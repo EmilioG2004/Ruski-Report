@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Project planning docs
+    url: https://github.com/EmilioG2004/Ruski-Report/tree/main/docs
+    about: Review the product scope, design plan, and rules documentation before opening planning issues.

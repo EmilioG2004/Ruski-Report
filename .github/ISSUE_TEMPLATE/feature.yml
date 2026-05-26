@@ -1,0 +1,45 @@
+name: Feature
+description: Plan or implement user-facing product behavior.
+title: "[Feature]: "
+labels:
+  - "type:feature"
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What should exist when this feature is complete?
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: List concrete pass/fail criteria.
+      placeholder: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - iOS
+        - Backend
+        - Data
+        - Infra
+        - Docs
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - High
+        - Medium
+        - Low
+    validations:
+      required: true

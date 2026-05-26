@@ -1,0 +1,238 @@
+{
+  "repository": "EmilioG2004/Ruski-Report",
+  "projectTitle": "Ruski Report",
+  "labels": [
+    { "name": "area:ios", "color": "1D76DB", "description": "iOS app work" },
+    { "name": "area:backend", "color": "5319E7", "description": "Backend service work" },
+    { "name": "area:data", "color": "006B75", "description": "Data model, ingestion, scorebook, or persistence work" },
+    { "name": "area:infra", "color": "C2E0C6", "description": "Hosting, deployment, tooling, and operations" },
+    { "name": "area:docs", "color": "0075CA", "description": "Documentation and planning" },
+    { "name": "type:feature", "color": "0E8A16", "description": "User-facing or platform capability" },
+    { "name": "type:task", "color": "FBCA04", "description": "Implementation or setup task" },
+    { "name": "type:spike", "color": "BFD4F2", "description": "Research or decision-discovery work" },
+    { "name": "type:bug", "color": "D73A4A", "description": "Broken behavior" },
+    { "name": "priority:high", "color": "B60205", "description": "Must be addressed early" },
+    { "name": "priority:medium", "color": "D93F0B", "description": "Important but not first-order blocking" },
+    { "name": "priority:low", "color": "FBCA04", "description": "Can wait" }
+  ],
+  "milestones": [
+    { "title": "M1: Project Setup & Planning", "description": "Organize repo, planning docs, GitHub workflow, and architecture decisions." },
+    { "title": "M2: Backend Platform Foundation", "description": "Create backend service skeleton, generic domain model, API boundaries, persistence, and logging." },
+    { "title": "M3: Ruski Scorebook Ingestion", "description": "Build the Ruski game plugin that validates and normalizes the official Excel scorebook." },
+    { "title": "M4: iOS Tournament Viewer", "description": "Build the viewing-first iOS app shell, tournament navigation, and metadata-driven UI." },
+    { "title": "M5: Match Detail & Live Updates", "description": "Render scorecards, box scores, comments, and server-pushed match updates." },
+    { "title": "M6: v1 Tournament Release", "description": "Harden, test, deploy, and prepare the first tournament-viewing release." }
+  ],
+  "issues": [
+    {
+      "id": "RR-001",
+      "title": "Finalize GitHub project workflow and issue templates",
+      "milestone": "M1: Project Setup & Planning",
+      "labels": ["area:docs", "type:task", "priority:high"],
+      "body": "Set up GitHub issue forms, labels, milestones, and the initial GitHub Issues backlog.\n\nAcceptance Criteria:\n- Issue forms exist for feature, task, spike, and bug work.\n- Labels and milestones are created in GitHub.\n- The docs backlog points to GitHub as the operational source of truth."
+    },
+    {
+      "id": "RR-002",
+      "title": "Replace starter SwiftData sample app structure with Ruski Report app shell",
+      "milestone": "M4: iOS Tournament Viewer",
+      "labels": ["area:ios", "type:task", "priority:high"],
+      "body": "Remove the default Item-based starter UI and establish the app shell for tournament viewing.\n\nAcceptance Criteria:\n- The app opens to a Ruski Report home screen.\n- Starter Item list behavior is removed.\n- The project has clear folders for Models, Views, Controllers, Data, and Services."
+    },
+    {
+      "id": "RR-003",
+      "title": "Define generic tournament domain model",
+      "milestone": "M2: Backend Platform Foundation",
+      "labels": ["area:backend", "area:data", "type:feature", "priority:high"],
+      "body": "Create backend domain types for tournaments, pods, teams, players, matches, brackets, standings, comments, and live update events without hardcoding Ruski-specific stats.\n\nAcceptance Criteria:\n- Generic models support tournament viewing and match detail pages.\n- Ruski-specific values are represented through game definitions/events.\n- Domain model tests cover core relationships."
+    },
+    {
+      "id": "RR-004",
+      "title": "Define game plugin interface",
+      "milestone": "M2: Backend Platform Foundation",
+      "labels": ["area:backend", "area:data", "type:feature", "priority:high"],
+      "body": "Create the backend interface that game modules use to parse, validate, normalize, and describe game-specific data.\n\nAcceptance Criteria:\n- Interface includes gameType, loadDefinition, parseScorebook, validateScorebook, normalizeScorebook, and calculateStats.\n- Backend can reject unsupported game types.\n- The interface can support Ruski now and Dye later without changing generic tournament APIs."
+    },
+    {
+      "id": "RR-005",
+      "title": "Create Node/TypeScript backend service skeleton",
+      "milestone": "M2: Backend Platform Foundation",
+      "labels": ["area:backend", "type:task", "priority:high"],
+      "body": "Set up the backend service with routes, controllers, services, repositories, ingestion, games, config, and logging directories.\n\nAcceptance Criteria:\n- Backend has a runnable local dev command.\n- Health endpoint exists.\n- Tests run in CI or locally.\n- Public routes are separated from internal service logic."
+    },
+    {
+      "id": "RR-006",
+      "title": "Choose backend web framework and realtime transport",
+      "milestone": "M2: Backend Platform Foundation",
+      "labels": ["area:backend", "type:spike", "priority:high"],
+      "body": "Decide whether the Node/TypeScript backend should use Express, Fastify, NestJS, or another framework, and decide between WebSockets and Server-Sent Events for v1 live updates.\n\nExpected Output:\n- Written recommendation in docs/project-management or an ADR.\n- Decision includes hosting implications for Raspberry Pi plus tunnel.\n- Decision includes iOS client implications.\n\nTimebox: 2 hours"
+    },
+    {
+      "id": "RR-007",
+      "title": "Implement structured backend logging and error responses",
+      "milestone": "M2: Backend Platform Foundation",
+      "labels": ["area:backend", "area:infra", "type:task", "priority:medium"],
+      "body": "Add structured logging and standard error response shapes for API and ingestion failures.\n\nAcceptance Criteria:\n- Logs include upload lifecycle, gameType, validation failures, and realtime publish events.\n- API errors return code, message, and details.\n- No production code uses ad hoc console logging without the logger abstraction."
+    },
+    {
+      "id": "RR-008",
+      "title": "Design persistence layer for tournament snapshots",
+      "milestone": "M2: Backend Platform Foundation",
+      "labels": ["area:backend", "area:data", "type:task", "priority:high"],
+      "body": "Define how normalized tournament snapshots, matches, comments, and upload reports are stored.\n\nAcceptance Criteria:\n- Persistence choice is documented as SQLite prototype or Postgres target.\n- Repository interfaces hide database implementation details.\n- Tournament snapshot save is atomic."
+    },
+    {
+      "id": "RR-009",
+      "title": "Create Ruski game definition config",
+      "milestone": "M3: Ruski Scorebook Ingestion",
+      "labels": ["area:backend", "area:data", "type:task", "priority:high"],
+      "body": "Create Ruski rules/config metadata for phases, event types, stat labels, scorecard columns, and display rules.\n\nAcceptance Criteria:\n- Config defines miss, make, splash-out, guy, tri, di, vom, redemption, and overtime.\n- Config documents that di and tri are special misses.\n- Scorecard UI labels can be derived from the config."
+    },
+    {
+      "id": "RR-010",
+      "title": "Create Ruski scorebook schema config",
+      "milestone": "M3: Ruski Scorebook Ingestion",
+      "labels": ["area:backend", "area:data", "type:task", "priority:high"],
+      "body": "Define the expected Excel workbook tabs, scorecard headers, cell regions, and summary tab expectations for the Ruski scorebook.\n\nAcceptance Criteria:\n- Required tabs are enumerated.\n- Blank Scorecard layout is captured.\n- Game sheet validation can detect renamed/missing scorecard headers."
+    },
+    {
+      "id": "RR-011",
+      "title": "Parse official Ruski Excel scorebook",
+      "milestone": "M3: Ruski Scorebook Ingestion",
+      "labels": ["area:backend", "area:data", "type:feature", "priority:high"],
+      "body": "Implement Excel parsing for the official scorebook format.\n\nAcceptance Criteria:\n- Parser reads workbook sheets without changing the file.\n- Parser identifies summary tabs, Blank Scorecard, scored game tabs, and AllData.\n- Parser extracts player names, shot rows, event flags, and box score totals from game sheets."
+    },
+    {
+      "id": "RR-012",
+      "title": "Validate Ruski scorebook before publish",
+      "milestone": "M3: Ruski Scorebook Ingestion",
+      "labels": ["area:backend", "area:data", "type:feature", "priority:high"],
+      "body": "Implement validation that rejects malformed scorebooks before data is published to app users.\n\nAcceptance Criteria:\n- Missing required tabs are reported clearly.\n- Changed scorecard headers are reported clearly.\n- Invalid stat/event rows produce actionable validation errors.\n- Validation report is returned to the admin upload flow."
+    },
+    {
+      "id": "RR-013",
+      "title": "Normalize Ruski scorebook into tournament snapshot",
+      "milestone": "M3: Ruski Scorebook Ingestion",
+      "labels": ["area:backend", "area:data", "type:feature", "priority:high"],
+      "body": "Convert validated Ruski workbook data into generic tournament, match, scorecard, box score, standing, and bracket structures.\n\nAcceptance Criteria:\n- Game tabs become match details.\n- Summary tabs become standings/stat views where applicable.\n- Di and tri are counted as misses.\n- Snapshot output is independent of Excel cell coordinates."
+    },
+    {
+      "id": "RR-014",
+      "title": "Build admin scorebook upload endpoint",
+      "milestone": "M3: Ruski Scorebook Ingestion",
+      "labels": ["area:backend", "type:feature", "priority:high"],
+      "body": "Implement POST /admin/tournaments/:year/upload-scorebook?gameType=ruski.\n\nAcceptance Criteria:\n- Endpoint accepts workbook upload from an authenticated admin.\n- Endpoint routes to RuskiGamePlugin.\n- Successful upload stores a tournament snapshot and returns an ingestion report.\n- Failed upload does not publish partial data."
+    },
+    {
+      "id": "RR-015",
+      "title": "Implement public tournament API endpoints",
+      "milestone": "M2: Backend Platform Foundation",
+      "labels": ["area:backend", "type:feature", "priority:high"],
+      "body": "Implement read-only endpoints for active tournament, tournament detail, matches, match detail, and supported games.\n\nAcceptance Criteria:\n- Endpoints match the design plan.\n- List endpoints return lightweight summaries.\n- Match detail returns scorecard definition, rows, box score, and phase.\n- Responses are documented or covered by tests."
+    },
+    {
+      "id": "RR-016",
+      "title": "Implement realtime tournament update stream",
+      "milestone": "M5: Match Detail & Live Updates",
+      "labels": ["area:backend", "type:feature", "priority:high"],
+      "body": "Implement the server-pushed update stream for tournament and match changes.\n\nAcceptance Criteria:\n- Clients can subscribe to update events.\n- Successful scorebook ingestion publishes a tournament update event.\n- Disconnects and reconnects are logged.\n- Transport choice is documented."
+    },
+    {
+      "id": "RR-017",
+      "title": "Implement iOS API client and repository protocols",
+      "milestone": "M4: iOS Tournament Viewer",
+      "labels": ["area:ios", "area:data", "type:feature", "priority:high"],
+      "body": "Create iOS data-layer protocols and concrete API clients for games, tournaments, matches, comments, auth session, logging, and realtime updates.\n\nAcceptance Criteria:\n- Controllers depend on protocols, not concrete clients.\n- DTO mapping is outside SwiftUI views.\n- Network errors map to app-level errors."
+    },
+    {
+      "id": "RR-018",
+      "title": "Build iOS home screen with official tournament card",
+      "milestone": "M4: iOS Tournament Viewer",
+      "labels": ["area:ios", "type:feature", "priority:high"],
+      "body": "Create the viewing-first home screen for Ruski Report.\n\nAcceptance Criteria:\n- Home screen loads active tournament summary.\n- Tournament card navigates to tournament detail.\n- Loading and error states are visible and understandable.\n- Guest users can access the screen."
+    },
+    {
+      "id": "RR-019",
+      "title": "Build iOS tournament detail screen",
+      "milestone": "M4: iOS Tournament Viewer",
+      "labels": ["area:ios", "type:feature", "priority:high"],
+      "body": "Build the tournament detail experience with tabs or segmented navigation for pods, bracket, matches, and stats.\n\nAcceptance Criteria:\n- Tournament detail renders data from the API.\n- Pods, bracket, matches, and stats are separated into focused views.\n- Views do not hardcode Ruski event labels."
+    },
+    {
+      "id": "RR-020",
+      "title": "Build pod standings UI",
+      "milestone": "M4: iOS Tournament Viewer",
+      "labels": ["area:ios", "type:feature", "priority:medium"],
+      "body": "Render the 8-pod tournament standings in a mobile-readable layout.\n\nAcceptance Criteria:\n- Each pod displays four teams.\n- Seed, record, cup differential, and shooting percentage are shown where available.\n- Long team names do not break the layout."
+    },
+    {
+      "id": "RR-021",
+      "title": "Build bracket viewer UI",
+      "milestone": "M4: iOS Tournament Viewer",
+      "labels": ["area:ios", "type:feature", "priority:medium"],
+      "body": "Render the playoff bracket from generic bracket data.\n\nAcceptance Criteria:\n- Bracket rounds and matchups display clearly on iPhone.\n- Winners/progression are visible.\n- Layout does not depend on Excel cell positions."
+    },
+    {
+      "id": "RR-022",
+      "title": "Build match detail and metadata-driven scorecard UI",
+      "milestone": "M5: Match Detail & Live Updates",
+      "labels": ["area:ios", "type:feature", "priority:high"],
+      "body": "Build the match landing page with score header, box score, scorecard, shot/event log, and comments preview.\n\nAcceptance Criteria:\n- Scorecard columns come from ScorecardDefinition.\n- Event labels come from GameEventType.\n- Ruski scorecard layout mirrors the traditional spreadsheet structure.\n- The screen handles loading and failure states."
+    },
+    {
+      "id": "RR-023",
+      "title": "Connect iOS realtime updates to visible match state",
+      "milestone": "M5: Match Detail & Live Updates",
+      "labels": ["area:ios", "type:feature", "priority:high"],
+      "body": "Subscribe to backend realtime events and update currently visible tournament or match data.\n\nAcceptance Criteria:\n- Match detail updates after relevant events.\n- Tournament lists refresh after tournament-level events.\n- Disconnect/reconnect behavior is logged and user-safe."
+    },
+    {
+      "id": "RR-024",
+      "title": "Implement comments read/write flow",
+      "milestone": "M5: Match Detail & Live Updates",
+      "labels": ["area:ios", "area:backend", "type:feature", "priority:medium"],
+      "body": "Add match-scoped comments without turning the app into a general messaging product.\n\nAcceptance Criteria:\n- Users can read match comments.\n- Authenticated users can post comments.\n- Guest users receive a clear sign-in prompt for posting.\n- Comments are scoped to a match."
+    },
+    {
+      "id": "RR-025",
+      "title": "Implement account and guest session model",
+      "milestone": "M4: iOS Tournament Viewer",
+      "labels": ["area:ios", "area:backend", "type:feature", "priority:medium"],
+      "body": "Define account, guest, and admin session behavior for viewing and comments.\n\nAcceptance Criteria:\n- Guest users can view tournament and match data.\n- Authenticated users can post comments.\n- Admin-only upload endpoints are protected.\n- Future GameCenter/TauID integration remains possible."
+    },
+    {
+      "id": "RR-026",
+      "title": "Plan homelab deployment with public tunnel",
+      "milestone": "M6: v1 Tournament Release",
+      "labels": ["area:infra", "type:task", "priority:medium"],
+      "body": "Document and implement the v1 deployment target for Raspberry Pi plus public tunnel or reverse proxy.\n\nAcceptance Criteria:\n- Backend can run under Docker or systemd.\n- HTTPS public access path is documented.\n- Logs and restart behavior are documented.\n- Uploaded workbook and database backup approach is documented."
+    },
+    {
+      "id": "RR-027",
+      "title": "Add backend ingestion test coverage using sample scorebook",
+      "milestone": "M3: Ruski Scorebook Ingestion",
+      "labels": ["area:backend", "area:data", "type:task", "priority:high"],
+      "body": "Use the uploaded 2026 Ruski Stat Sheet as the sample fixture for ingestion tests.\n\nAcceptance Criteria:\n- Tests verify sheet classification.\n- Tests verify representative game sheet parsing.\n- Tests verify AllData or summary data normalization where used.\n- Tests do not mutate the workbook."
+    },
+    {
+      "id": "RR-028",
+      "title": "Add iOS UI tests for tournament viewing flow",
+      "milestone": "M6: v1 Tournament Release",
+      "labels": ["area:ios", "type:task", "priority:medium"],
+      "body": "Cover the primary viewing path with UI tests.\n\nAcceptance Criteria:\n- App opens to home screen.\n- User can navigate to tournament detail.\n- User can open a match detail screen.\n- Error/loading states are testable."
+    },
+    {
+      "id": "RR-029",
+      "title": "Create architecture decision records for backend stack and realtime transport",
+      "milestone": "M1: Project Setup & Planning",
+      "labels": ["area:docs", "type:task", "priority:medium"],
+      "body": "Write ADRs for Node/TypeScript backend, homelab hosting, and realtime transport choice.\n\nAcceptance Criteria:\n- ADRs capture context, decision, alternatives, and consequences.\n- Design plan links remain consistent with ADR decisions."
+    },
+    {
+      "id": "RR-030",
+      "title": "Prepare v1 release checklist",
+      "milestone": "M6: v1 Tournament Release",
+      "labels": ["area:docs", "area:infra", "type:task", "priority:medium"],
+      "body": "Create a release checklist for the first tournament-viewing release.\n\nAcceptance Criteria:\n- Checklist covers backend deployment, scorebook upload, app config, smoke tests, logs, backups, and rollback plan.\n- Checklist is stored in project-management docs."
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+name: Spike
+description: Time-boxed research for an unresolved technical or product decision.
+title: "[Spike]: "
+labels:
+  - "type:spike"
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What decision should this research unlock?
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Expected Output
+      description: What artifact or recommendation should come out of the spike?
+    validations:
+      required: true
+  - type: input
+    id: timebox
+    attributes:
+      label: Timebox
+      placeholder: "Example: 2 hours"
+    validations:
+      required: true

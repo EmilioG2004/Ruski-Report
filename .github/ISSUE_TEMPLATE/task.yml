@@ -1,0 +1,34 @@
+name: Task
+description: Track implementation, setup, documentation, or cleanup work.
+title: "[Task]: "
+labels:
+  - "type:task"
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What work needs to be done?
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Definition of Done
+      placeholder: |
+        - [ ] Done criterion 1
+        - [ ] Done criterion 2
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - iOS
+        - Backend
+        - Data
+        - Infra
+        - Docs
+    validations:
+      required: true
