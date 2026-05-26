@@ -24,18 +24,13 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		BC396FB02FB7A00100F6AA21 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		BC396F852FB7856700F6AA21 /* Ruski Report.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Ruski Report.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC396F942FB7856900F6AA21 /* Ruski ReportTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Ruski ReportTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		BC396F9E2FB7856900F6AA21 /* Ruski ReportUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "Ruski ReportUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
+		BC396FB02FB7A00100F6AA21 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		BC396FB12FB7A00100F6AA21 /* docs */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = docs;
-			sourceTree = "<group>";
-		};
 		BC396F872FB7856700F6AA21 /* Ruski Report */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "Ruski Report";
@@ -49,6 +44,11 @@
 		BC396FA12FB7856900F6AA21 /* Ruski ReportUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "Ruski ReportUITests";
+			sourceTree = "<group>";
+		};
+		BC396FB12FB7A00100F6AA21 /* docs */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = docs;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
