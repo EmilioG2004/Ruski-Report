@@ -234,8 +234,8 @@ V1 hosting target: Raspberry Pi homelab with public tunnel/reverse proxy.
 
 Required components:
 
-- Node/TypeScript backend process managed by systemd or Docker.
-- SQLite for earliest prototype; Postgres preferred once comments/auth are active.
+- Node/TypeScript backend process managed by Docker Compose.
+- PostgreSQL as the primary persistence layer for tournament snapshots, comments, users, and upload reports.
 - Uploaded workbook storage on disk with backups.
 - Caddy/Nginx/Cloudflare Tunnel/Tailscale Funnel for public HTTPS access.
 - Health endpoint and structured log files.
@@ -270,7 +270,9 @@ iOS tests:
 - Excel ingestion uses admin upload.
 - Live updates use server push via WebSocket or Server-Sent Events.
 - Hosting target is homelab Raspberry Pi plus public tunnel.
+- Deployment uses Docker Compose for the NestJS backend, PostgreSQL database, and public access layer.
 - V1 implements only the Ruski game plugin.
 - The generic platform is designed for future games, but arbitrary game logic is not expected to be expressible through JSON alone.
 - Game-specific logic lives in plugins; game-specific labels/layouts/rule metadata live in config files.
 - V1 is viewing-first; game instantiation and scoring UI are future features.
+- PostgreSQL is the primary database; semi-structured scorebook snapshots and ingestion reports may use JSONB where appropriate.
