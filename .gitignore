@@ -1,5 +1,11 @@
 .DS_Store
 
+# Node / TypeScript
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
 # Xcode
 build/
 DerivedData/
