@@ -9,6 +9,10 @@ import {
 } from "../domain";
 import { RepositoryResult } from "./repository-result";
 
+export const TOURNAMENT_READ_REPOSITORY = Symbol(
+  "TOURNAMENT_READ_REPOSITORY"
+);
+
 export interface ActiveTournamentQuery {
   gameType?: GameType;
   year?: number;
