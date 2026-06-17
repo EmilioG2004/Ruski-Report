@@ -4,9 +4,11 @@ import { APP_FILTER } from "@nestjs/core";
 import { HealthController } from "./controllers/health.controller";
 import { AppExceptionFilter } from "./errors";
 import { APP_LOGGER, ConsoleAppLogger } from "./logging";
+import { PublicApiModule } from "./public-api";
 import { HealthService } from "./services/health.service";
 
 @Module({
+  imports: [PublicApiModule],
   controllers: [HealthController],
   providers: [
     HealthService,
