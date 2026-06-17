@@ -12,9 +12,7 @@ import { GameDefinitionRepository } from "./game-definition-repository";
 export class InMemoryGameDefinitionRepository
   implements GameDefinitionRepository
 {
-  constructor(
-    private readonly gameDefinitions: GameDefinition[] = [ruskiGameDefinition]
-  ) {}
+  private readonly gameDefinitions: GameDefinition[] = [ruskiGameDefinition];
 
   async findAll(): Promise<RepositoryResult<GameDefinition[]>> {
     return repositorySuccess(clone(this.gameDefinitions));

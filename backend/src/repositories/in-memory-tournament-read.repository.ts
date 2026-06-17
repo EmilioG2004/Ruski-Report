@@ -17,10 +17,8 @@ import {
 export class InMemoryTournamentReadRepository
   implements TournamentReadRepository
 {
-  constructor(
-    private readonly tournaments: Tournament[] = [sampleTournament],
-    private readonly matches: MatchDetail[] = [sampleMatchDetail]
-  ) {}
+  private readonly tournaments: Tournament[] = [sampleTournament];
+  private readonly matches: MatchDetail[] = [sampleMatchDetail];
 
   async findActiveTournament(
     query?: ActiveTournamentQuery
