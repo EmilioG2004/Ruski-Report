@@ -1,4 +1,8 @@
-import { GameDefinition, GameEventType, GamePhaseDefinition } from "../../domain";
+import {
+  GameDefinition,
+  GameEventType,
+  GamePhaseDefinition
+} from "../../../domain";
 import {
   RUSKI_EVENT_TYPE_IDS,
   RUSKI_GAME_TYPE,

@@ -1,4 +1,4 @@
-import { Metadata } from "../../domain";
+import { Metadata } from "../../../domain";
 import { RUSKI_EVENT_TYPE_IDS, RUSKI_STAT_KEYS } from "./ruski-ids";
 
 export const ruskiRulesMetadata: Metadata = {

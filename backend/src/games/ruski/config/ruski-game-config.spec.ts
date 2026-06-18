@@ -1,8 +1,8 @@
 import {
   RUSKI_EVENT_TYPE_IDS,
-  RUSKI_PHASE_IDS,
-  ruskiGameConfig
-} from ".";
+  RUSKI_PHASE_IDS
+} from "../definition";
+import { ruskiGameConfig } from "./ruski-game-config";
 
 describe("Ruski game config", () => {
   it("defines the required Ruski event types", () => {
