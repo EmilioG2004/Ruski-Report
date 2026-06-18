@@ -69,6 +69,7 @@ export const sampleMatchDetail: MatchDetail = {
           makes: 2,
           misses: 1,
           shootingPercentage: 0.667,
+          splashOuts: 0,
           dis: 1,
           tris: 0,
           guys: 0,
@@ -86,6 +87,7 @@ export const sampleMatchDetail: MatchDetail = {
           makes: 1,
           misses: 1,
           shootingPercentage: 0.5,
+          splashOuts: 0,
           dis: 0,
           tris: 0,
           guys: 1,
@@ -97,6 +99,7 @@ export const sampleMatchDetail: MatchDetail = {
       makes: 5,
       misses: 4,
       shootingPercentage: 0.556,
+      splashOuts: 0,
       dis: 1,
       tris: 0,
       guys: 1,
@@ -115,8 +118,14 @@ export const sampleMatchDetail: MatchDetail = {
         playerId: "player-alex",
         values: {
           shotNumber: 1,
-          result: "di",
-          cupCount: 2
+          shooter: "Alex",
+          miss: false,
+          make: false,
+          splashOut: false,
+          guy: false,
+          tri: false,
+          di: true,
+          vom: false
         },
         eventIds: ["event-2026-001"]
       },
@@ -129,8 +138,14 @@ export const sampleMatchDetail: MatchDetail = {
         playerId: "player-jordan",
         values: {
           shotNumber: 2,
-          result: "guy",
-          cupCount: 1
+          shooter: "Jordan",
+          miss: false,
+          make: false,
+          splashOut: false,
+          guy: true,
+          tri: false,
+          di: false,
+          vom: false
         },
         eventIds: ["event-2026-002"]
       }
