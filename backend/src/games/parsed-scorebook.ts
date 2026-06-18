@@ -1,6 +1,7 @@
 import { GameType, Metadata } from "../domain";
 
 export type ScorebookSheetRole =
+  | "bracket"
   | "summary"
   | "template"
   | "game"
@@ -15,11 +16,54 @@ export interface ScorebookSource {
   metadata?: Metadata;
 }
 
+export type ParsedScorebookCellValue = string | number | boolean | null;
+
+export interface ParsedScorebookRow {
+  rowNumber: number;
+  values: Record<string, ParsedScorebookCellValue>;
+  metadata?: Metadata;
+}
+
+export interface ParsedScorebookPlayer {
+  slot: number;
+  name: string;
+  sourceCell: string;
+}
+
+export interface ParsedScorebookStatLine {
+  playerSlot: number;
+  playerName: string | null;
+  stats: Record<string, number | null>;
+  sourceCells: Record<string, string>;
+}
+
+export interface ParsedScorebookShotRow {
+  rowNumber: number;
+  shotNumber: number | null;
+  shooterName: string | null;
+  eventFlags: Record<string, boolean>;
+  sourceCells: Record<string, string>;
+}
+
+export interface ParsedScorebookSide {
+  id: string;
+  label: string;
+  players: ParsedScorebookPlayer[];
+  boxScoreTotals: ParsedScorebookStatLine[];
+  shotRows: ParsedScorebookShotRow[];
+}
+
+export interface ParsedScorebookGameSheet {
+  status: string | null;
+  sides: ParsedScorebookSide[];
+}
+
 export interface ParsedScorebookSheet {
   name: string;
   index: number;
   role: ScorebookSheetRole;
   rows?: unknown[];
+  game?: ParsedScorebookGameSheet;
   metadata?: Metadata;
 }
 
