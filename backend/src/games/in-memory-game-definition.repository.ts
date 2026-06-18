@@ -5,8 +5,8 @@ import {
   repositorySuccess,
   RepositoryResult
 } from "../repositories/repository-result";
-import { ruskiGameDefinition } from "../sample-data";
 import { GameDefinitionRepository } from "./game-definition-repository";
+import { ruskiGameDefinition } from "./ruski";
 
 @Injectable()
 export class InMemoryGameDefinitionRepository

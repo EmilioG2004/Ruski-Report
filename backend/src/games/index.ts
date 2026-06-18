@@ -4,6 +4,7 @@ export * from "./game-plugin";
 export * from "./game-plugin-registry";
 export * from "./in-memory-game-definition.repository";
 export * from "./parsed-scorebook";
+export * from "./ruski";
 export * from "./scorebook-file";
 export * from "./tournament-snapshot";
 export * from "./validation-result";
