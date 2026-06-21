@@ -6,13 +6,25 @@
 //
 
 import Testing
+import SwiftUI
+@testable import Ruski_Report
 
 struct Ruski_ReportTests {
 
-    @Test func example() async throws {
-        // Write your test here and use APIs like `#expect(...)` to check expected conditions.
-        // Swift Testing Documentation
-        // https://developer.apple.com/documentation/testing
+    @Test func featuredTournamentUsesRuskiReportShellData() {
+        let store = TournamentPreviewStore()
+        let tournament = store.featuredTournament
+
+        #expect(tournament.id == "tournament-2026")
+        #expect(tournament.name == "2026 Ruski Tournament")
+        #expect(tournament.status == .scheduled)
+    }
+
+    @MainActor
+    @Test func appNavigationStartsAtHome() {
+        let navigation = AppNavigationController()
+
+        #expect(navigation.path.isEmpty)
     }
 
 }
