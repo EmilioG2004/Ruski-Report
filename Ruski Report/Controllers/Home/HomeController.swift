@@ -37,20 +37,16 @@ final class HomeController: ObservableObject {
                 "Unable to load active tournament",
                 metadata: ["error": String(describing: error)]
             )
-            state = .failed(message: errorMessage(from: error))
+            state = .failed(
+                message: AppErrorMessageFormatter.message(
+                    from: error,
+                    fallback: "Unable to load the active tournament."
+                )
+            )
         }
     }
 
     func tournament(id: TournamentPreview.ID) -> TournamentPreview? {
         cachedTournaments[id]
-    }
-
-    private func errorMessage(from error: Error) -> String {
-        if let errorDescription = (error as? LocalizedError)?.errorDescription,
-           !errorDescription.isEmpty {
-            return errorDescription
-        }
-
-        return "Unable to load the active tournament."
     }
 }
