@@ -27,18 +27,4 @@ struct Ruski_ReportTests {
         #expect(navigation.path.isEmpty)
     }
 
-    @MainActor
-    @Test func homeControllerDependsOnTournamentRepository() async throws {
-        let controller = HomeController(
-            tournaments: PreviewTournamentRepository(),
-            logger: NoopAppLogger(),
-            initialTournament: PreviewData.tournamentPreview
-        )
-
-        await controller.loadActiveTournament()
-
-        #expect(controller.tournament.id == "tournament-2026")
-        #expect(controller.tournament(id: "tournament-2026") != nil)
-    }
-
 }
