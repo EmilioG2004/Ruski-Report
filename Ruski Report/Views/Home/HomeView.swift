@@ -22,9 +22,9 @@ struct HomeView: View {
             .padding(.vertical, 24)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Color.appGroupedBackground)
         .navigationTitle("Ruski Report")
-        .toolbarTitleDisplayMode(.large)
+        .appLargeNavigationTitle()
     }
 
     private var header: some View {

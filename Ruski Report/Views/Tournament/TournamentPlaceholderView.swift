@@ -19,9 +19,9 @@ struct TournamentPlaceholderView: View {
                 )
             }
         }
-        .background(Color(.systemGroupedBackground))
+        .background(Color.appGroupedBackground)
         .navigationTitle("Tournament")
-        .navigationBarTitleDisplayMode(.inline)
+        .appInlineNavigationTitle()
     }
 
     private func tournamentContent(_ tournament: TournamentPreview) -> some View {
@@ -83,7 +83,7 @@ private struct TournamentInfoRow: View {
             Spacer()
         }
         .padding(16)
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Color.appSecondaryGroupedBackground)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }

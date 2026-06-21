@@ -46,11 +46,11 @@ struct TournamentCardView: View {
             .accessibilityIdentifier("home.openTournament")
         }
         .padding(20)
-        .background(Color(.secondarySystemGroupedBackground))
+        .background(Color.appSecondaryGroupedBackground)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color(.separator), lineWidth: 0.5)
+                .stroke(Color.appSeparator, lineWidth: 0.5)
         }
         .accessibilityElement(children: .contain)
     }
