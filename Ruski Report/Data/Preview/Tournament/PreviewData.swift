@@ -28,18 +28,6 @@ nonisolated enum PreviewData {
         stats: []
     )
 
-    static let matchPreview = MatchPreview(
-        id: "match-2026-001",
-        tournamentId: tournamentPreview.id,
-        gameType: "ruski",
-        status: .scheduled,
-        participants: [],
-        score: nil,
-        podId: "pod-a",
-        currentPhaseLabel: nil,
-        updatedAt: "2026-06-21T00:00:00.000Z"
-    )
-
     static let tournamentDetail = TournamentDetail(
         id: tournamentPreview.id,
         preview: tournamentPreview,
@@ -48,21 +36,23 @@ nonisolated enum PreviewData {
                 id: "pod-a",
                 name: "Pod A",
                 sequence: 1,
-                teamIds: [],
-                matchIds: [matchPreview.id]
+                teamIds: teams.map(\.id),
+                matchIds: [openingMatch.id, secondMatch.id]
             )
         ],
-        teams: [],
-        standings: [],
-        bracket: nil,
-        matches: [matchPreview]
-    )
-
-    static let matchDetail = MatchDetail(
-        id: matchPreview.id,
-        preview: matchPreview,
-        boxScore: nil,
-        scorecard: nil,
-        events: []
+        teams: teams,
+        standings: standings,
+        bracket: TournamentBracket(
+            id: "bracket-2026",
+            rounds: [
+                BracketRound(
+                    id: "round-1",
+                    name: "Semifinals",
+                    sequence: 1,
+                    matchIds: [openingMatch.id, secondMatch.id]
+                )
+            ]
+        ),
+        matches: [openingMatch, secondMatch]
     )
 }
