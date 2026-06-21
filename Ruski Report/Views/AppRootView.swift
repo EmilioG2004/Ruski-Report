@@ -24,7 +24,12 @@ struct AppRootView: View {
 
     var body: some View {
         NavigationStack(path: $navigation.path) {
-            HomeView(tournament: homeController.tournament)
+            HomeView(
+                state: homeController.state,
+                retry: {
+                    await homeController.loadActiveTournament()
+                }
+            )
                 .task {
                     await homeController.loadActiveTournament()
                 }
