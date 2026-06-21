@@ -17,7 +17,7 @@ import {
   ruskiScorebookSchema
 } from "../scorebook";
 import { RuskiScorecardSheetParser } from "./ruski-scorecard-sheet.parser";
-import { classifyRuskiSheet } from "./ruski-sheet-classifier";
+import { analyzeRuskiSheet } from "./ruski-sheet-classifier";
 
 export class RuskiScorebookParser {
   private readonly scorecardSheetParser = new RuskiScorecardSheetParser();
@@ -46,11 +46,18 @@ export class RuskiScorebookParser {
   }
 
   private parseSheet(worksheet: ExcelWorksheetReader): ParsedScorebookSheet {
-    const role = classifyRuskiSheet(worksheet);
+    const classification = analyzeRuskiSheet(worksheet);
+    const role = classification.role;
     const sheet: ParsedScorebookSheet = {
       name: worksheet.name,
       index: worksheet.index,
-      role
+      role,
+      metadata:
+        classification.headerMismatches.length > 0
+          ? {
+              headerMismatches: classification.headerMismatches
+            }
+          : undefined
     };
 
     if (role === "game") {
@@ -64,6 +71,7 @@ export class RuskiScorebookParser {
       return {
         ...sheet,
         metadata: {
+          ...sheet.metadata,
           status: worksheet.readCell(
             ruskiScorebookSchema.blankScorecard.statusCell
           )
