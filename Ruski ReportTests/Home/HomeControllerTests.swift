@@ -43,23 +43,3 @@ struct HomeControllerTests {
         )
     }
 }
-
-private final class StubTournamentRepository: TournamentRepository {
-    private let activeTournamentResult: Result<TournamentPreview, Error>
-
-    init(activeTournamentResult: Result<TournamentPreview, Error>) {
-        self.activeTournamentResult = activeTournamentResult
-    }
-
-    func activeTournament() async throws -> TournamentPreview {
-        try activeTournamentResult.get()
-    }
-
-    func tournament(id: TournamentPreview.ID) async throws -> TournamentDetail {
-        PreviewData.tournamentDetail
-    }
-
-    func matches(tournamentId: TournamentPreview.ID) async throws -> [MatchPreview] {
-        []
-    }
-}
