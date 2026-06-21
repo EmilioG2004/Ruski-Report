@@ -9,6 +9,8 @@ import { RepositoryResult } from "./repository-result";
 import { PublishedSnapshotVersion } from "./tournament-snapshot-repository";
 import { TransactionContext } from "./transaction";
 
+export const UPLOAD_REPORT_REPOSITORY = Symbol("UPLOAD_REPORT_REPOSITORY");
+
 export type UploadReportId = string;
 
 export type UploadReportStatus =
