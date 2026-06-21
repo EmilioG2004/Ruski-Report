@@ -167,7 +167,7 @@ export const ruskiScorebookSummarySheets: ScorebookSummarySheetSchema[] = [
   {
     sheetName: RUSKI_SCOREBOOK_SHEET_NAMES.allData,
     kind: "data",
-    required: true,
+    required: false,
     headerRow: 1,
     headers: createHeaderCells(ruskiAllDataHeaders, [
       "A1",

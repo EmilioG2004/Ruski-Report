@@ -13,8 +13,7 @@ describe("Ruski scorebook schema", () => {
       RUSKI_SCOREBOOK_SHEET_NAMES.teamStats,
       RUSKI_SCOREBOOK_SHEET_NAMES.playoffStats,
       RUSKI_SCOREBOOK_SHEET_NAMES.playoffBracket,
-      RUSKI_SCOREBOOK_SHEET_NAMES.blankScorecard,
-      RUSKI_SCOREBOOK_SHEET_NAMES.allData
+      RUSKI_SCOREBOOK_SHEET_NAMES.blankScorecard
     ]);
   });
 

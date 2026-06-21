@@ -13,7 +13,12 @@ export { RUSKI_SCOREBOOK_SHEET_NAMES } from "./ruski-scorebook-sheets";
 
 export const ruskiScorebookSchema: ScorebookSchema = {
   gameType: RUSKI_GAME_TYPE,
-  requiredSheetNames: Object.values(RUSKI_SCOREBOOK_SHEET_NAMES),
+  requiredSheetNames: [
+    ...ruskiScorebookSummarySheets
+      .filter((sheet) => sheet.required)
+      .map((sheet) => sheet.sheetName),
+    RUSKI_SCOREBOOK_SHEET_NAMES.blankScorecard
+  ],
   summarySheets: ruskiScorebookSummarySheets,
   blankScorecard: {
     kind: "template",
