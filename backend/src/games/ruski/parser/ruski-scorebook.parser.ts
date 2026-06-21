@@ -10,13 +10,18 @@ import {
   ScorebookSheetRole
 } from "../../parsed-scorebook";
 import { ScorebookFile } from "../../scorebook-file";
+import { ScorebookTabularSheetParser } from "../../scorebook-tabular-sheet.parser";
 import { RUSKI_GAME_TYPE } from "../definition";
-import { ruskiScorebookSchema } from "../scorebook";
+import {
+  RUSKI_SCOREBOOK_SHEET_NAMES,
+  ruskiScorebookSchema
+} from "../scorebook";
 import { RuskiScorecardSheetParser } from "./ruski-scorecard-sheet.parser";
 import { classifyRuskiSheet } from "./ruski-sheet-classifier";
 
 export class RuskiScorebookParser {
   private readonly scorecardSheetParser = new RuskiScorecardSheetParser();
+  private readonly tabularSheetParser = new ScorebookTabularSheetParser();
 
   async parseScorebook(file: ScorebookFile): Promise<ParsedScorebook> {
     const workbook = await ExcelWorkbookReader.load(file);
@@ -64,6 +69,25 @@ export class RuskiScorebookParser {
           )
         }
       };
+    }
+
+    if (
+      role === "data" &&
+      worksheet.name === RUSKI_SCOREBOOK_SHEET_NAMES.allData
+    ) {
+      const allDataSchema = ruskiScorebookSchema.summarySheets.find(
+        (schema) => schema.sheetName === RUSKI_SCOREBOOK_SHEET_NAMES.allData
+      );
+
+      if (allDataSchema?.dataRange !== undefined) {
+        return {
+          ...sheet,
+          rows: this.tabularSheetParser.parse(worksheet, {
+            headers: allDataSchema.headers,
+            dataRange: allDataSchema.dataRange
+          })
+        };
+      }
     }
 
     return sheet;

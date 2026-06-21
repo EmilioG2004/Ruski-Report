@@ -62,7 +62,7 @@ export interface ParsedScorebookSheet {
   name: string;
   index: number;
   role: ScorebookSheetRole;
-  rows?: unknown[];
+  rows?: ParsedScorebookRow[];
   game?: ParsedScorebookGameSheet;
   metadata?: Metadata;
 }

@@ -9,5 +9,6 @@ export * from "./ruski";
 export * from "./scorebook-cell-address";
 export * from "./scorebook-schema";
 export * from "./scorebook-file";
+export * from "./scorebook-tabular-sheet.parser";
 export * from "./tournament-snapshot";
 export * from "./validation-result";

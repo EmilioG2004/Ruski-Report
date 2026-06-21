@@ -23,6 +23,16 @@ export function parseCellAddress(address: string): ScorebookCellCoordinate {
   };
 }
 
+export function formatCellAddress(coordinate: ScorebookCellCoordinate): string {
+  if (coordinate.column < 1 || coordinate.row < 1) {
+    throw new Error(
+      `Invalid scorebook cell coordinate: ${coordinate.column}, ${coordinate.row}`
+    );
+  }
+
+  return `${columnNumberToName(coordinate.column)}${coordinate.row}`;
+}
+
 export function expandCellRangeRows(
   range: ScorebookCellRange
 ): ScorebookRowRange[] {

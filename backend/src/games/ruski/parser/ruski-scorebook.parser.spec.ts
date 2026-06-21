@@ -5,9 +5,11 @@ import { join } from "node:path";
 import {
   ParsedScorebook,
   ParsedScorebookGameSheet,
+  ParsedScorebookRow,
   ParsedScorebookSheet
 } from "../../parsed-scorebook";
 import { RUSKI_EVENT_TYPE_IDS } from "../definition";
+import { RUSKI_SCOREBOOK_SHEET_NAMES } from "../scorebook";
 import { RuskiScorebookParser } from "./ruski-scorebook.parser";
 
 const fixturePath = join(
@@ -147,9 +149,66 @@ describe("RuskiScorebookParser", () => {
       rightSide.shotRows.some((row) => row.eventFlags[RUSKI_EVENT_TYPE_IDS.guy])
     ).toBe(true);
   });
+
+  it("normalizes AllData rows from the official fixture", async () => {
+    const rows = await parseAllDataRows();
+
+    expect(rows).toHaveLength(226);
+    expect(rows[0]).toMatchObject({
+      rowNumber: 2,
+      values: {
+        game: "Regular Season Standings",
+        player: "Pierre/Anson",
+        misses: 0,
+        makes: 7,
+        splashOuts: 0,
+        guys: 0,
+        tris: 1,
+        dis: 0,
+        voms: 0
+      },
+      metadata: {
+        sourceCells: {
+          game: "A2",
+          player: "B2",
+          misses: "C2",
+          makes: "D2",
+          splashOuts: "E2",
+          guys: "F2",
+          tris: "G2",
+          dis: "H2",
+          voms: "I2"
+        }
+      }
+    });
+    expect(rows).toContainEqual(
+      expect.objectContaining({
+        rowNumber: 8,
+        values: expect.objectContaining({
+          game: "Brando/Heath vs. Hispanics",
+          player: "Heath Lawry",
+          misses: 16,
+          makes: 5,
+          splashOuts: 1,
+          guys: 1,
+          tris: 0,
+          dis: 0,
+          voms: 0
+        })
+      })
+    );
+    expect(rows.at(-1)?.rowNumber).toBe(227);
+    expect(
+      rows.some((row) =>
+        Object.values(row.values).every((value) => value === null)
+      )
+    ).toBe(false);
+  });
 });
 
-async function parseFixture(buffer = readFileSync(fixturePath)): Promise<ParsedScorebook> {
+async function parseFixture(
+  buffer = readFileSync(fixturePath)
+): Promise<ParsedScorebook> {
   const parser = new RuskiScorebookParser();
 
   return parser.parseScorebook({
@@ -159,6 +218,17 @@ async function parseFixture(buffer = readFileSync(fixturePath)): Promise<ParsedS
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     sizeBytes: buffer.byteLength
   });
+}
+
+async function parseAllDataRows(): Promise<ParsedScorebookRow[]> {
+  const parsed = await parseFixture();
+  const sheet = getSheetByName(parsed).get(RUSKI_SCOREBOOK_SHEET_NAMES.allData);
+
+  if (sheet?.rows === undefined) {
+    throw new Error("Expected AllData to be parsed into normalized rows.");
+  }
+
+  return sheet.rows;
 }
 
 async function parseGameSheet(
