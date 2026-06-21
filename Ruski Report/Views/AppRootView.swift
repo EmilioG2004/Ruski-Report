@@ -44,8 +44,10 @@ struct AppRootView: View {
     private func destination(for route: AppRoute) -> some View {
         switch route {
         case .tournament(let id):
-            TournamentPlaceholderView(
-                tournament: homeController.tournament(id: id)
+            TournamentDetailView(
+                tournamentId: id,
+                tournaments: services.tournaments,
+                logger: services.logger
             )
         }
     }
