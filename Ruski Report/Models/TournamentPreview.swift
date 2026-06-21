@@ -5,7 +5,7 @@
 
 import Foundation
 
-struct TournamentPreview: Identifiable, Equatable {
+nonisolated struct TournamentPreview: Identifiable, Equatable {
     let id: String
     let year: Int
     let name: String
@@ -15,10 +15,12 @@ struct TournamentPreview: Identifiable, Equatable {
     let featuredMatchCount: Int
 }
 
-enum TournamentPreviewStatus: String, Equatable {
+nonisolated enum TournamentPreviewStatus: Equatable {
     case scheduled
     case active
     case completed
+    case archived
+    case unknown(String)
 
     var displayName: String {
         switch self {
@@ -28,6 +30,10 @@ enum TournamentPreviewStatus: String, Equatable {
             "Active"
         case .completed:
             "Completed"
+        case .archived:
+            "Archived"
+        case .unknown(let value):
+            value.isEmpty ? "Unknown" : value.capitalized
         }
     }
 }
