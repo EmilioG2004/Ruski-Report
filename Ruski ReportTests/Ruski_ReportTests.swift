@@ -11,9 +11,9 @@ import SwiftUI
 
 struct Ruski_ReportTests {
 
-    @Test func featuredTournamentUsesRuskiReportShellData() {
-        let store = TournamentPreviewStore()
-        let tournament = store.featuredTournament
+    @Test func featuredTournamentUsesRuskiReportShellData() async throws {
+        let repository = PreviewTournamentRepository()
+        let tournament = try await repository.activeTournament()
 
         #expect(tournament.id == "tournament-2026")
         #expect(tournament.name == "2026 Ruski Tournament")
@@ -25,6 +25,20 @@ struct Ruski_ReportTests {
         let navigation = AppNavigationController()
 
         #expect(navigation.path.isEmpty)
+    }
+
+    @MainActor
+    @Test func homeControllerDependsOnTournamentRepository() async throws {
+        let controller = HomeController(
+            tournaments: PreviewTournamentRepository(),
+            logger: NoopAppLogger(),
+            initialTournament: PreviewData.tournamentPreview
+        )
+
+        await controller.loadActiveTournament()
+
+        #expect(controller.tournament.id == "tournament-2026")
+        #expect(controller.tournament(id: "tournament-2026") != nil)
     }
 
 }
