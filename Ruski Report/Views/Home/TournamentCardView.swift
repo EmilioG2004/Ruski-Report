@@ -10,48 +10,61 @@ struct TournamentCardView: View {
     let action: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(tournament.name)
-                        .font(.title2.bold())
-                        .foregroundStyle(.primary)
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(tournament.name)
+                            .font(.title2.bold())
+                            .foregroundStyle(.primary)
 
-                    Text(tournament.locationName)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        Text(tournament.locationName)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer(minLength: 12)
+
+                    StatusPill(text: tournament.status.displayName)
                 }
 
-                Spacer(minLength: 12)
+                VStack(alignment: .leading, spacing: 10) {
+                    Label(tournament.formatSummary, systemImage: "trophy")
+                    Label("\(tournament.year) season", systemImage: "calendar")
+                    Label(featuredMatchText, systemImage: "sportscourt")
+                }
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
 
-                StatusPill(text: tournament.status.displayName)
-            }
+                HStack {
+                    Label("Open Tournament", systemImage: "arrow.right.circle.fill")
+                        .font(.headline)
 
-            VStack(alignment: .leading, spacing: 10) {
-                Label(tournament.formatSummary, systemImage: "trophy")
-                Label("\(tournament.year) season", systemImage: "calendar")
-                Label(
-                    "\(tournament.featuredMatchCount) featured matches",
-                    systemImage: "sportscourt"
-                )
-            }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
+                    Spacer()
 
-            Button(action: action) {
-                Label("Open Tournament", systemImage: "arrow.right.circle.fill")
-                    .frame(maxWidth: .infinity)
+                    Image(systemName: "chevron.right")
+                        .font(.headline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .foregroundStyle(Color.accentColor)
             }
-            .buttonStyle(.borderedProminent)
-            .accessibilityIdentifier("home.openTournament")
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.appSecondaryGroupedBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(Color.appSeparator, lineWidth: 0.5)
+            }
         }
-        .padding(20)
-        .background(Color.appSecondaryGroupedBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
-        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("home.tournamentCard")
         .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isButton)
+    }
+
+    private var featuredMatchText: String {
+        let count = tournament.featuredMatchCount
+        return "\(count) featured \(count == 1 ? "match" : "matches")"
     }
 }
