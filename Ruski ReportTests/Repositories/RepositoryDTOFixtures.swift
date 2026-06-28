@@ -258,3 +258,13 @@ func matchDetailDTO() -> MatchDetailDTO {
         updatedAt: "2026-06-21T00:00:00.000Z"
     )
 }
+
+func commentDTO() -> CommentDTO {
+    CommentDTO(
+        id: "comment-1",
+        matchId: "match-1",
+        author: CommentAuthorDTO(displayName: "Alex"),
+        body: "Great match.",
+        createdAt: "2026-06-21T00:18:00.000Z"
+    )
+}

@@ -8,6 +8,7 @@
 final class RecordingAPIClient: APIClient {
     var requestedPaths: [String] = []
     var responses: [String: Any] = [:]
+    var postedBodies: [String: Any] = [:]
 
     func get<Response: Decodable>(_ path: String) async throws -> Response {
         requestedPaths.append(path)
@@ -24,6 +25,7 @@ final class RecordingAPIClient: APIClient {
         body: Body
     ) async throws -> Response {
         requestedPaths.append(path)
+        postedBodies[path] = body
 
         guard let response = responses[path] as? Response else {
             throw AppError.unsupported("Missing response for \(path).")

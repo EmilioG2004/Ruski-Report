@@ -80,4 +80,55 @@ struct RepositoryTests {
             "dis"
         ])
     }
+
+    @Test func commentRepositoryLoadsMatchCommentsPath() async throws {
+        let apiClient = RecordingAPIClient()
+        apiClient.responses["matches/match-1/comments"] = [commentDTO()]
+        let repository = RemoteCommentRepository(
+            apiClient: apiClient,
+            session: StubSessionRepository()
+        )
+
+        let comments = try await repository.comments(matchId: "match-1")
+
+        #expect(apiClient.requestedPaths == ["matches/match-1/comments"])
+        #expect(comments.map(\.id) == ["comment-1"])
+        #expect(comments.first?.matchId == "match-1")
+    }
+
+    @Test func commentRepositoryPostsAuthenticatedAuthorPayload() async throws {
+        let apiClient = RecordingAPIClient()
+        apiClient.responses["matches/match-1/comments"] = commentDTO()
+        let repository = RemoteCommentRepository(
+            apiClient: apiClient,
+            session: StubSessionRepository(
+                session: .authenticated(
+                    UserProfile(
+                        id: "user-1",
+                        displayName: "Alex",
+                        provider: .gameCenter
+                    )
+                )
+            )
+        )
+
+        let comment = try await repository.postComment(
+            matchId: "match-1",
+            body: "Great match."
+        )
+
+        #expect(apiClient.requestedPaths == ["matches/match-1/comments"])
+        #expect(comment.id == "comment-1")
+        #expect(
+            apiClient.postedBodies["matches/match-1/comments"] as? CreateCommentRequestDTO ==
+                CreateCommentRequestDTO(
+                    body: "Great match.",
+                    author: CreateCommentAuthorDTO(
+                        kind: "account",
+                        displayName: "Alex",
+                        userId: "user-1"
+                    )
+                )
+        )
+    }
 }
