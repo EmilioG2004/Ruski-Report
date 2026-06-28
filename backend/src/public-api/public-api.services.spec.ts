@@ -1,4 +1,5 @@
 import {
+  Comment,
   GameDefinition,
   MatchDetail,
   MatchSummary,
@@ -10,12 +11,14 @@ import {
   InMemoryGameDefinitionRepository
 } from "../games";
 import {
+  InMemoryCommentRepository,
   InMemoryTournamentReadRepository,
   repositorySuccess,
   RepositoryResult,
   TournamentReadRepository
 } from "../repositories";
 import { AppError } from "../errors";
+import { CommentsService } from "./comments.service";
 import { GamesService } from "./games.service";
 import { MatchesService } from "./matches.service";
 import { TournamentsService } from "./tournaments.service";
@@ -131,6 +134,74 @@ describe("public API services", () => {
     expect(match.events).toHaveLength(2);
   });
 
+  it("returns comments scoped to a match", async () => {
+    const service = new CommentsService(
+      new InMemoryCommentRepository(),
+      new InMemoryTournamentReadRepository()
+    );
+
+    const created = await service.createMatchComment("match-2026-001", {
+      body: "Great match.",
+      author: {
+        kind: "account",
+        displayName: "Alex",
+        userId: "user-1"
+      }
+    });
+    const comments = await service.getMatchComments("match-2026-001");
+
+    expect(created).toMatchObject({
+      matchId: "match-2026-001",
+      body: "Great match.",
+      author: {
+        kind: "account",
+        displayName: "Alex",
+        userId: "user-1"
+      }
+    } satisfies Partial<Comment>);
+    expect(comments).toEqual([created]);
+  });
+
+  it("rejects guest comments", async () => {
+    const service = new CommentsService(
+      new InMemoryCommentRepository(),
+      new InMemoryTournamentReadRepository()
+    );
+
+    await expect(
+      service.createMatchComment("match-2026-001", {
+        body: "Great match.",
+        author: {
+          kind: "guest",
+          displayName: "Guest"
+        }
+      })
+    ).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+      statusCode: 401
+    } satisfies Partial<AppError>);
+  });
+
+  it("rejects invalid comment bodies", async () => {
+    const service = new CommentsService(
+      new InMemoryCommentRepository(),
+      new InMemoryTournamentReadRepository()
+    );
+
+    await expect(
+      service.createMatchComment("match-2026-001", {
+        body: "   ",
+        author: {
+          kind: "account",
+          displayName: "Alex"
+        }
+      })
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      statusCode: 400
+    } satisfies Partial<AppError>);
+  });
+
   it("raises not found when a tournament does not exist", async () => {
     const service = new TournamentsService(new EmptyTournamentReadRepository());
 
@@ -144,6 +215,18 @@ describe("public API services", () => {
     const service = new MatchesService(new EmptyTournamentReadRepository());
 
     await expect(service.getMatchDetail("missing")).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      statusCode: 404
+    } satisfies Partial<AppError>);
+  });
+
+  it("raises not found when reading comments for a missing match", async () => {
+    const service = new CommentsService(
+      new InMemoryCommentRepository(),
+      new EmptyTournamentReadRepository()
+    );
+
+    await expect(service.getMatchComments("missing")).rejects.toMatchObject({
       code: "NOT_FOUND",
       statusCode: 404
     } satisfies Partial<AppError>);

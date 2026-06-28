@@ -1,5 +1,13 @@
-import { GameDefinition, MatchDetail, MatchSummary, Tournament } from "../domain";
+import {
+  Comment,
+  GameDefinition,
+  MatchDetail,
+  MatchSummary,
+  Tournament
+} from "../domain";
 import { sampleMatchDetail, sampleMatchSummary, sampleTournament } from "../sample-data";
+import { CommentsController } from "./comments.controller";
+import { CommentsService, CreateCommentRequest } from "./comments.service";
 import { GamesController } from "./games.controller";
 import { GamesService } from "./games.service";
 import { MatchesController } from "./matches.controller";
@@ -66,5 +74,47 @@ describe("public API controllers", () => {
       sampleMatchDetail
     );
     expect(service.getMatchDetail).toHaveBeenCalledWith("match-2026-001");
+  });
+
+  it("delegates match comment reads and writes to the comments service", async () => {
+    const comment: Comment = {
+      id: "comment-1",
+      matchId: "match-2026-001",
+      author: {
+        kind: "account",
+        displayName: "Alex"
+      },
+      body: "Great match.",
+      createdAt: "2026-06-17T12:00:00.000Z"
+    };
+    const request: CreateCommentRequest = {
+      body: "Great match.",
+      author: {
+        kind: "account",
+        displayName: "Alex",
+        userId: "user-1"
+      }
+    };
+    const service = {
+      getMatchComments: jest
+        .fn<Promise<Comment[]>, [string]>()
+        .mockResolvedValue([comment]),
+      createMatchComment: jest
+        .fn<Promise<Comment>, [string, CreateCommentRequest | null | undefined]>()
+        .mockResolvedValue(comment)
+    } as unknown as CommentsService;
+    const controller = new CommentsController(service);
+
+    await expect(
+      controller.getMatchComments("match-2026-001")
+    ).resolves.toEqual([comment]);
+    await expect(
+      controller.createMatchComment("match-2026-001", request)
+    ).resolves.toBe(comment);
+    expect(service.getMatchComments).toHaveBeenCalledWith("match-2026-001");
+    expect(service.createMatchComment).toHaveBeenCalledWith(
+      "match-2026-001",
+      request
+    );
   });
 });
