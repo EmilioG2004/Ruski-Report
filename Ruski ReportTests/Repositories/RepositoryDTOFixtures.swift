@@ -118,8 +118,44 @@ func gameDefinitionDTO() -> GameDefinitionDTO {
         phases: [
             GamePhaseDefinitionDTO(id: "normal", label: "Normal Play", sequence: 1)
         ],
-        eventTypes: [],
-        stats: []
+        eventTypes: [
+            GameEventTypeDefinitionDTO(
+                id: "di",
+                label: "Di",
+                category: "attempt",
+                affectsScore: false,
+                countsAsAttempt: true,
+                statKey: "dis"
+            ),
+            GameEventTypeDefinitionDTO(
+                id: "guy",
+                label: "Guy",
+                category: "attempt",
+                affectsScore: false,
+                countsAsAttempt: true,
+                statKey: "guys"
+            )
+        ],
+        stats: [
+            GameStatDefinitionDTO(
+                key: "makes",
+                label: "Cups Made",
+                scope: "player",
+                valueType: "count"
+            ),
+            GameStatDefinitionDTO(
+                key: "shootingPercentage",
+                label: "Shooting Percentage",
+                scope: "player",
+                valueType: "percentage"
+            ),
+            GameStatDefinitionDTO(
+                key: "dis",
+                label: "Di",
+                scope: "player",
+                valueType: "count"
+            )
+        ],
     )
 }
 
@@ -148,9 +184,76 @@ func matchDetailDTO() -> MatchDetailDTO {
         score: nil,
         podId: "pod-a",
         currentPhase: nil,
-        boxScore: nil,
-        scorecard: nil,
-        events: [],
+        boxScore: BoxScoreDTO(
+            matchId: "match-1",
+            rows: [
+                BoxScoreRowDTO(
+                    subject: BoxScoreSubjectDTO(
+                        type: "player",
+                        label: "Alex",
+                        playerId: "player-alex",
+                        teamId: "team-alpha"
+                    ),
+                    stats: [
+                        "makes": .number(2),
+                        "shootingPercentage": .number(0.667),
+                        "dis": .number(1)
+                    ]
+                )
+            ],
+            totals: [
+                "makes": .number(2),
+                "shootingPercentage": .number(0.667),
+                "dis": .number(1)
+            ]
+        ),
+        scorecard: ScorecardDTO(
+            definition: ScorecardDefinitionDTO(
+                columns: [
+                    ScorecardColumnDTO(
+                        key: "shotNumber",
+                        label: "Shot",
+                        dataType: "number"
+                    ),
+                    ScorecardColumnDTO(
+                        key: "shooter",
+                        label: "Shooter",
+                        dataType: "player"
+                    ),
+                    ScorecardColumnDTO(
+                        key: "di",
+                        label: "Di",
+                        dataType: "boolean"
+                    )
+                ]
+            ),
+            rows: [
+                ScorecardRowDTO(
+                    id: "scorecard-row-1",
+                    sequence: 1,
+                    values: [
+                        "shotNumber": .number(1),
+                        "shooter": .string("Alex"),
+                        "di": .bool(true)
+                    ]
+                )
+            ]
+        ),
+        events: [
+            GameEventDTO(
+                id: "event-1",
+                type: "di",
+                sequence: 1,
+                teamId: "team-alpha",
+                playerId: "player-alex",
+                value: 2
+            )
+        ],
+        commentsSummary: CommentsSummaryDTO(
+            matchId: "match-1",
+            count: 1,
+            latestCommentAt: "2026-06-21T00:15:00.000Z"
+        ),
         version: 1,
         updatedAt: "2026-06-21T00:00:00.000Z"
     )

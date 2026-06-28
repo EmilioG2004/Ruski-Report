@@ -57,6 +57,10 @@ struct RepositoryTests {
 
         #expect(apiClient.requestedPaths == ["matches/match-1"])
         #expect(match.id == "match-1")
+        #expect(match.boxScore?.rows.first?.stats["dis"] == 1)
+        #expect(match.scorecard?.columns.map(\.key) == ["shotNumber", "shooter", "di"])
+        #expect(match.events.first?.type == "di")
+        #expect(match.commentsSummary?.count == 1)
     }
 
     @Test func gameRepositoryMapsGameDefinitions() async throws {
@@ -69,5 +73,11 @@ struct RepositoryTests {
         #expect(apiClient.requestedPaths == ["games"])
         #expect(games.first?.gameType == "ruski")
         #expect(games.first?.displayName == "Ruski")
+        #expect(games.first?.eventTypes.map(\.label) == ["Di", "Guy"])
+        #expect(games.first?.stats.map(\.key) == [
+            "makes",
+            "shootingPercentage",
+            "dis"
+        ])
     }
 }
