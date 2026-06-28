@@ -89,6 +89,119 @@ nonisolated extension TournamentDetail {
                     (originalOrder[rhs.teamId] ?? Int.max)
             }
     }
+
+    func bracketRoundSections() -> [TournamentBracketRoundSection] {
+        guard let bracket else {
+            return []
+        }
+
+        let sortedRounds = bracket.rounds.sorted { $0.sequence < $1.sequence }
+
+        return sortedRounds.map { round in
+            let laterRounds = sortedRounds.filter { $0.sequence > round.sequence }
+
+            return TournamentBracketRoundSection(
+                id: round.id,
+                name: round.name,
+                sequence: round.sequence,
+                matchups: round.matchIds.enumerated().map { index, matchId in
+                    bracketMatchup(
+                        matchId: matchId,
+                        ordinal: index + 1,
+                        laterRounds: laterRounds
+                    )
+                }
+            )
+        }
+    }
+
+    private func bracketMatchup(
+        matchId: MatchPreview.ID,
+        ordinal: Int,
+        laterRounds: [BracketRound]
+    ) -> TournamentBracketMatchup {
+        guard let match = matchesById[matchId] else {
+            return TournamentBracketMatchup(
+                id: matchId,
+                matchId: matchId,
+                title: "Match \(ordinal)",
+                statusText: "Unavailable",
+                slots: [],
+                progressionText: nil,
+                isAvailable: false
+            )
+        }
+
+        let winnerTeamId = resolvedWinnerTeamId(for: match)
+
+        return TournamentBracketMatchup(
+            id: match.id,
+            matchId: match.id,
+            title: participantsLabel(for: match),
+            statusText: match.status.displayName,
+            slots: match.participants.map { participant in
+                TournamentBracketTeamSlot(
+                    teamId: participant.teamId,
+                    teamName: teamName(for: participant.teamId),
+                    seed: participant.seed ?? teamsById[participant.teamId]?.seed,
+                    score: score(for: participant, in: match),
+                    isWinner: winnerTeamId == participant.teamId
+                )
+            },
+            progressionText: progressionText(
+                winnerTeamId: winnerTeamId,
+                laterRounds: laterRounds
+            ),
+            isAvailable: true
+        )
+    }
+
+    private func resolvedWinnerTeamId(for match: MatchPreview) -> String? {
+        if let winnerTeamId = match.score?.winnerTeamId {
+            return winnerTeamId
+        }
+
+        return match.participants.first { $0.result == "win" }?.teamId
+    }
+
+    private func score(
+        for participant: MatchParticipant,
+        in match: MatchPreview
+    ) -> Int? {
+        participant.score ??
+            match.score?.participants.first { $0.teamId == participant.teamId }?.score
+    }
+
+    private func progressionText(
+        winnerTeamId: TournamentTeam.ID?,
+        laterRounds: [BracketRound]
+    ) -> String? {
+        guard let nextRound = nextRound(
+            for: winnerTeamId,
+            in: laterRounds
+        ) else {
+            return winnerTeamId == nil ? nil : "Bracket winner"
+        }
+
+        return "Winner advances to \(nextRound.name)"
+    }
+
+    private func nextRound(
+        for winnerTeamId: TournamentTeam.ID?,
+        in laterRounds: [BracketRound]
+    ) -> BracketRound? {
+        guard let winnerTeamId else {
+            return laterRounds.first
+        }
+
+        return laterRounds.first { round in
+            round.matchIds.contains { matchId in
+                matchesById[matchId]?.participants.contains {
+                    $0.teamId == winnerTeamId
+                } ?? false
+            }
+        } ?? laterRounds.first
+    }
 }
 
 nonisolated struct TournamentPodStandingRow: Identifiable, Equatable {
@@ -102,4 +215,31 @@ nonisolated struct TournamentPodStandingRow: Identifiable, Equatable {
     let losses: Int?
     let cupDifferential: Double?
     let shootingPercentage: Double?
+}
+
+nonisolated struct TournamentBracketRoundSection: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let sequence: Int
+    let matchups: [TournamentBracketMatchup]
+}
+
+nonisolated struct TournamentBracketMatchup: Identifiable, Equatable {
+    let id: String
+    let matchId: String
+    let title: String
+    let statusText: String
+    let slots: [TournamentBracketTeamSlot]
+    let progressionText: String?
+    let isAvailable: Bool
+}
+
+nonisolated struct TournamentBracketTeamSlot: Identifiable, Equatable {
+    var id: String { teamId }
+
+    let teamId: String
+    let teamName: String
+    let seed: Int?
+    let score: Int?
+    let isWinner: Bool
 }
