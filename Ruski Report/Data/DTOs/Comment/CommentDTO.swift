@@ -19,4 +19,11 @@ nonisolated struct CommentAuthorDTO: Decodable, Equatable {
 
 nonisolated struct CreateCommentRequestDTO: Encodable, Equatable {
     let body: String
+    let author: CreateCommentAuthorDTO
+}
+
+nonisolated struct CreateCommentAuthorDTO: Encodable, Equatable {
+    let kind: String
+    let displayName: String
+    let userId: String?
 }

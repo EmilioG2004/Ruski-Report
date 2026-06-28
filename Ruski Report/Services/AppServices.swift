@@ -58,13 +58,14 @@ nonisolated struct AppServices {
         logger: any AppLogger = OSLogAppLogger()
     ) -> AppServices {
         let apiClient = URLSessionAPIClient(baseURL: config.apiBaseURL)
+        let session = GuestSessionRepository()
 
         return AppServices(
             games: RemoteGameRepository(apiClient: apiClient),
             tournaments: RemoteTournamentRepository(apiClient: apiClient),
             matches: RemoteMatchRepository(apiClient: apiClient),
-            comments: RemoteCommentRepository(apiClient: apiClient),
-            session: GuestSessionRepository(),
+            comments: RemoteCommentRepository(apiClient: apiClient, session: session),
+            session: session,
             realtime: NoopRealtimeUpdateRepository(),
             logger: logger,
             initialTournament: PreviewData.tournamentPreview
