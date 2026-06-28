@@ -11,7 +11,7 @@ struct MatchDetailView: View {
 
     private let routeContext: MatchRouteContext
     private let comments: any CommentRepository
-    private let session: any SessionRepository
+    private let session: LocalSessionRepository
     private let logger: any AppLogger
 
     init(
@@ -19,7 +19,7 @@ struct MatchDetailView: View {
         matches: any MatchRepository,
         games: any GameRepository,
         comments: any CommentRepository,
-        session: any SessionRepository,
+        session: LocalSessionRepository,
         logger: any AppLogger
     ) {
         self.routeContext = routeContext
@@ -398,14 +398,17 @@ private struct MatchEventLogView: View {
 
 private struct MatchCommentsView: View {
     @StateObject private var controller: MatchCommentsController
+    @ObservedObject private var session: LocalSessionRepository
+    @EnvironmentObject private var sheetRouter: AppSheetRouter
     @State private var draftComment = ""
 
     init(
         matchId: MatchPreview.ID,
         comments: any CommentRepository,
-        session: any SessionRepository,
+        session: LocalSessionRepository,
         logger: any AppLogger
     ) {
+        self.session = session
         _controller = StateObject(
             wrappedValue: MatchCommentsController(
                 matchId: matchId,
@@ -433,7 +436,7 @@ private struct MatchCommentsView: View {
             }
             .accessibilityIdentifier("match.comments")
         }
-        .task {
+        .task(id: session.current) {
             await controller.loadComments()
         }
     }
@@ -500,6 +503,14 @@ private struct MatchCommentsView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .accessibilityIdentifier("match.comments.signInPrompt")
+
+                Button {
+                    sheetRouter.showAccount()
+                } label: {
+                    Label("Sign In", systemImage: "person.crop.circle.badge.plus")
+                }
+                .buttonStyle(.bordered)
+                .accessibilityIdentifier("match.comments.signIn")
 
                 if let postErrorMessage = content.postErrorMessage {
                     Text(postErrorMessage)
