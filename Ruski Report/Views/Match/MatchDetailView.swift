@@ -10,14 +10,22 @@ struct MatchDetailView: View {
     @StateObject private var controller: MatchDetailController
 
     private let routeContext: MatchRouteContext
+    private let comments: any CommentRepository
+    private let session: any SessionRepository
+    private let logger: any AppLogger
 
     init(
         routeContext: MatchRouteContext,
         matches: any MatchRepository,
         games: any GameRepository,
+        comments: any CommentRepository,
+        session: any SessionRepository,
         logger: any AppLogger
     ) {
         self.routeContext = routeContext
+        self.comments = comments
+        self.session = session
+        self.logger = logger
         _controller = StateObject(
             wrappedValue: MatchDetailController(
                 matchId: routeContext.matchId,
@@ -66,7 +74,12 @@ struct MatchDetailView: View {
                     routeContext: routeContext
                 )
 
-                MatchCommentsPreviewView(summary: screen.match.commentsSummary)
+                MatchCommentsView(
+                    matchId: screen.match.id,
+                    comments: comments,
+                    session: session,
+                    logger: logger
+                )
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -383,54 +396,179 @@ private struct MatchEventLogView: View {
     }
 }
 
-private struct MatchCommentsPreviewView: View {
-    let summary: MatchCommentsSummary?
+private struct MatchCommentsView: View {
+    @StateObject private var controller: MatchCommentsController
+    @State private var draftComment = ""
+
+    init(
+        matchId: MatchPreview.ID,
+        comments: any CommentRepository,
+        session: any SessionRepository,
+        logger: any AppLogger
+    ) {
+        _controller = StateObject(
+            wrappedValue: MatchCommentsController(
+                matchId: matchId,
+                comments: comments,
+                session: session,
+                logger: logger
+            )
+        )
+    }
 
     var body: some View {
-        MatchSectionView(
-            title: "Comments",
-            systemImage: "text.bubble"
-        ) {
-            HStack(spacing: 12) {
-                Image(systemName: "text.bubble")
-                    .frame(width: 28, height: 28)
-                    .foregroundStyle(Color.accentColor)
+        MatchSectionView(title: "Comments", systemImage: "text.bubble") {
+            Group {
+                switch controller.state {
+                case .loading:
+                    ProgressView("Loading comments")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.vertical, 12)
+                        .accessibilityIdentifier("match.comments.loading")
+                case .loaded(let content):
+                    loadedContent(content)
+                case .failed(let message):
+                    failedContent(message)
+                }
+            }
+            .accessibilityIdentifier("match.comments")
+        }
+        .task {
+            await controller.loadComments()
+        }
+    }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(commentCountText)
-                        .font(.body.weight(.medium))
+    private func loadedContent(_ content: MatchCommentsContent) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            if content.comments.isEmpty {
+                EmptyMatchSectionView(
+                    title: "No comments yet",
+                    systemImage: "text.bubble"
+                )
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(Array(content.comments.enumerated()), id: \.element.id) { index, comment in
+                        if index > 0 {
+                            Divider()
+                        }
 
-                    Text(latestCommentText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        MatchCommentRowView(comment: comment)
+                    }
+                }
+            }
+
+            postingContent(content)
+        }
+    }
+
+    @ViewBuilder
+    private func postingContent(_ content: MatchCommentsContent) -> some View {
+        switch content.postingAuthorization {
+        case .allowed:
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .top, spacing: 10) {
+                    TextField("Add a comment", text: $draftComment, axis: .vertical)
+                        .lineLimit(2...4)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityIdentifier("match.comments.input")
+
+                    Button {
+                        submitComment()
+                    } label: {
+                        if content.isPosting {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Label("Post", systemImage: "paperplane.fill")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(content.isPosting || trimmedDraft.isEmpty)
+                    .accessibilityIdentifier("match.comments.post")
                 }
 
-                Spacer(minLength: 0)
+                if let postErrorMessage = content.postErrorMessage {
+                    Text(postErrorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier("match.comments.postError")
+                }
             }
-            .accessibilityIdentifier("match.commentsPreview")
+        case .requiresSignIn(let message):
+            VStack(alignment: .leading, spacing: 8) {
+                Label(message, systemImage: "person.crop.circle.badge.exclamationmark")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("match.comments.signInPrompt")
+
+                if let postErrorMessage = content.postErrorMessage {
+                    Text(postErrorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .accessibilityIdentifier("match.comments.postError")
+                }
+            }
         }
     }
 
-    private var commentCountText: String {
-        let count = summary?.count ?? 0
+    private func failedContent(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(message, systemImage: "exclamationmark.triangle")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
 
-        if count == 0 {
-            return "No comments yet"
+            Button {
+                Task {
+                    await controller.loadComments()
+                }
+            } label: {
+                Label("Retry", systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
+            .accessibilityIdentifier("match.comments.retry")
         }
-
-        if count == 1 {
-            return "1 comment"
-        }
-
-        return "\(count) comments"
+        .padding(.vertical, 8)
     }
 
-    private var latestCommentText: String {
-        guard let latestCommentAt = summary?.latestCommentAt else {
-            return "No recent comments"
-        }
+    private var trimmedDraft: String {
+        draftComment.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
-        return "Latest comment \(latestCommentAt)"
+    private func submitComment() {
+        let body = draftComment
+        Task {
+            if await controller.postComment(body: body) {
+                draftComment = ""
+            }
+        }
+    }
+}
+
+private struct MatchCommentRowView: View {
+    let comment: MatchComment
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(comment.authorDisplayName)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+
+                Spacer(minLength: 8)
+
+                Text(comment.createdAt)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
+
+            Text(comment.body)
+                .font(.subheadline)
+                .foregroundStyle(.primary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 

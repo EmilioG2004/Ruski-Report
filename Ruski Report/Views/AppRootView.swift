@@ -54,6 +54,8 @@ struct AppRootView: View {
                 routeContext: context,
                 matches: services.matches,
                 games: services.games,
+                comments: services.comments,
+                session: services.session,
                 logger: services.logger
             )
         }
