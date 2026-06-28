@@ -7,6 +7,8 @@ import {
 import { RepositoryResult } from "./repository-result";
 import { TransactionContext } from "./transaction";
 
+export const COMMENT_REPOSITORY = Symbol("COMMENT_REPOSITORY");
+
 export interface CreateCommentInput {
   matchId: MatchId;
   author: CommentAuthor;

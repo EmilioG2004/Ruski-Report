@@ -1,3 +1,5 @@
+export * from "./comments.controller";
+export * from "./comments.service";
 export * from "./games.controller";
 export * from "./games.service";
 export * from "./matches.controller";

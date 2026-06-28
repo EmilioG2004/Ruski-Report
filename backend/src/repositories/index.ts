@@ -1,4 +1,5 @@
 export * from "./comment-repository";
+export * from "./in-memory-comment.repository";
 export * from "./in-memory-tournament-snapshot.repository";
 export * from "./in-memory-tournament-read.repository";
 export * from "./in-memory-transaction.manager";
