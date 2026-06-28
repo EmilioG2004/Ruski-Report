@@ -5,6 +5,7 @@
 
 import Foundation
 
-nonisolated protocol SessionRepository {
+@MainActor
+protocol SessionRepository {
     func currentSession() async -> UserSession
 }

@@ -6,6 +6,7 @@
 import Testing
 @testable import Ruski_Report
 
+@MainActor
 struct SessionAuthorizationTests {
     @Test func guestSessionCanViewButCannotPostComments() {
         let session = UserSession.guest
@@ -76,6 +77,52 @@ struct SessionAuthorizationTests {
 
         #expect(session == .guest)
         #expect(session.canViewTournamentData)
+        #expect(!session.canPostComments)
+    }
+
+    @Test func localSessionRepositorySignsInWithTrimmedDisplayName() async {
+        let repository = LocalSessionRepository(idFactory: { "local-test-user" })
+
+        let result = repository.signIn(displayName: "  Jamie  ")
+        let session = await repository.currentSession()
+
+        if case .failure = result {
+            #expect(Bool(false))
+        }
+        #expect(
+            session == .authenticated(
+                UserProfile(
+                    id: "local-test-user",
+                    displayName: "Jamie",
+                    provider: .localAccount
+                )
+            )
+        )
+        #expect(session.canPostComments)
+    }
+
+    @Test func localSessionRepositoryRejectsBlankDisplayName() async {
+        let repository = LocalSessionRepository(idFactory: { "local-test-user" })
+
+        let result = repository.signIn(displayName: "   ")
+        let session = await repository.currentSession()
+
+        if case .failure(let error) = result {
+            #expect(error == .invalid(message: "Enter a display name."))
+        } else {
+            #expect(Bool(false))
+        }
+        #expect(session == .guest)
+    }
+
+    @Test func localSessionRepositorySignsOutToGuestSession() async {
+        let repository = LocalSessionRepository(idFactory: { "local-test-user" })
+
+        repository.signIn(displayName: "Jamie")
+        repository.signOut()
+        let session = await repository.currentSession()
+
+        #expect(session == .guest)
         #expect(!session.canPostComments)
     }
 }

@@ -5,7 +5,7 @@
 
 import Foundation
 
-nonisolated final class GuestSessionRepository: SessionRepository {
+final class GuestSessionRepository: SessionRepository {
     func currentSession() async -> UserSession {
         .guest
     }
