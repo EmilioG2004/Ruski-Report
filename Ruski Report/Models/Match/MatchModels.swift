@@ -23,6 +23,13 @@ nonisolated struct MatchDetail: Identifiable, Equatable {
     let boxScore: BoxScore?
     let scorecard: Scorecard?
     let events: [GameEvent]
+    let commentsSummary: MatchCommentsSummary?
+}
+
+nonisolated struct MatchCommentsSummary: Equatable {
+    let matchId: String
+    let count: Int
+    let latestCommentAt: String?
 }
 
 nonisolated enum MatchStatus: Equatable {

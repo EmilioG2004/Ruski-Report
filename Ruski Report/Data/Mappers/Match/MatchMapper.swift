@@ -38,7 +38,8 @@ nonisolated enum MatchMapper {
             preview: preview,
             boxScore: dto.boxScore.map(mapBoxScore),
             scorecard: dto.scorecard.map(mapScorecard),
-            events: dto.events.map(mapEvent)
+            events: dto.events.map(mapEvent),
+            commentsSummary: dto.commentsSummary.map(mapCommentsSummary)
         )
     }
 
@@ -123,6 +124,16 @@ nonisolated enum MatchMapper {
             teamId: dto.teamId,
             playerId: dto.playerId,
             value: dto.value
+        )
+    }
+
+    private static func mapCommentsSummary(
+        _ dto: CommentsSummaryDTO
+    ) -> MatchCommentsSummary {
+        MatchCommentsSummary(
+            matchId: dto.matchId,
+            count: dto.count,
+            latestCommentAt: dto.latestCommentAt
         )
     }
 

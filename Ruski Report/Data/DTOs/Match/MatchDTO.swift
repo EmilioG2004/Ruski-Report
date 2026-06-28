@@ -30,6 +30,7 @@ nonisolated struct MatchDetailDTO: Decodable, Equatable {
     let boxScore: BoxScoreDTO?
     let scorecard: ScorecardDTO?
     let events: [GameEventDTO]
+    let commentsSummary: CommentsSummaryDTO?
     let version: Int
     let updatedAt: String
 }
@@ -107,4 +108,10 @@ nonisolated struct GameEventDTO: Decodable, Equatable {
     let teamId: String?
     let playerId: String?
     let value: Double?
+}
+
+nonisolated struct CommentsSummaryDTO: Decodable, Equatable {
+    let matchId: String
+    let count: Int
+    let latestCommentAt: String?
 }
