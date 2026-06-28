@@ -96,4 +96,10 @@ nonisolated struct BracketRoundDTO: Decodable, Equatable {
     let name: String
     let sequence: Int
     let matchIds: [String]?
+    let matches: [BracketMatchDTO]?
+}
+
+nonisolated struct BracketMatchDTO: Decodable, Equatable {
+    let id: String
+    let matchId: String?
 }

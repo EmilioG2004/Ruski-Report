@@ -6,6 +6,8 @@
 import Foundation
 
 nonisolated struct AppServices {
+    static let previewLaunchArgument = "--use-preview-services"
+
     let games: any GameRepository
     let tournaments: any TournamentRepository
     let matches: any MatchRepository
@@ -26,10 +28,36 @@ nonisolated struct AppServices {
         initialTournament: PreviewData.tournamentPreview
     )
 
-    static func live(
-        baseURL: URL = URL(string: "http://localhost:3000/api")!
+    static func configured(
+        bundle: Bundle = .main,
+        processInfo: ProcessInfo = .processInfo
     ) -> AppServices {
-        let apiClient = URLSessionAPIClient(baseURL: baseURL)
+        if processInfo.arguments.contains(previewLaunchArgument) {
+            return preview
+        }
+
+        let logger = OSLogAppLogger()
+        let config: AppConfig
+
+        do {
+            config = try AppConfig.load(bundle: bundle, processInfo: processInfo)
+        } catch {
+            logger.log(
+                .warning,
+                "Unable to load app config; using fallback API base URL",
+                metadata: ["error": String(describing: error)]
+            )
+            config = .fallback
+        }
+
+        return live(config: config, logger: logger)
+    }
+
+    static func live(
+        config: AppConfig = .fallback,
+        logger: any AppLogger = OSLogAppLogger()
+    ) -> AppServices {
+        let apiClient = URLSessionAPIClient(baseURL: config.apiBaseURL)
 
         return AppServices(
             games: RemoteGameRepository(apiClient: apiClient),
@@ -38,7 +66,7 @@ nonisolated struct AppServices {
             comments: RemoteCommentRepository(apiClient: apiClient),
             session: GuestSessionRepository(),
             realtime: NoopRealtimeUpdateRepository(),
-            logger: OSLogAppLogger(),
+            logger: logger,
             initialTournament: PreviewData.tournamentPreview
         )
     }

@@ -11,7 +11,7 @@ import SwiftUI
 struct Ruski_ReportApp: App {
     var body: some Scene {
         WindowGroup {
-            AppRootView()
+            AppRootView(services: .configured())
         }
     }
 }

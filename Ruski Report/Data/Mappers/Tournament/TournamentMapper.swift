@@ -121,9 +121,17 @@ nonisolated enum TournamentMapper {
                     id: $0.id,
                     name: $0.name,
                     sequence: $0.sequence,
-                    matchIds: $0.matchIds ?? []
+                    matchIds: bracketMatchIds(from: $0)
                 )
             }
         )
+    }
+
+    private static func bracketMatchIds(from dto: BracketRoundDTO) -> [String] {
+        if let matchIds = dto.matchIds {
+            return matchIds
+        }
+
+        return dto.matches?.compactMap(\.matchId) ?? []
     }
 }

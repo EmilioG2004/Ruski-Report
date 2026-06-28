@@ -24,8 +24,7 @@ final class Ruski_ReportUITests: XCTestCase {
 
     @MainActor
     func testExample() throws {
-        let app = XCUIApplication()
-        app.launch()
+        let app = launchPreviewApp()
 
         XCTAssertTrue(app.staticTexts["home.title"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["2026 Ruski Tournament"].exists)
@@ -35,7 +34,15 @@ final class Ruski_ReportUITests: XCTestCase {
     func testLaunchPerformance() throws {
         // This measures how long it takes to launch your application.
         measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
+            _ = launchPreviewApp()
         }
+    }
+
+    @MainActor
+    private func launchPreviewApp() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments.append("--use-preview-services")
+        app.launch()
+        return app
     }
 }

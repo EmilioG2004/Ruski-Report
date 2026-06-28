@@ -33,6 +33,21 @@ struct RepositoryTests {
         #expect(matches.map(\.id) == ["match-1"])
     }
 
+    @Test func tournamentRepositoryLoadsDetailPathAndMapsSections() async throws {
+        let apiClient = RecordingAPIClient()
+        apiClient.responses["tournaments/tournament-2026"] = tournamentDetailDTO()
+        let repository = RemoteTournamentRepository(apiClient: apiClient)
+
+        let detail = try await repository.tournament(id: "tournament-2026")
+
+        #expect(apiClient.requestedPaths == ["tournaments/tournament-2026"])
+        #expect(detail.id == "tournament-2026")
+        #expect(detail.pods.map(\.id) == ["pod-a"])
+        #expect(detail.matches.map(\.id) == ["match-1"])
+        #expect(detail.bracket?.rounds.first?.matchIds == ["match-1"])
+        #expect(detail.standings.first?.shootingPercentage == 0.556)
+    }
+
     @Test func matchRepositoryLoadsMatchDetailPath() async throws {
         let apiClient = RecordingAPIClient()
         apiClient.responses["matches/match-1"] = matchDetailDTO()
