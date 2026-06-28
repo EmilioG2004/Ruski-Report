@@ -6,6 +6,8 @@
 import SwiftUI
 
 struct TournamentMatchesView: View {
+    @EnvironmentObject private var navigation: AppNavigationController
+
     let detail: TournamentDetail
 
     var body: some View {
@@ -17,7 +19,13 @@ struct TournamentMatchesView: View {
         } else {
             VStack(alignment: .leading, spacing: 12) {
                 ForEach(detail.matches) { match in
-                    TournamentMatchCard(detail: detail, match: match)
+                    Button {
+                        navigation.showMatch(match, in: detail)
+                    } label: {
+                        TournamentMatchCard(detail: detail, match: match)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("tournament.match.\(match.id)")
                 }
             }
             .accessibilityIdentifier("tournament.matches")

@@ -13,6 +13,45 @@ final class AppNavigationController: ObservableObject {
         path.append(AppRoute.tournament(id: tournament.id))
     }
 
+    func showMatch(_ match: MatchPreview, in tournament: TournamentDetail) {
+        showMatch(
+            match,
+            title: tournament.participantsLabel(for: match),
+            teamNames: match.participants.map { participant in
+                MatchRouteTeamName(
+                    teamId: participant.teamId,
+                    name: tournament.teamName(for: participant.teamId)
+                )
+            },
+            playerNames: tournament.teams.flatMap { team in
+                team.players.map { player in
+                    MatchRoutePlayerName(
+                        playerId: player.id,
+                        name: player.displayName
+                    )
+                }
+            }
+        )
+    }
+
+    func showMatch(
+        _ match: MatchPreview,
+        title: String,
+        teamNames: [MatchRouteTeamName],
+        playerNames: [MatchRoutePlayerName] = []
+    ) {
+        path.append(
+            AppRoute.match(
+                MatchRouteContext(
+                    matchId: match.id,
+                    title: title,
+                    teamNames: teamNames,
+                    playerNames: playerNames
+                )
+            )
+        )
+    }
+
     func reset() {
         path = NavigationPath()
     }

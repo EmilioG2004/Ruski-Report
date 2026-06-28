@@ -49,6 +49,13 @@ struct AppRootView: View {
                 tournaments: services.tournaments,
                 logger: services.logger
             )
+        case .match(let context):
+            MatchDetailView(
+                routeContext: context,
+                matches: services.matches,
+                games: services.games,
+                logger: services.logger
+            )
         }
     }
 }
