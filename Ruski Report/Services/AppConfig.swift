@@ -9,7 +9,7 @@ nonisolated struct AppConfig: Equatable {
     let apiBaseURL: URL
 
     static let fallback = AppConfig(
-        apiBaseURL: URL(string: "http://localhost:3000/api")!
+        apiBaseURL: URL(string: "http://127.0.0.1:3000/api")!
     )
 
     static func load(
@@ -43,11 +43,24 @@ nonisolated struct AppConfig: Equatable {
             throw AppConfigError.invalidAPIBaseURL(apiBaseURLString)
         }
 
-        self.apiBaseURL = url
+        self.apiBaseURL = Self.normalizedLocalDevelopmentURL(url)
     }
 
     private init(apiBaseURL: URL) {
         self.apiBaseURL = apiBaseURL
+    }
+
+    private static func normalizedLocalDevelopmentURL(_ url: URL) -> URL {
+        guard var components = URLComponents(
+            url: url,
+            resolvingAgainstBaseURL: false
+        ),
+              components.host == "localhost" else {
+            return url
+        }
+
+        components.host = "127.0.0.1"
+        return components.url ?? url
     }
 }
 
