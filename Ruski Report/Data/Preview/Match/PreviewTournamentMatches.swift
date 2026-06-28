@@ -71,6 +71,42 @@ nonisolated extension PreviewData {
         updatedAt: "2026-06-21T00:00:00.000Z"
     )
 
+    static let championshipMatch = MatchPreview(
+        id: "match-2026-003",
+        tournamentId: tournamentPreview.id,
+        gameType: "ruski",
+        status: .final,
+        participants: [
+            MatchParticipant(
+                teamId: "team-1",
+                role: "higher_seed",
+                seed: 1,
+                playerIds: ["player-alex", "player-sam"],
+                score: 10,
+                result: "win"
+            ),
+            MatchParticipant(
+                teamId: "team-3",
+                role: "lower_seed",
+                seed: 3,
+                playerIds: [],
+                score: 8,
+                result: "loss"
+            )
+        ],
+        score: MatchScore(
+            participants: [
+                TeamScore(teamId: "team-1", score: 10),
+                TeamScore(teamId: "team-3", score: 8)
+            ],
+            winnerTeamId: "team-1",
+            isFinal: true
+        ),
+        podId: nil,
+        currentPhaseLabel: "Championship",
+        updatedAt: "2026-06-21T00:30:00.000Z"
+    )
+
     static let matchPreview = openingMatch
 
     static let matchDetail = MatchDetail(

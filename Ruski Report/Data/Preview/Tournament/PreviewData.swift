@@ -158,9 +158,15 @@ nonisolated enum PreviewData {
                     name: "Semifinals",
                     sequence: 1,
                     matchIds: [openingMatch.id, secondMatch.id]
+                ),
+                BracketRound(
+                    id: "round-2",
+                    name: "Final",
+                    sequence: 2,
+                    matchIds: [championshipMatch.id]
                 )
             ]
         ),
-        matches: [openingMatch, secondMatch]
+        matches: [openingMatch, secondMatch, championshipMatch]
     )
 }
