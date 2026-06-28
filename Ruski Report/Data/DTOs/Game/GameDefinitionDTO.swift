@@ -24,8 +24,8 @@ nonisolated struct GameEventTypeDefinitionDTO: Decodable, Equatable {
     let id: String
     let label: String
     let category: String
-    let affectsScore: Bool
-    let countsAsAttempt: Bool
+    let affectsScore: Bool?
+    let countsAsAttempt: Bool?
     let statKey: String?
 }
 

@@ -7,6 +7,7 @@ import Foundation
 import Testing
 @testable import Ruski_Report
 
+@MainActor
 struct RepositoryTests {
     @Test func tournamentRepositoryLoadsActiveTournamentPath() async throws {
         let apiClient = RecordingAPIClient()
@@ -79,6 +80,41 @@ struct RepositoryTests {
             "shootingPercentage",
             "dis"
         ])
+    }
+
+    @Test func gameRepositoryDefaultsMissingOptionalEventFlags() async throws {
+        let apiClient = RecordingAPIClient()
+        apiClient.responses["games"] = [
+            GameDefinitionDTO(
+                gameType: "ruski",
+                displayName: "Ruski",
+                scorecardDefinitionId: "ruski-scorecard",
+                phases: [
+                    GamePhaseDefinitionDTO(
+                        id: "normal",
+                        label: "Normal Play",
+                        sequence: 1
+                    )
+                ],
+                eventTypes: [
+                    GameEventTypeDefinitionDTO(
+                        id: "vom",
+                        label: "Vom",
+                        category: "penalty",
+                        affectsScore: nil,
+                        countsAsAttempt: nil,
+                        statKey: "voms"
+                    )
+                ],
+                stats: []
+            )
+        ]
+        let repository = RemoteGameRepository(apiClient: apiClient)
+
+        let games = try await repository.games()
+
+        #expect(games.first?.eventTypes.first?.affectsScore == false)
+        #expect(games.first?.eventTypes.first?.countsAsAttempt == false)
     }
 
     @Test func commentRepositoryLoadsMatchCommentsPath() async throws {

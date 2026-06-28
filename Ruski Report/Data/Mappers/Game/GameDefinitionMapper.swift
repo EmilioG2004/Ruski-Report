@@ -34,8 +34,8 @@ nonisolated enum GameDefinitionMapper {
             id: dto.id,
             label: dto.label,
             category: dto.category,
-            affectsScore: dto.affectsScore,
-            countsAsAttempt: dto.countsAsAttempt,
+            affectsScore: dto.affectsScore ?? false,
+            countsAsAttempt: dto.countsAsAttempt ?? false,
             statKey: dto.statKey
         )
     }
