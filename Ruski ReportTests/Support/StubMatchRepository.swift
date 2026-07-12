@@ -7,6 +7,7 @@
 
 final class StubMatchRepository: MatchRepository {
     private let matchResult: Result<MatchDetail, Error>
+    private(set) var requestedMatchIds: [MatchPreview.ID] = []
 
     init(
         matchResult: Result<MatchDetail, Error> = .success(
@@ -17,6 +18,7 @@ final class StubMatchRepository: MatchRepository {
     }
 
     func match(id: MatchPreview.ID) async throws -> MatchDetail {
-        try matchResult.get()
+        requestedMatchIds.append(id)
+        return try matchResult.get()
     }
 }
