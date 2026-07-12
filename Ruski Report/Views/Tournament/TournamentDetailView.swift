@@ -12,12 +12,14 @@ struct TournamentDetailView: View {
     init(
         tournamentId: TournamentPreview.ID,
         tournaments: any TournamentRepository,
+        realtime: any RealtimeUpdateRepository,
         logger: any AppLogger
     ) {
         _controller = StateObject(
             wrappedValue: TournamentDetailController(
                 tournamentId: tournamentId,
                 tournaments: tournaments,
+                realtime: realtime,
                 logger: logger
             )
         )
@@ -41,6 +43,9 @@ struct TournamentDetailView: View {
         .appInlineNavigationTitle()
         .task {
             await controller.loadTournament()
+        }
+        .task {
+            await controller.observeRealtimeUpdates()
         }
     }
 

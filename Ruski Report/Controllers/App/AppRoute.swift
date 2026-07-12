@@ -12,6 +12,7 @@ enum AppRoute: Hashable {
 
 nonisolated struct MatchRouteContext: Hashable {
     let matchId: MatchPreview.ID
+    let tournamentId: TournamentPreview.ID
     let title: String
     let teamNames: [MatchRouteTeamName]
     let playerNames: [MatchRoutePlayerName]

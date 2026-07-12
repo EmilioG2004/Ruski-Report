@@ -13,6 +13,7 @@ final class MatchCommentsController: ObservableObject {
     private let matchId: MatchPreview.ID
     private let comments: any CommentRepository
     private let session: any SessionRepository
+    private let realtime: any RealtimeUpdateRepository
     private let logger: any AppLogger
     private let authorizationPolicy: CommentAuthorizationPolicy
     private let configuration: CommentPostingConfiguration
@@ -21,6 +22,7 @@ final class MatchCommentsController: ObservableObject {
         matchId: MatchPreview.ID,
         comments: any CommentRepository,
         session: any SessionRepository,
+        realtime: any RealtimeUpdateRepository = NoopRealtimeUpdateRepository(),
         logger: any AppLogger,
         authorizationPolicy: CommentAuthorizationPolicy = CommentAuthorizationPolicy(),
         configuration: CommentPostingConfiguration = .default
@@ -28,13 +30,36 @@ final class MatchCommentsController: ObservableObject {
         self.matchId = matchId
         self.comments = comments
         self.session = session
+        self.realtime = realtime
         self.logger = logger
         self.authorizationPolicy = authorizationPolicy
         self.configuration = configuration
     }
 
     func loadComments() async {
-        state = .loading
+        await loadComments(showLoading: true, showFailure: true)
+    }
+
+    func observeRealtimeUpdates() async {
+        for await update in realtime.updates(
+            subscription: .match(tournamentId: nil, matchId: matchId)
+        ) {
+            guard update.type == .commentsUpdated,
+                  update.matchId == matchId else {
+                continue
+            }
+
+            await loadComments(showLoading: false, showFailure: false)
+        }
+    }
+
+    private func loadComments(
+        showLoading: Bool,
+        showFailure: Bool
+    ) async {
+        if showLoading {
+            state = .loading
+        }
 
         do {
             let currentSession = await session.currentSession()
@@ -58,12 +83,14 @@ final class MatchCommentsController: ObservableObject {
                     "matchId": matchId
                 ]
             )
-            state = .failed(
-                message: AppErrorMessageFormatter.message(
-                    from: error,
-                    fallback: "Unable to load match comments."
+            if showFailure {
+                state = .failed(
+                    message: AppErrorMessageFormatter.message(
+                        from: error,
+                        fallback: "Unable to load match comments."
+                    )
                 )
-            )
+            }
         }
     }
 

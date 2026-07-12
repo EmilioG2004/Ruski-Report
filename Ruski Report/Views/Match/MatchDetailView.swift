@@ -12,6 +12,7 @@ struct MatchDetailView: View {
     private let routeContext: MatchRouteContext
     private let comments: any CommentRepository
     private let session: LocalSessionRepository
+    private let realtime: any RealtimeUpdateRepository
     private let logger: any AppLogger
 
     init(
@@ -20,17 +21,21 @@ struct MatchDetailView: View {
         games: any GameRepository,
         comments: any CommentRepository,
         session: LocalSessionRepository,
+        realtime: any RealtimeUpdateRepository,
         logger: any AppLogger
     ) {
         self.routeContext = routeContext
         self.comments = comments
         self.session = session
+        self.realtime = realtime
         self.logger = logger
         _controller = StateObject(
             wrappedValue: MatchDetailController(
                 matchId: routeContext.matchId,
+                tournamentId: routeContext.tournamentId,
                 matches: matches,
                 games: games,
+                realtime: realtime,
                 logger: logger
             )
         )
@@ -55,6 +60,9 @@ struct MatchDetailView: View {
         .task {
             await controller.loadMatch()
         }
+        .task {
+            await controller.observeRealtimeUpdates()
+        }
     }
 
     private func detailContent(_ screen: MatchDetailScreen) -> some View {
@@ -78,6 +86,7 @@ struct MatchDetailView: View {
                     matchId: screen.match.id,
                     comments: comments,
                     session: session,
+                    realtime: realtime,
                     logger: logger
                 )
             }
@@ -406,6 +415,7 @@ private struct MatchCommentsView: View {
         matchId: MatchPreview.ID,
         comments: any CommentRepository,
         session: LocalSessionRepository,
+        realtime: any RealtimeUpdateRepository,
         logger: any AppLogger
     ) {
         self.session = session
@@ -414,6 +424,7 @@ private struct MatchCommentsView: View {
                 matchId: matchId,
                 comments: comments,
                 session: session,
+                realtime: realtime,
                 logger: logger
             )
         )
@@ -438,6 +449,9 @@ private struct MatchCommentsView: View {
         }
         .task(id: session.current) {
             await controller.loadComments()
+        }
+        .task {
+            await controller.observeRealtimeUpdates()
         }
     }
 

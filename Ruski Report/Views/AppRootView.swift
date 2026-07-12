@@ -19,6 +19,7 @@ struct AppRootView: View {
         _homeController = StateObject(
             wrappedValue: HomeController(
                 tournaments: services.tournaments,
+                realtime: services.realtime,
                 logger: services.logger,
                 initialTournament: services.initialTournament
             )
@@ -35,6 +36,9 @@ struct AppRootView: View {
             )
                 .task {
                     await homeController.loadActiveTournament()
+                }
+                .task {
+                    await homeController.observeRealtimeUpdates()
                 }
                 .navigationDestination(for: AppRoute.self) { route in
                     destination(for: route)
@@ -68,6 +72,7 @@ struct AppRootView: View {
             TournamentDetailView(
                 tournamentId: id,
                 tournaments: services.tournaments,
+                realtime: services.realtime,
                 logger: services.logger
             )
         case .match(let context):
@@ -77,6 +82,7 @@ struct AppRootView: View {
                 games: services.games,
                 comments: services.comments,
                 session: session,
+                realtime: services.realtime,
                 logger: services.logger
             )
         }

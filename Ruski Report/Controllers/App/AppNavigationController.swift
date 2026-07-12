@@ -44,6 +44,7 @@ final class AppNavigationController: ObservableObject {
             AppRoute.match(
                 MatchRouteContext(
                     matchId: match.id,
+                    tournamentId: match.tournamentId,
                     title: title,
                     teamNames: teamNames,
                     playerNames: playerNames
