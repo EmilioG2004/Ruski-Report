@@ -18,6 +18,7 @@ import {
   TournamentReadRepository
 } from "../repositories";
 import { AppError } from "../errors";
+import { RealtimeUpdatePublisher } from "../realtime";
 import { CommentsService } from "./comments.service";
 import { GamesService } from "./games.service";
 import { MatchesService } from "./matches.service";
@@ -135,9 +136,11 @@ describe("public API services", () => {
   });
 
   it("returns comments scoped to a match", async () => {
+    const realtimeUpdates = createRealtimeUpdates();
     const service = new CommentsService(
       new InMemoryCommentRepository(),
-      new InMemoryTournamentReadRepository()
+      new InMemoryTournamentReadRepository(),
+      realtimeUpdates
     );
 
     const created = await service.createMatchComment("match-2026-001", {
@@ -160,12 +163,20 @@ describe("public API services", () => {
       }
     } satisfies Partial<Comment>);
     expect(comments).toEqual([created]);
+    expect(realtimeUpdates.publishCommentsUpdated).toHaveBeenCalledWith({
+      tournamentId: "tournament-2026",
+      matchId: "match-2026-001",
+      metadata: {
+        commentId: created.id
+      }
+    });
   });
 
   it("rejects guest comments", async () => {
     const service = new CommentsService(
       new InMemoryCommentRepository(),
-      new InMemoryTournamentReadRepository()
+      new InMemoryTournamentReadRepository(),
+      createRealtimeUpdates()
     );
 
     await expect(
@@ -185,7 +196,8 @@ describe("public API services", () => {
   it("rejects invalid comment bodies", async () => {
     const service = new CommentsService(
       new InMemoryCommentRepository(),
-      new InMemoryTournamentReadRepository()
+      new InMemoryTournamentReadRepository(),
+      createRealtimeUpdates()
     );
 
     await expect(
@@ -223,7 +235,8 @@ describe("public API services", () => {
   it("raises not found when reading comments for a missing match", async () => {
     const service = new CommentsService(
       new InMemoryCommentRepository(),
-      new EmptyTournamentReadRepository()
+      new EmptyTournamentReadRepository(),
+      createRealtimeUpdates()
     );
 
     await expect(service.getMatchComments("missing")).rejects.toMatchObject({
@@ -232,3 +245,11 @@ describe("public API services", () => {
     } satisfies Partial<AppError>);
   });
 });
+
+function createRealtimeUpdates(): jest.Mocked<RealtimeUpdatePublisher> {
+  return {
+    publishTournamentUpdated: jest.fn(),
+    publishMatchUpdated: jest.fn(),
+    publishCommentsUpdated: jest.fn()
+  } as unknown as jest.Mocked<RealtimeUpdatePublisher>;
+}

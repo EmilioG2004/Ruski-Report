@@ -10,6 +10,7 @@ import {
   InMemoryTournamentReadRepository,
   TOURNAMENT_READ_REPOSITORY
 } from "../repositories";
+import { RealtimeModule } from "../realtime";
 import { CommentsController } from "./comments.controller";
 import { CommentsService } from "./comments.service";
 import { GamesController } from "./games.controller";
@@ -20,6 +21,7 @@ import { TournamentsController } from "./tournaments.controller";
 import { TournamentsService } from "./tournaments.service";
 
 @Module({
+  imports: [RealtimeModule],
   controllers: [
     GamesController,
     TournamentsController,

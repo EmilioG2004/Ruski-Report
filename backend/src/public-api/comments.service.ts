@@ -18,6 +18,7 @@ import {
   resourceNotFound,
   unwrapRepositoryResult
 } from "./repository-result.mapper";
+import { RealtimeUpdatePublisher } from "../realtime";
 
 export interface CreateCommentAuthorRequest {
   kind?: CommentAuthorKind;
@@ -38,7 +39,8 @@ export class CommentsService {
     @Inject(COMMENT_REPOSITORY)
     private readonly commentRepository: CommentRepository,
     @Inject(TOURNAMENT_READ_REPOSITORY)
-    private readonly tournamentReadRepository: TournamentReadRepository
+    private readonly tournamentReadRepository: TournamentReadRepository,
+    private readonly realtimeUpdates: RealtimeUpdatePublisher
   ) {}
 
   async getMatchComments(matchId: string): Promise<Comment[]> {
@@ -54,12 +56,12 @@ export class CommentsService {
     matchId: string,
     request: CreateCommentRequest | null | undefined
   ): Promise<Comment> {
-    await this.requireMatch(matchId);
+    const match = await this.requireMatch(matchId);
 
     const body = this.normalizeBody(request?.body);
     const author = this.normalizeAuthor(request?.author);
 
-    return unwrapRepositoryResult(
+    const comment = unwrapRepositoryResult(
       await this.commentRepository.create({
         matchId,
         author,
@@ -67,6 +69,16 @@ export class CommentsService {
       }),
       "Unable to create match comment."
     );
+
+    this.realtimeUpdates.publishCommentsUpdated({
+      tournamentId: match.tournamentId,
+      matchId,
+      metadata: {
+        commentId: comment.id
+      }
+    });
+
+    return comment;
   }
 
   private async requireMatch(matchId: string): Promise<MatchDetail> {
