@@ -112,6 +112,40 @@ struct MatchCommentsControllerTests {
         #expect(controller.state == .failed(message: "Comments are offline."))
     }
 
+    @Test func realtimeCommentsUpdateReloadsVisibleComments() async {
+        let comments = StubCommentRepository(
+            commentsResult: .success([Self.existingComment])
+        )
+        let realtime = StubRealtimeUpdateRepository()
+        let controller = MatchCommentsController(
+            matchId: "match-1",
+            comments: comments,
+            session: StubSessionRepository(session: Self.authenticatedSession),
+            realtime: realtime,
+            logger: NoopAppLogger()
+        )
+
+        await controller.loadComments()
+
+        let observation = Task {
+            await controller.observeRealtimeUpdates()
+        }
+        defer {
+            observation.cancel()
+            realtime.finish()
+        }
+
+        await waitUntil {
+            realtime.subscriptions == [.match(tournamentId: nil, matchId: "match-1")]
+        }
+        realtime.send(.commentsUpdated(matchId: "match-1"))
+        await waitUntil {
+            comments.requestedMatchIds == ["match-1", "match-1"]
+        }
+
+        #expect(comments.requestedMatchIds == ["match-1", "match-1"])
+    }
+
     private static let authenticatedSession = UserSession.authenticated(
         UserProfile(
             id: "user-1",
@@ -135,4 +169,28 @@ struct MatchCommentsControllerTests {
         body: "Clutch finish.",
         createdAt: "2026-06-21T00:18:00.000Z"
     )
+}
+
+private extension RealtimeUpdate {
+    static func commentsUpdated(matchId: String) -> RealtimeUpdate {
+        RealtimeUpdate(
+            id: "live-test",
+            type: .commentsUpdated,
+            tournamentId: "tournament-2026",
+            matchId: matchId,
+            occurredAt: "2026-07-12T20:00:00.000Z",
+            version: nil,
+            metadata: nil
+        )
+    }
+}
+
+private func waitUntil(_ condition: @escaping () -> Bool) async {
+    for _ in 0..<50 {
+        if condition() {
+            return
+        }
+
+        try? await Task.sleep(nanoseconds: 10_000_000)
+    }
 }
