@@ -75,6 +75,19 @@ refresh visible data:
 }
 ```
 
+## Implementation Notes
+
+The backend implementation uses NestJS's Socket.IO WebSocket gateway support.
+The realtime namespace is `/live`, the default Socket.IO path is `/socket.io`,
+clients send `subscribe` messages, and the server emits typed `live.update`
+events. The WebSocket gateway only sends compact change notifications; clients
+should continue using HTTP APIs for full tournament, match, scorecard, and
+comment reads.
+
+Deployments must expose this gateway through the same public origin as the HTTP
+API and preserve HTTP upgrade traffic through the reverse proxy, tunnel, or VPN
+edge in front of the Raspberry Pi.
+
 ## Alternatives Considered
 
 ### Server-Sent Events
@@ -136,4 +149,3 @@ refreshed.
 Because WebSockets add complexity, the app should retain a simple refresh path
 through HTTP APIs. A polling or manual refresh fallback should be available if
 the realtime connection is unavailable.
-

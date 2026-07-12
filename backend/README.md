@@ -29,4 +29,12 @@ curl http://localhost:3000/api/health
 - `src/games`: Game plugins such as the v1 Ruski module.
 - `src/config`: Environment and application configuration.
 - `src/logging`: Logging abstractions and adapters.
+- `src/realtime`: Socket.IO WebSocket gateway and typed live update publisher.
 - `src/routes`: Route registration notes and future module routing boundaries.
+
+## Realtime Updates
+
+The backend exposes a Socket.IO WebSocket namespace at `/live` using the default
+Socket.IO path `/socket.io`. Clients listen for `live.update` events and send
+`subscribe` events for `all`, `tournament`, or `match` scopes. See
+`src/realtime/README.md` for payloads and deployment notes.
