@@ -70,7 +70,10 @@ struct AppServices {
             matches: RemoteMatchRepository(apiClient: apiClient),
             comments: RemoteCommentRepository(apiClient: apiClient, session: session),
             session: session,
-            realtime: NoopRealtimeUpdateRepository(),
+            realtime: URLSessionSocketIORealtimeUpdateRepository(
+                apiBaseURL: config.apiBaseURL,
+                logger: logger
+            ),
             logger: logger,
             initialTournament: PreviewData.tournamentPreview
         )
