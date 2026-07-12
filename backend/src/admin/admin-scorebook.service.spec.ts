@@ -23,6 +23,7 @@ import {
   PublishSnapshotResult,
   UploadReport
 } from "../repositories";
+import { RealtimeUpdatePublisher } from "../realtime";
 import {
   ruskiGameDefinition,
   sampleMatchDetail,
@@ -46,7 +47,13 @@ describe("AdminScorebookService", () => {
     });
     const uploadReports = new InMemoryUploadReportRepository();
     const snapshots = new InMemoryTournamentSnapshotRepository();
-    const service = createService(plugin, uploadReports, snapshots);
+    const realtimeUpdates = createRealtimeUpdates();
+    const service = createService(
+      plugin,
+      uploadReports,
+      snapshots,
+      realtimeUpdates
+    );
 
     const response = await service.uploadScorebook({
       year: 2026,
@@ -75,6 +82,17 @@ describe("AdminScorebookService", () => {
       })
     );
     expect(snapshots.getLatestSnapshot("tournament-2026")).toBe(snapshot);
+    expect(realtimeUpdates.publishTournamentUpdated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tournamentId: "tournament-2026",
+        version: sampleTournament.version,
+        metadata: expect.objectContaining({
+          gameType: "ruski",
+          uploadId: response.uploadId,
+          publishedAt: expect.any(String)
+        })
+      })
+    );
 
     const reportLookup = await uploadReports.findById(response.uploadId);
     expect(reportLookup.ok && reportLookup.value).toMatchObject({
@@ -100,7 +118,13 @@ describe("AdminScorebookService", () => {
     });
     const uploadReports = new InMemoryUploadReportRepository();
     const snapshots = new InMemoryTournamentSnapshotRepository();
-    const service = createService(plugin, uploadReports, snapshots);
+    const realtimeUpdates = createRealtimeUpdates();
+    const service = createService(
+      plugin,
+      uploadReports,
+      snapshots,
+      realtimeUpdates
+    );
 
     const response = await service.uploadScorebook({
       year: 2026,
@@ -112,6 +136,7 @@ describe("AdminScorebookService", () => {
     expect(response.validation.errors).toEqual(validation.errors);
     expect(plugin.normalizeScorebook).not.toHaveBeenCalled();
     expect(snapshots.getLatestSnapshot("tournament-2026")).toBeNull();
+    expect(realtimeUpdates.publishTournamentUpdated).not.toHaveBeenCalled();
 
     const reportLookup = await uploadReports.findById(response.uploadId);
     expect(reportLookup.ok && reportLookup.value?.status).toBe(
@@ -125,7 +150,8 @@ describe("AdminScorebookService", () => {
       new GamePluginRegistry([]),
       uploadReports,
       new InMemoryTournamentSnapshotRepository(),
-      new InMemoryTransactionManager()
+      new InMemoryTransactionManager(),
+      createRealtimeUpdates()
     );
 
     await expect(
@@ -147,10 +173,12 @@ describe("AdminScorebookService", () => {
       snapshot
     });
     const uploadReports = new RecordingUploadReportRepository();
+    const realtimeUpdates = createRealtimeUpdates();
     const service = createService(
       plugin,
       uploadReports,
-      new FailingSnapshotRepository()
+      new FailingSnapshotRepository(),
+      realtimeUpdates
     );
 
     await expect(
@@ -167,6 +195,7 @@ describe("AdminScorebookService", () => {
       status: "publish_failed",
       tournamentId: "tournament-2026"
     });
+    expect(realtimeUpdates.publishTournamentUpdated).not.toHaveBeenCalled();
   });
 });
 
@@ -203,14 +232,24 @@ function createService(
   plugin: jest.Mocked<GamePlugin>,
   uploadReports = new InMemoryUploadReportRepository(),
   snapshots: TournamentSnapshotRepository =
-    new InMemoryTournamentSnapshotRepository()
+    new InMemoryTournamentSnapshotRepository(),
+  realtimeUpdates = createRealtimeUpdates()
 ): AdminScorebookService {
   return new AdminScorebookService(
     new GamePluginRegistry([plugin]),
     uploadReports,
     snapshots,
-    new InMemoryTransactionManager()
+    new InMemoryTransactionManager(),
+    realtimeUpdates
   );
+}
+
+function createRealtimeUpdates(): jest.Mocked<RealtimeUpdatePublisher> {
+  return {
+    publishTournamentUpdated: jest.fn(),
+    publishMatchUpdated: jest.fn(),
+    publishCommentsUpdated: jest.fn()
+  } as unknown as jest.Mocked<RealtimeUpdatePublisher>;
 }
 
 function createPlugin(input: {

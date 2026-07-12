@@ -29,6 +29,7 @@ import {
   UploadReport,
   UploadReportRepository
 } from "../repositories";
+import { RealtimeUpdatePublisher } from "../realtime";
 import { ScorebookUploadResponse } from "./scorebook-upload-response";
 
 export interface UploadedScorebookFile {
@@ -53,7 +54,8 @@ export class AdminScorebookService {
     @Inject(TOURNAMENT_SNAPSHOT_REPOSITORY)
     private readonly snapshots: TournamentSnapshotRepository,
     @Inject(TRANSACTION_MANAGER)
-    private readonly transactions: TransactionManager
+    private readonly transactions: TransactionManager,
+    private readonly realtimeUpdates: RealtimeUpdatePublisher
   ) {}
 
   async uploadScorebook(
@@ -158,6 +160,19 @@ export class AdminScorebookService {
       }
 
       throw error;
+    }
+
+    if (report.tournamentId !== undefined && report.snapshotVersion !== undefined) {
+      this.realtimeUpdates.publishTournamentUpdated({
+        tournamentId: report.tournamentId,
+        version: report.snapshotVersion.version,
+        metadata: {
+          gameType: report.gameType,
+          uploadId: report.id,
+          publishedAt: report.snapshotVersion.publishedAt,
+          previousVersion: report.snapshotVersion.previousVersion
+        }
+      });
     }
 
     return toResponse(report);

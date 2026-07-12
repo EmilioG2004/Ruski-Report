@@ -12,11 +12,13 @@ import {
   TRANSACTION_MANAGER,
   UPLOAD_REPORT_REPOSITORY
 } from "../repositories";
+import { RealtimeModule } from "../realtime";
 import { AdminAuthGuard } from "./admin-auth.guard";
 import { AdminScorebookController } from "./admin-scorebook.controller";
 import { AdminScorebookService } from "./admin-scorebook.service";
 
 @Module({
+  imports: [RealtimeModule],
   controllers: [AdminScorebookController],
   providers: [
     AdminAuthGuard,
