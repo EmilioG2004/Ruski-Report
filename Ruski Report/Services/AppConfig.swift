@@ -64,7 +64,7 @@ nonisolated struct AppConfig: Equatable {
     }
 }
 
-private struct AppConfigDTO: Decodable {
+nonisolated private struct AppConfigDTO: Decodable {
     let apiBaseURL: String
 }
 

@@ -6,7 +6,7 @@
 import Foundation
 
 nonisolated final class NoopRealtimeUpdateRepository: RealtimeUpdateRepository {
-    func updates() -> AsyncStream<RealtimeUpdate> {
+    func updates(subscription: RealtimeSubscription) -> AsyncStream<RealtimeUpdate> {
         AsyncStream { continuation in
             continuation.finish()
         }
