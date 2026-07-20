@@ -99,14 +99,26 @@ nonisolated extension TournamentDetail {
 
         return sortedRounds.map { round in
             let laterRounds = sortedRounds.filter { $0.sequence > round.sequence }
+            let bracketMatches = round.matches.isEmpty
+                ? round.matchIds.enumerated().map { index, matchId in
+                    TournamentBracketMatch(
+                        id: matchId,
+                        matchId: matchId,
+                        sequence: index + 1,
+                        status: "pending",
+                        slots: [],
+                        winnerTeamId: nil
+                    )
+                }
+                : round.matches.sorted { $0.sequence < $1.sequence }
 
             return TournamentBracketRoundSection(
                 id: round.id,
                 name: round.name,
                 sequence: round.sequence,
-                matchups: round.matchIds.enumerated().map { index, matchId in
+                matchups: bracketMatches.enumerated().map { index, bracketMatch in
                     bracketMatchup(
-                        matchId: matchId,
+                        bracketMatch: bracketMatch,
                         ordinal: index + 1,
                         laterRounds: laterRounds
                     )
@@ -116,44 +128,81 @@ nonisolated extension TournamentDetail {
     }
 
     private func bracketMatchup(
-        matchId: MatchPreview.ID,
+        bracketMatch: TournamentBracketMatch,
         ordinal: Int,
         laterRounds: [BracketRound]
     ) -> TournamentBracketMatchup {
-        guard let match = matchesById[matchId] else {
-            return TournamentBracketMatchup(
-                id: matchId,
-                matchId: matchId,
-                title: "Match \(ordinal)",
-                statusText: "Unavailable",
-                slots: [],
-                progressionText: nil,
-                isAvailable: false
-            )
-        }
-
-        let winnerTeamId = resolvedWinnerTeamId(for: match)
+        let match = bracketMatch.matchId.flatMap { matchesById[$0] }
+        let winnerTeamId = bracketMatch.winnerTeamId ?? match.flatMap(resolvedWinnerTeamId)
+        let slots = bracketSlots(
+            bracketMatch: bracketMatch,
+            match: match,
+            winnerTeamId: winnerTeamId
+        )
 
         return TournamentBracketMatchup(
-            id: match.id,
-            matchId: match.id,
-            title: participantsLabel(for: match),
-            statusText: match.status.displayName,
-            slots: match.participants.map { participant in
-                TournamentBracketTeamSlot(
-                    teamId: participant.teamId,
-                    teamName: teamName(for: participant.teamId),
-                    seed: participant.seed ?? teamsById[participant.teamId]?.seed,
-                    score: score(for: participant, in: match),
-                    isWinner: winnerTeamId == participant.teamId
-                )
-            },
+            id: bracketMatch.id,
+            matchId: match?.id,
+            title: matchupTitle(slots: slots, ordinal: ordinal),
+            statusText: match?.status.displayName ?? statusLabel(bracketMatch.status),
+            slots: slots,
             progressionText: progressionText(
+                bracketMatchId: bracketMatch.id,
                 winnerTeamId: winnerTeamId,
                 laterRounds: laterRounds
             ),
-            isAvailable: true
+            isAvailable: match != nil
         )
+    }
+
+    private func bracketSlots(
+        bracketMatch: TournamentBracketMatch,
+        match: MatchPreview?,
+        winnerTeamId: String?
+    ) -> [TournamentBracketTeamSlot] {
+        if !bracketMatch.slots.isEmpty {
+            return bracketMatch.slots.enumerated().map { index, slot in
+                let participant = match?.participants.first {
+                    $0.teamId == slot.teamId
+                }
+
+                return TournamentBracketTeamSlot(
+                    id: "\(bracketMatch.id)-slot-\(index + 1)",
+                    teamId: slot.teamId,
+                    teamName: slot.teamId.map(teamName) ?? slot.source?.label ?? "TBD",
+                    seed: slot.seed ?? participant?.seed ?? slot.teamId.flatMap {
+                        teamsById[$0]?.seed
+                    },
+                    score: participant.flatMap { participant in
+                        match.flatMap { score(for: participant, in: $0) }
+                    },
+                    isWinner: slot.teamId != nil && winnerTeamId == slot.teamId
+                )
+            }
+        }
+
+        return (match?.participants ?? []).enumerated().map { index, participant in
+            TournamentBracketTeamSlot(
+                id: "\(bracketMatch.id)-slot-\(index + 1)",
+                teamId: participant.teamId,
+                teamName: teamName(for: participant.teamId),
+                seed: participant.seed ?? teamsById[participant.teamId]?.seed,
+                score: match.flatMap { score(for: participant, in: $0) },
+                isWinner: winnerTeamId == participant.teamId
+            )
+        }
+    }
+
+    private func matchupTitle(
+        slots: [TournamentBracketTeamSlot],
+        ordinal: Int
+    ) -> String {
+        let teamNames = slots.map(\.teamName).filter { $0 != "TBD" }
+        return teamNames.isEmpty ? "Match \(ordinal)" : teamNames.joined(separator: " vs ")
+    }
+
+    private func statusLabel(_ status: String) -> String {
+        MatchDetailScreen.readableLabel(from: status)
     }
 
     private func resolvedWinnerTeamId(for match: MatchPreview) -> String? {
@@ -173,11 +222,12 @@ nonisolated extension TournamentDetail {
     }
 
     private func progressionText(
+        bracketMatchId: String,
         winnerTeamId: TournamentTeam.ID?,
         laterRounds: [BracketRound]
     ) -> String? {
         guard let nextRound = nextRound(
-            for: winnerTeamId,
+            for: bracketMatchId,
             in: laterRounds
         ) else {
             return winnerTeamId == nil ? nil : "Bracket winner"
@@ -187,18 +237,14 @@ nonisolated extension TournamentDetail {
     }
 
     private func nextRound(
-        for winnerTeamId: TournamentTeam.ID?,
+        for bracketMatchId: String,
         in laterRounds: [BracketRound]
     ) -> BracketRound? {
-        guard let winnerTeamId else {
-            return laterRounds.first
-        }
-
         return laterRounds.first { round in
-            round.matchIds.contains { matchId in
-                matchesById[matchId]?.participants.contains {
-                    $0.teamId == winnerTeamId
-                } ?? false
+            round.matches.contains { match in
+                match.slots.contains { slot in
+                    slot.source?.sourceMatchId == bracketMatchId
+                }
             }
         } ?? laterRounds.first
     }
@@ -226,7 +272,7 @@ nonisolated struct TournamentBracketRoundSection: Identifiable, Equatable {
 
 nonisolated struct TournamentBracketMatchup: Identifiable, Equatable {
     let id: String
-    let matchId: String
+    let matchId: String?
     let title: String
     let statusText: String
     let slots: [TournamentBracketTeamSlot]
@@ -235,9 +281,8 @@ nonisolated struct TournamentBracketMatchup: Identifiable, Equatable {
 }
 
 nonisolated struct TournamentBracketTeamSlot: Identifiable, Equatable {
-    var id: String { teamId }
-
-    let teamId: String
+    let id: String
+    let teamId: String?
     let teamName: String
     let seed: Int?
     let score: Int?

@@ -62,7 +62,8 @@ private struct TournamentBracketRoundSectionView: View {
             } else {
                 VStack(spacing: 10) {
                     ForEach(section.matchups) { matchup in
-                        if let match = detail.matchesById[matchup.matchId],
+                        if let matchId = matchup.matchId,
+                           let match = detail.matchesById[matchId],
                            matchup.isAvailable {
                             Button {
                                 openMatch(match)
@@ -71,12 +72,12 @@ private struct TournamentBracketRoundSectionView: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier(
-                                "tournament.bracket.match.\(matchup.matchId)"
+                                "tournament.bracket.match.\(matchup.id)"
                             )
                         } else {
                             TournamentBracketMatchupCard(matchup: matchup)
                                 .accessibilityIdentifier(
-                                    "tournament.bracket.match.\(matchup.matchId)"
+                                    "tournament.bracket.match.\(matchup.id)"
                                 )
                         }
                     }
@@ -109,7 +110,7 @@ private struct TournamentBracketMatchupCard: View {
                         .lineLimit(2)
                         .minimumScaleFactor(0.82)
 
-                    Text(matchup.matchId)
+                    Text(matchup.matchId ?? matchup.id)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
