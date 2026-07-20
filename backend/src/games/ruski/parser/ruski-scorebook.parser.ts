@@ -17,11 +17,15 @@ import {
   ruskiScorebookSchema
 } from "../scorebook";
 import { RuskiScorecardSheetParser } from "./ruski-scorecard-sheet.parser";
+import { RuskiBracketSheetParser } from "./ruski-bracket-sheet.parser";
+import { RuskiStandingsSheetParser } from "./ruski-standings-sheet.parser";
 import { analyzeRuskiSheet } from "./ruski-sheet-classifier";
 
 export class RuskiScorebookParser {
   private readonly scorecardSheetParser = new RuskiScorecardSheetParser();
   private readonly tabularSheetParser = new ScorebookTabularSheetParser();
+  private readonly standingsSheetParser = new RuskiStandingsSheetParser();
+  private readonly bracketSheetParser = new RuskiBracketSheetParser();
 
   async parseScorebook(file: ScorebookFile): Promise<ParsedScorebook> {
     const workbook = await ExcelWorkbookReader.load(file);
@@ -80,19 +84,32 @@ export class RuskiScorebookParser {
     }
 
     if (
-      role === "data" &&
-      worksheet.name === RUSKI_SCOREBOOK_SHEET_NAMES.allData
+      worksheet.name === RUSKI_SCOREBOOK_SHEET_NAMES.regularSeasonStandings
     ) {
-      const allDataSchema = ruskiScorebookSchema.summarySheets.find(
-        (schema) => schema.sheetName === RUSKI_SCOREBOOK_SHEET_NAMES.allData
+      return {
+        ...sheet,
+        rows: this.standingsSheetParser.parse(worksheet)
+      };
+    }
+
+    if (worksheet.name === RUSKI_SCOREBOOK_SHEET_NAMES.playoffBracket) {
+      return {
+        ...sheet,
+        rows: this.bracketSheetParser.parse(worksheet)
+      };
+    }
+
+    if (role === "summary" || role === "data") {
+      const summarySchema = ruskiScorebookSchema.summarySheets.find(
+        (schema) => schema.sheetName === worksheet.name
       );
 
-      if (allDataSchema?.dataRange !== undefined) {
+      if (summarySchema?.dataRange !== undefined) {
         return {
           ...sheet,
           rows: this.tabularSheetParser.parse(worksheet, {
-            headers: allDataSchema.headers,
-            dataRange: allDataSchema.dataRange
+            headers: summarySchema.headers,
+            dataRange: summarySchema.dataRange
           })
         };
       }

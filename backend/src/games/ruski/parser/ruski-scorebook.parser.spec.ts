@@ -204,6 +204,72 @@ describe("RuskiScorebookParser", () => {
       )
     ).toBe(false);
   });
+
+  it("parses all pod standings into one row per canonical team", async () => {
+    const parsed = await parseFixture();
+    const rows = getSheetByName(parsed).get(
+      RUSKI_SCOREBOOK_SHEET_NAMES.regularSeasonStandings
+    )?.rows;
+
+    expect(rows).toHaveLength(32);
+    expect(rows?.filter((row) => row.values.podName === "Pod A")).toHaveLength(4);
+    expect(rows?.[0]).toEqual({
+      rowNumber: 3,
+      values: {
+        podName: "Pod A",
+        podSequence: 1,
+        seed: 1,
+        team: "Pierre/Anson",
+        record: "3-0",
+        cupDifferential: "+7",
+        shootingPercentage: 0.2849462366
+      }
+    });
+  });
+
+  it("parses season, team, and playoff statistic tables", async () => {
+    const sheets = getSheetByName(await parseFixture());
+
+    expect(sheets.get(RUSKI_SCOREBOOK_SHEET_NAMES.seasonStats)?.rows).toHaveLength(65);
+    expect(sheets.get(RUSKI_SCOREBOOK_SHEET_NAMES.teamStats)?.rows).toHaveLength(32);
+    expect(sheets.get(RUSKI_SCOREBOOK_SHEET_NAMES.playoffStats)?.rows).toHaveLength(32);
+    expect(sheets.get(RUSKI_SCOREBOOK_SHEET_NAMES.seasonStats)?.rows?.[0].values)
+      .toMatchObject({
+        name: "Joe Raza",
+        makes: 17,
+        misses: 22,
+        shootingPercentage: 0.4358974359
+      });
+  });
+
+  it("parses generic bracket topology and progression", async () => {
+    const rows = getSheetByName(await parseFixture()).get(
+      RUSKI_SCOREBOOK_SHEET_NAMES.playoffBracket
+    )?.rows;
+    const slotRows = rows?.filter((row) => row.values.bracketMatchId !== undefined);
+
+    expect(slotRows).toHaveLength(30);
+    expect(slotRows?.[0].values).toEqual({
+      roundId: "sweet-16",
+      roundName: "Sweet 16",
+      roundSequence: 1,
+      bracketMatchId: "sweet-16-1",
+      matchSequence: 1,
+      slotSequence: 1,
+      seed: 1,
+      team: "Brando/Heath",
+      winner: true,
+      sourceMatchId: null
+    });
+    expect(
+      slotRows?.find(
+        (row) =>
+          row.values.bracketMatchId === "elite-8-1" &&
+          row.values.slotSequence === 1
+      )?.values.sourceMatchId
+    ).toBe("sweet-16-1");
+    expect(rows?.at(-1)?.values.champion).toBe("Ev/Hulu");
+  });
 });
 
 async function parseFixture(

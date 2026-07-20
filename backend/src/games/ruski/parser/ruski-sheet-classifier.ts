@@ -11,11 +11,8 @@ export interface RuskiSheetClassification {
   headerMismatches: ScorebookHeaderMismatch[];
 }
 
-const summarySheetRoles = new Map<string, ScorebookSheetRole>(
-  ruskiScorebookSchema.summarySheets.map((sheet) => [
-    sheet.sheetName,
-    sheet.kind
-  ])
+const summarySheetsByName = new Map(
+  ruskiScorebookSchema.summarySheets.map((sheet) => [sheet.sheetName, sheet])
 );
 
 export function classifyRuskiSheet(
@@ -37,12 +34,21 @@ export function analyzeRuskiSheet(
     };
   }
 
-  const summaryRole = summarySheetRoles.get(worksheet.name);
+  const summarySheet = summarySheetsByName.get(worksheet.name);
 
-  if (summaryRole !== undefined) {
+  if (summarySheet !== undefined) {
     return {
-      role: summaryRole,
-      headerMismatches: []
+      role: summarySheet.kind,
+      headerMismatches: findScorebookHeaderMismatches(
+        [
+          {
+            id: `${summarySheet.sheetName}-headers`,
+            label: `${summarySheet.sheetName} headers`,
+            headers: summarySheet.headers
+          }
+        ],
+        (cell) => worksheet.readCell(cell)
+      )
     };
   }
 
