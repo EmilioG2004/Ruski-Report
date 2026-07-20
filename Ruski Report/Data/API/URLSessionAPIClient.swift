@@ -10,21 +10,24 @@ nonisolated final class URLSessionAPIClient: APIClient {
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
+    private let authorizer: any RequestAuthorizer
 
     init(
         baseURL: URL,
         session: URLSession = .shared,
         decoder: JSONDecoder = JSONDecoder(),
-        encoder: JSONEncoder = JSONEncoder()
+        encoder: JSONEncoder = JSONEncoder(),
+        authorizer: any RequestAuthorizer = NoopRequestAuthorizer()
     ) {
         self.baseURL = baseURL
         self.session = session
         self.decoder = decoder
         self.encoder = encoder
+        self.authorizer = authorizer
     }
 
     func get<Response: Decodable>(_ path: String) async throws -> Response {
-        try await request(path: path, method: "GET", body: Optional<Data>.none)
+        try decode(try await request(path: path, method: "GET", body: nil))
     }
 
     func post<Response: Decodable, Body: Encodable>(
@@ -39,18 +42,25 @@ nonisolated final class URLSessionAPIClient: APIClient {
             throw AppError.encodingFailed(error.localizedDescription)
         }
 
-        return try await request(path: path, method: "POST", body: encodedBody)
+        return try decode(
+            try await request(path: path, method: "POST", body: encodedBody)
+        )
     }
 
-    private func request<Response: Decodable>(
+    func delete(_ path: String) async throws {
+        _ = try await request(path: path, method: "DELETE", body: nil)
+    }
+
+    private func request(
         path: String,
         method: String,
         body: Data?
-    ) async throws -> Response {
+    ) async throws -> Data {
         let url = try makeURL(path: path)
         var request = URLRequest(url: url)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        try await authorizer.authorize(&request)
 
         if let body {
             request.httpBody = body
@@ -76,6 +86,10 @@ nonisolated final class URLSessionAPIClient: APIClient {
             throw mapErrorResponse(data: data, statusCode: httpResponse.statusCode)
         }
 
+        return data
+    }
+
+    private func decode<Response: Decodable>(_ data: Data) throws -> Response {
         do {
             return try decoder.decode(Response.self, from: data)
         } catch {

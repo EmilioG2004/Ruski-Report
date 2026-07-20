@@ -12,4 +12,6 @@ nonisolated protocol APIClient {
         _ path: String,
         body: Body
     ) async throws -> Response
+
+    func delete(_ path: String) async throws
 }

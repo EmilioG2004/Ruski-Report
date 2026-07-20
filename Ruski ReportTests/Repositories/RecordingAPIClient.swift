@@ -33,4 +33,8 @@ final class RecordingAPIClient: APIClient {
 
         return response
     }
+
+    func delete(_ path: String) async throws {
+        requestedPaths.append(path)
+    }
 }
