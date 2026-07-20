@@ -46,7 +46,9 @@ struct RepositoryTests {
         #expect(detail.pods.map(\.id) == ["pod-a"])
         #expect(detail.matches.map(\.id) == ["match-1"])
         #expect(detail.bracket?.rounds.first?.matchIds == ["match-1"])
+        #expect(detail.bracket?.rounds.first?.matches.first?.slots.count == 2)
         #expect(detail.standings.first?.shootingPercentage == 0.556)
+        #expect(detail.statistics.first?.rows.first?.values["makes"] == 10)
     }
 
     @Test func matchRepositoryLoadsMatchDetailPath() async throws {

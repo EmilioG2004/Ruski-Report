@@ -7,12 +7,14 @@ import Foundation
 
 nonisolated struct TournamentDetail: Identifiable, Equatable {
     let id: String
+    let gameType: String
     let preview: TournamentPreview
     let pods: [TournamentPod]
     let teams: [TournamentTeam]
     let standings: [PodStanding]
     let bracket: TournamentBracket?
     let matches: [MatchPreview]
+    let statistics: [TournamentStatisticTable]
 }
 
 nonisolated struct TournamentPod: Identifiable, Equatable {
@@ -57,4 +59,52 @@ nonisolated struct BracketRound: Identifiable, Equatable {
     let name: String
     let sequence: Int
     let matchIds: [String]
+    let matches: [TournamentBracketMatch]
+}
+
+nonisolated struct TournamentBracketMatch: Identifiable, Equatable {
+    let id: String
+    let matchId: String?
+    let sequence: Int
+    let status: String
+    let slots: [TournamentBracketSlot]
+    let winnerTeamId: String?
+}
+
+nonisolated struct TournamentBracketSlot: Equatable {
+    let seed: Int?
+    let teamId: String?
+    let source: TournamentBracketSlotSource?
+}
+
+nonisolated struct TournamentBracketSlotSource: Equatable {
+    let type: String
+    let sourceMatchId: String?
+    let label: String?
+}
+
+nonisolated struct TournamentStatisticTable: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let scope: String
+    let subjectType: String
+    let statKeys: [String]
+    let rows: [TournamentStatisticRow]
+}
+
+nonisolated struct TournamentStatisticRow: Identifiable, Equatable {
+    var id: String {
+        subject.playerId ?? subject.teamId ?? "\(rank)-\(subject.label)"
+    }
+
+    let rank: Int
+    let subject: TournamentStatisticSubject
+    let values: [String: Double]
+}
+
+nonisolated struct TournamentStatisticSubject: Equatable {
+    let type: String
+    let label: String
+    let playerId: String?
+    let teamId: String?
 }

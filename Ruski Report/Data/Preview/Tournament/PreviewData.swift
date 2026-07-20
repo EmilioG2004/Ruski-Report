@@ -138,6 +138,7 @@ nonisolated enum PreviewData {
 
     static let tournamentDetail = TournamentDetail(
         id: tournamentPreview.id,
+        gameType: gameDefinition.gameType,
         preview: tournamentPreview,
         pods: [
             TournamentPod(
@@ -157,16 +158,43 @@ nonisolated enum PreviewData {
                     id: "round-1",
                     name: "Semifinals",
                     sequence: 1,
-                    matchIds: [openingMatch.id, secondMatch.id]
+                    matchIds: [openingMatch.id, secondMatch.id],
+                    matches: []
                 ),
                 BracketRound(
                     id: "round-2",
                     name: "Final",
                     sequence: 2,
-                    matchIds: [championshipMatch.id]
+                    matchIds: [championshipMatch.id],
+                    matches: []
                 )
             ]
         ),
-        matches: [openingMatch, secondMatch, championshipMatch]
+        matches: [openingMatch, secondMatch, championshipMatch],
+        statistics: [
+            TournamentStatisticTable(
+                id: "season-player-statistics",
+                name: "Season Stats",
+                scope: "season",
+                subjectType: "player",
+                statKeys: ["makes", "misses", "shootingPercentage"],
+                rows: [
+                    TournamentStatisticRow(
+                        rank: 1,
+                        subject: TournamentStatisticSubject(
+                            type: "player",
+                            label: "Alex Morgan",
+                            playerId: "player-alpha-1",
+                            teamId: teams.first?.id
+                        ),
+                        values: [
+                            "makes": 22,
+                            "misses": 18,
+                            "shootingPercentage": 0.55
+                        ]
+                    )
+                ]
+            )
+        ]
     )
 }

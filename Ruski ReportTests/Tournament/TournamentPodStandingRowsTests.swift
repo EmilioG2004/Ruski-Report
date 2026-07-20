@@ -17,6 +17,7 @@ struct TournamentPodStandingRowsTests {
         )
         let detail = TournamentDetail(
             id: "tournament-test",
+            gameType: "ruski",
             preview: PreviewData.tournamentPreview,
             pods: [pod],
             teams: [
@@ -50,7 +51,8 @@ struct TournamentPodStandingRowsTests {
                 )
             ],
             bracket: nil,
-            matches: []
+            matches: [],
+            statistics: []
         )
 
         let rows = detail.podStandingRows(for: pod)
@@ -72,6 +74,7 @@ struct TournamentPodStandingRowsTests {
         )
         let detail = TournamentDetail(
             id: "tournament-test",
+            gameType: "ruski",
             preview: PreviewData.tournamentPreview,
             pods: [pod],
             teams: [
@@ -80,7 +83,8 @@ struct TournamentPodStandingRowsTests {
             ],
             standings: [],
             bracket: nil,
-            matches: []
+            matches: [],
+            statistics: []
         )
 
         let rows = detail.podStandingRows(for: pod)

@@ -88,6 +88,7 @@ func tournamentDetailDTO() -> TournamentDTO {
         ],
         bracket: BracketDTO(
             id: "bracket-2026",
+            name: "Playoff Bracket",
             rounds: [
                 BracketRoundDTO(
                     id: "round-1",
@@ -97,13 +98,60 @@ func tournamentDetailDTO() -> TournamentDTO {
                     matches: [
                         BracketMatchDTO(
                             id: "bracket-match-1",
-                            matchId: "match-1"
+                            matchId: "match-1",
+                            sequence: 1,
+                            status: "scheduled",
+                            slots: [
+                                BracketSlotDTO(
+                                    seed: 1,
+                                    teamId: "team-alpha",
+                                    source: BracketSlotSourceDTO(
+                                        type: "team",
+                                        sourceMatchId: nil,
+                                        label: nil
+                                    )
+                                ),
+                                BracketSlotDTO(
+                                    seed: 2,
+                                    teamId: "team-blue",
+                                    source: BracketSlotSourceDTO(
+                                        type: "team",
+                                        sourceMatchId: nil,
+                                        label: nil
+                                    )
+                                )
+                            ],
+                            winnerTeamId: nil
                         )
                     ]
                 )
             ]
         ),
         matchSummaries: [matchSummaryDTO()],
+        statistics: [
+            TournamentStatisticTableDTO(
+                id: "season-player-statistics",
+                name: "Season Stats",
+                scope: "season",
+                subjectType: "player",
+                statKeys: ["makes", "shootingPercentage"],
+                rows: [
+                    TournamentStatisticRowDTO(
+                        rank: 1,
+                        subject: TournamentStatisticSubjectDTO(
+                            type: "player",
+                            label: "Alex",
+                            playerId: "player-alex",
+                            teamId: "team-alpha"
+                        ),
+                        values: [
+                            "makes": .number(10),
+                            "shootingPercentage": .number(0.5)
+                        ]
+                    )
+                ]
+            )
+        ],
         version: 1,
         updatedAt: "2026-06-21T00:00:00.000Z",
         metadata: ["locationName": .string("Durham")]

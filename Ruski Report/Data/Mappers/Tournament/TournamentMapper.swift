@@ -35,12 +35,14 @@ nonisolated enum TournamentMapper {
 
         return TournamentDetail(
             id: dto.id,
+            gameType: dto.gameType,
             preview: preview,
             pods: dto.pods.map(mapPod),
             teams: dto.teams.map(mapTeam),
             standings: dto.standings.map(mapStanding),
             bracket: dto.bracket.map(mapBracket),
-            matches: dto.matchSummaries.map(MatchMapper.preview)
+            matches: dto.matchSummaries.map(MatchMapper.preview),
+            statistics: dto.statistics?.map(mapStatisticTable) ?? []
         )
     }
 
@@ -117,21 +119,80 @@ nonisolated enum TournamentMapper {
         TournamentBracket(
             id: dto.id,
             rounds: dto.rounds.map {
-                BracketRound(
+                let matches = bracketMatches(from: $0)
+
+                return BracketRound(
                     id: $0.id,
                     name: $0.name,
                     sequence: $0.sequence,
-                    matchIds: bracketMatchIds(from: $0)
+                    matchIds: matches.compactMap(\.matchId),
+                    matches: matches
                 )
             }
         )
     }
 
-    private static func bracketMatchIds(from dto: BracketRoundDTO) -> [String] {
-        if let matchIds = dto.matchIds {
-            return matchIds
+    private static func bracketMatches(
+        from dto: BracketRoundDTO
+    ) -> [TournamentBracketMatch] {
+        if let matches = dto.matches {
+            return matches.map { match in
+                TournamentBracketMatch(
+                    id: match.id,
+                    matchId: match.matchId,
+                    sequence: match.sequence ?? 0,
+                    status: match.status ?? "pending",
+                    slots: (match.slots ?? []).map { slot in
+                        TournamentBracketSlot(
+                            seed: slot.seed,
+                            teamId: slot.teamId,
+                            source: slot.source.map {
+                                TournamentBracketSlotSource(
+                                    type: $0.type,
+                                    sourceMatchId: $0.sourceMatchId,
+                                    label: $0.label
+                                )
+                            }
+                        )
+                    },
+                    winnerTeamId: match.winnerTeamId
+                )
+            }
         }
 
-        return dto.matches?.compactMap(\.matchId) ?? []
+        return (dto.matchIds ?? []).enumerated().map { index, matchId in
+            TournamentBracketMatch(
+                id: matchId,
+                matchId: matchId,
+                sequence: index + 1,
+                status: "pending",
+                slots: [],
+                winnerTeamId: nil
+            )
+        }
+    }
+
+    private static func mapStatisticTable(
+        _ dto: TournamentStatisticTableDTO
+    ) -> TournamentStatisticTable {
+        TournamentStatisticTable(
+            id: dto.id,
+            name: dto.name,
+            scope: dto.scope,
+            subjectType: dto.subjectType,
+            statKeys: dto.statKeys,
+            rows: dto.rows.map { row in
+                TournamentStatisticRow(
+                    rank: row.rank,
+                    subject: TournamentStatisticSubject(
+                        type: row.subject.type,
+                        label: row.subject.label,
+                        playerId: row.subject.playerId,
+                        teamId: row.subject.teamId
+                    ),
+                    values: row.values.compactMapValues(\.doubleValue)
+                )
+            }
+        )
     }
 }
