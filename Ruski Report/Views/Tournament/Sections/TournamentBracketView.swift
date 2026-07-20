@@ -19,16 +19,20 @@ struct TournamentBracketView: View {
                 systemImage: "rectangle.grid.2x2"
             )
         } else {
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(sections) { section in
-                    TournamentBracketRoundSectionView(
-                        detail: detail,
-                        section: section,
-                        openMatch: { match in
-                            navigation.showMatch(match, in: detail)
-                        }
-                    )
+            ScrollView(.horizontal, showsIndicators: true) {
+                LazyHStack(alignment: .top, spacing: 16) {
+                    ForEach(sections) { section in
+                        TournamentBracketRoundSectionView(
+                            detail: detail,
+                            section: section,
+                            openMatch: { match in
+                                navigation.showMatch(match, in: detail)
+                            }
+                        )
+                        .frame(width: AppLayout.bracketRoundWidth)
+                    }
                 }
+                .padding(.bottom, 8)
             }
             .accessibilityIdentifier("tournament.bracket")
         }
@@ -103,24 +107,21 @@ private struct TournamentBracketMatchupCard: View {
 
     var body: some View {
         TournamentDetailCard {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(matchup.title)
-                        .font(.subheadline.weight(.semibold))
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.82)
+            HStack(spacing: 10) {
+                StatusPill(text: matchup.statusText, style: statusStyle)
 
-                    Text(matchup.matchId ?? matchup.id)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                }
+                Spacer(minLength: 8)
 
-                Spacer(minLength: 12)
-
-                StatusPill(text: matchup.statusText)
+                Text(matchup.matchId ?? matchup.id)
+                    .font(.caption2.monospaced())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
             }
+
+            Text(matchup.title)
+                .font(.subheadline.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
 
             if matchup.slots.isEmpty {
                 Text("Match summary unavailable")
@@ -151,6 +152,15 @@ private struct TournamentBracketMatchupCard: View {
             }
         }
     }
+
+    private var statusStyle: StatusPill.Style {
+        switch matchup.statusText.lowercased() {
+        case "in progress", "active", "live": .live
+        case "final", "completed": .final
+        case "scheduled", "pending": .scheduled
+        default: .neutral
+        }
+    }
 }
 
 private struct TournamentBracketTeamSlotView: View {
@@ -165,8 +175,6 @@ private struct TournamentBracketTeamSlotView: View {
 
             Text(slot.teamName)
                 .font(.subheadline.weight(slot.isWinner ? .semibold : .regular))
-                .lineLimit(2)
-                .minimumScaleFactor(0.8)
                 .fixedSize(horizontal: false, vertical: true)
 
             Spacer(minLength: 8)
@@ -177,7 +185,7 @@ private struct TournamentBracketTeamSlotView: View {
 
             if slot.isWinner {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.accentColor)
+                    .foregroundStyle(Color.appFinal)
                     .accessibilityLabel("Winner")
             }
         }
