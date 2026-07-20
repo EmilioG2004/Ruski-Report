@@ -28,7 +28,7 @@ describe("RuskiScorebookNormalizer", () => {
     expect(snapshot.tournament.matchSummaries).toHaveLength(gameSheetCount);
     expect(snapshot.tournament.teams.length).toBeGreaterThan(0);
     expect(snapshot.tournament.metadata).toMatchObject({
-      normalizedFrom: "ruski-game-sheets",
+      normalizedFrom: "ruski-scorebook",
       allDataRequired: false
     });
   });
@@ -103,6 +103,97 @@ describe("RuskiScorebookNormalizer", () => {
     expect(serialized).not.toContain("B10");
     expect(serialized).not.toContain("D3");
   });
+
+  it("normalizes the workbook into eight pods and 32 canonical teams", async () => {
+    const snapshot = await normalizeCanonicalFixture(await parseFixture());
+
+    expect(snapshot.tournament.teams).toHaveLength(32);
+    expect(snapshot.tournament.pods).toHaveLength(8);
+    expect(snapshot.tournament.standings).toHaveLength(32);
+    expect(snapshot.tournament.pods.every((pod) => pod.teamIds.length === 4)).toBe(true);
+    expect(snapshot.tournament.pods.every((pod) => pod.standingIds?.length === 4)).toBe(true);
+    expect(new Set(snapshot.tournament.teams.map((team) => team.id)).size).toBe(32);
+    expect(snapshot.tournament.standings[0]).toMatchObject({
+      podId: "pod-pod-a",
+      rank: 1,
+      record: { wins: 3, losses: 0 },
+      metricValues: {
+        cupDifferential: 7,
+        shootingPercentage: 0.2849462366
+      }
+    });
+  });
+
+  it("normalizes metadata-driven statistic tables with canonical identities", async () => {
+    const snapshot = await normalizeCanonicalFixture(await parseFixture());
+    const tables = snapshot.tournament.statistics ?? [];
+    const teamIds = new Set(snapshot.tournament.teams.map((team) => team.id));
+
+    expect(tables.map((table) => [table.id, table.rows.length])).toEqual([
+      ["season-player-statistics", 65],
+      ["season-team-statistics", 32],
+      ["playoff-player-statistics", 32]
+    ]);
+    expect(
+      tables
+        .find((table) => table.id === "season-team-statistics")
+        ?.rows.every((row) =>
+          row.subject.teamId !== undefined && teamIds.has(row.subject.teamId)
+        )
+    ).toBe(true);
+    expect(
+      tables
+        .find((table) => table.id === "season-player-statistics")
+        ?.rows.find((row) => row.subject.label === "Dylan and Matian")
+        ?.values
+    ).toMatchObject({
+      tris: expect.any(Number),
+      dis: expect.any(Number),
+      voms: expect.any(Number)
+    });
+  });
+
+  it("normalizes bracket rounds, winners, and available match links", async () => {
+    const snapshot = await normalizeCanonicalFixture(await parseFixture());
+    const bracket = snapshot.tournament.bracket;
+
+    expect(bracket?.rounds.map((round) => round.matches.length)).toEqual([8, 4, 2, 1]);
+    expect(bracket?.rounds[0].matches[0]).toMatchObject({
+      id: "sweet-16-1",
+      status: "completed",
+      matchId: expect.any(String),
+      winnerTeamId: "team-brando-heath"
+    });
+    expect(bracket?.rounds[1].matches[0].slots[0].source).toEqual({
+      type: "match-winner",
+      sourceMatchId: "sweet-16-1"
+    });
+    expect(bracket?.metadata?.championTeamId).toBe("team-everett-hulu");
+  });
+
+  it("reuses canonical team IDs across standings, matches, stats, and bracket", async () => {
+    const snapshot = await normalizeCanonicalFixture(await parseFixture());
+    const teamIds = new Set(snapshot.tournament.teams.map((team) => team.id));
+    const referencedTeamIds = [
+      ...snapshot.tournament.standings.map((standing) => standing.teamId),
+      ...snapshot.matches.flatMap((match) =>
+        match.participants.map((participant) => participant.teamId)
+      ),
+      ...(snapshot.tournament.statistics ?? []).flatMap((table) =>
+        table.rows.flatMap((row) => row.subject.teamId ?? [])
+      ),
+      ...(snapshot.tournament.bracket?.rounds ?? []).flatMap((round) =>
+        round.matches.flatMap((match) => [
+          ...match.slots.flatMap((slot) => slot.teamId ?? []),
+          ...(match.winnerTeamId === undefined ? [] : [match.winnerTeamId])
+        ])
+      )
+    ];
+
+    expect(referencedTeamIds.every((teamId) => teamIds.has(teamId))).toBe(true);
+    expect(snapshot.matches.filter((match) => match.podId !== undefined)).toHaveLength(44);
+    expect(snapshot.matches.filter((match) => match.bracketMatchId !== undefined)).toHaveLength(12);
+  });
 });
 
 async function parseFixture(): Promise<ParsedScorebook> {
@@ -132,5 +223,11 @@ function normalizeFixture(parsed: ParsedScorebook) {
         players: ["Henry Lewis", "Everett Schroeder"]
       }
     ]
+  }).normalizeScorebook(parsed);
+}
+
+function normalizeCanonicalFixture(parsed: ParsedScorebook) {
+  return new RuskiScorebookNormalizer(undefined, {
+    now: () => "2026-06-21T12:00:00.000Z"
   }).normalizeScorebook(parsed);
 }
