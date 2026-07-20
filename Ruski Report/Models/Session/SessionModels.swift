@@ -101,3 +101,15 @@ nonisolated enum SessionIdentityProvider: Equatable {
     case adminToken
     case unknown(String)
 }
+
+nonisolated struct AuthenticatedAccountSession: Equatable {
+    let profile: UserProfile
+    let token: String
+    let expiresAt: String
+}
+
+nonisolated enum AccountSessionActivity: Equatable {
+    case idle
+    case restoring
+    case authenticating
+}
