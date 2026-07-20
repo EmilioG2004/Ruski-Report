@@ -193,7 +193,10 @@ describe("AdminScorebookService", () => {
 
     expect(uploadReports.latestReport()).toMatchObject({
       status: "publish_failed",
-      tournamentId: "tournament-2026"
+      tournamentId: "tournament-2026",
+      metadata: {
+        publishFailure: "Failed to publish tournament snapshot."
+      }
     });
     expect(realtimeUpdates.publishTournamentUpdated).not.toHaveBeenCalled();
   });

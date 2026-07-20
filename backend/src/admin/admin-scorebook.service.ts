@@ -148,15 +148,21 @@ export class AdminScorebookService {
         );
       });
     } catch (error) {
-      if (error instanceof AppError) {
+      try {
         await this.updateReport({
           ...report,
           source: parsed.source,
           status: "publish_failed",
           validation,
           tournamentId: snapshot.tournament.id,
-          completedAt: new Date().toISOString()
+          completedAt: new Date().toISOString(),
+          metadata: {
+            ...report.metadata,
+            publishFailure: getErrorMessage(error)
+          }
         });
+      } catch {
+        // Preserve the publication error when storage is unavailable entirely.
       }
 
       throw error;
