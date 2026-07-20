@@ -55,10 +55,21 @@ should record the published snapshot version. Publish failures should record
 the validation result and failure metadata so the admin workflow can explain
 what happened.
 
-## Future PostgreSQL Shape
+## PostgreSQL Shape
 
-The initial PostgreSQL implementation should start with tables for active
-snapshot versions, tournaments, teams, players, pods, matches, standings,
-comments, upload reports, and stored source files. JSONB can hold normalized
-scorecard rows, game events, box scores, validation issues, and source metadata
-until those structures need dedicated query paths.
+Migration `0001_initial_persistence.sql` creates relational records for active
+snapshot versions, tournaments, teams, players, team membership, pods, pod
+membership, matches, standings, comments, upload reports, and scorebook source
+metadata. JSONB holds bracket/statistic structures, scorecard rows, events, box
+scores, validation issues, and game-specific metadata that do not need separate
+query paths yet.
+
+Snapshot rows are immutable. Publishing takes a tournament-scoped transaction
+advisory lock, writes the complete next version, and changes the active pointer
+only after every child record succeeds. Read repositories resolve the pointer
+once and continue reading that retained version, so concurrent publication does
+not mix versions.
+
+Comments reference stable match identities rather than a particular snapshot
+version. Republishing a workbook can therefore add a new match version without
+rewriting or deleting its comments.

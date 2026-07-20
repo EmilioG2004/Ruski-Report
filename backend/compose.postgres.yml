@@ -1,0 +1,19 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ruski_report
+      POSTGRES_USER: ruski
+      POSTGRES_PASSWORD: local-development-only
+    ports:
+      - "5432:5432"
+    volumes:
+      - ruski-report-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ruski -d ruski_report"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  ruski-report-postgres:

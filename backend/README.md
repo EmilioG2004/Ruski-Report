@@ -6,12 +6,43 @@ NestJS backend for Ruski Report.
 
 ```bash
 npm install
+npm run db:migrate
 npm run start:dev
 npm test
 npm run build
 ```
 
 The development server listens on `PORT` or `3000` by default.
+
+## PostgreSQL
+
+Runtime repositories use PostgreSQL. Start a local database with:
+
+```bash
+docker compose -f compose.postgres.yml up -d
+export DATABASE_URL=postgresql://ruski:local-development-only@localhost:5432/ruski_report
+npm run db:migrate
+npm run start:dev
+```
+
+Migrations are explicit and versioned under `migrations/`. Run them before each
+deployment; application startup does not mutate the schema. Production should
+provide `DATABASE_URL` through its secret manager and enable `DATABASE_SSL` when
+the database endpoint requires TLS. After compiling a production artifact, run
+`npm run db:migrate:prod` before `npm start`.
+
+PostgreSQL integration tests require a disposable database because they truncate
+application tables between cases:
+
+```bash
+docker compose -f compose.postgres.yml exec postgres \
+  createdb -U ruski ruski_report_test
+export TEST_DATABASE_URL=postgresql://ruski:local-development-only@localhost:5432/ruski_report_test
+npm run test:postgres
+```
+
+Unit tests continue to use the in-memory repository adapters directly and do
+not require PostgreSQL.
 
 Health check:
 
@@ -24,6 +55,7 @@ curl http://localhost:3000/api/health
 - `src/controllers`: HTTP controller boundaries.
 - `src/services`: Application and business workflow services.
 - `src/repositories`: Persistence interfaces and implementations.
+- `src/database`: PostgreSQL pool, transactions, and migration runner.
 - `src/domain`: Framework-free tournament and game domain contracts.
 - `src/ingestion`: Scorebook upload, parsing, validation, and normalization workflows.
 - `src/games`: Game plugins such as the v1 Ruski module.
