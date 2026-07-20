@@ -197,4 +197,16 @@ nonisolated enum PreviewData {
             )
         ]
     )
+
+    static let emptyTournamentDetail = TournamentDetail(
+        id: tournamentPreview.id,
+        gameType: gameDefinition.gameType,
+        preview: tournamentPreview,
+        pods: [],
+        teams: [],
+        standings: [],
+        bracket: nil,
+        matches: [],
+        statistics: []
+    )
 }

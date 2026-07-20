@@ -17,31 +17,51 @@ struct AppServices {
     let logger: any AppLogger
     let initialTournament: TournamentPreview
 
-    static let preview: AppServices = {
+    static let preview = preview(scenario: .standard)
+
+    static func preview(scenario: PreviewScenario) -> AppServices {
         let logger = NoopAppLogger()
+        let profile = UserProfile(
+            id: "preview-user",
+            displayName: "Emilio Garcia",
+            provider: .localAccount
+        )
+        let isAuthenticated = scenario == .authenticated
+        let tournamentDetail = scenario == .empty ?
+            PreviewData.emptyTournamentDetail : PreviewData.tournamentDetail
+        let tournamentFailure: AppError? = scenario == .unavailable ?
+            .networkUnavailable("The tournament service is temporarily unavailable.") : nil
 
         return AppServices(
             games: PreviewGameRepository(),
-            tournaments: PreviewTournamentRepository(),
+            tournaments: PreviewTournamentRepository(
+                detail: tournamentDetail,
+                failure: tournamentFailure
+            ),
             matches: PreviewMatchRepository(),
             comments: PreviewCommentRepository(),
             session: AccountSessionStore(
-                authentication: PreviewAuthenticationRepository(),
-                credentials: InMemorySessionCredentialStore(),
+                initialSession: isAuthenticated ? .authenticated(profile) : .guest,
+                authentication: PreviewAuthenticationRepository(profile: profile),
+                credentials: InMemorySessionCredentialStore(
+                    token: isAuthenticated ? "preview-session-token" : nil
+                ),
                 logger: logger
             ),
             realtime: NoopRealtimeUpdateRepository(),
             logger: logger,
             initialTournament: PreviewData.tournamentPreview
         )
-    }()
+    }
 
     static func configured(
         bundle: Bundle = .main,
         processInfo: ProcessInfo = .processInfo
     ) -> AppServices {
         if processInfo.arguments.contains(previewLaunchArgument) {
-            return preview
+            return preview(
+                scenario: PreviewScenario.resolve(from: processInfo.arguments)
+            )
         }
 
         let logger = OSLogAppLogger()

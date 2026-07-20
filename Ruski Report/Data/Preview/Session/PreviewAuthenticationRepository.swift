@@ -6,11 +6,17 @@
 import Foundation
 
 nonisolated final class PreviewAuthenticationRepository: AuthenticationRepository {
-    private let profile = UserProfile(
-        id: "preview-user",
-        displayName: "Preview User",
-        provider: .localAccount
-    )
+    private let profile: UserProfile
+
+    init(
+        profile: UserProfile = UserProfile(
+            id: "preview-user",
+            displayName: "Preview User",
+            provider: .localAccount
+        )
+    ) {
+        self.profile = profile
+    }
 
     func register(
         displayName: String,
