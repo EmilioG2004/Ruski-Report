@@ -3,9 +3,8 @@ import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 import { commentsConfig, CommentsConfig } from "../config/comments.config";
 import { AppError } from "../errors";
 import {
+  AuthenticatedPrincipal,
   Comment,
-  CommentAuthor,
-  CommentAuthorKind,
   MatchDetail
 } from "../domain";
 import {
@@ -20,15 +19,8 @@ import {
 } from "./repository-result.mapper";
 import { RealtimeUpdatePublisher } from "../realtime";
 
-export interface CreateCommentAuthorRequest {
-  kind?: CommentAuthorKind;
-  displayName?: string;
-  userId?: string;
-}
-
 export interface CreateCommentRequest {
   body?: string;
-  author?: CreateCommentAuthorRequest;
 }
 
 @Injectable()
@@ -54,17 +46,20 @@ export class CommentsService {
 
   async createMatchComment(
     matchId: string,
-    request: CreateCommentRequest | null | undefined
+    request: CreateCommentRequest | null | undefined,
+    principal: AuthenticatedPrincipal
   ): Promise<Comment> {
     const match = await this.requireMatch(matchId);
 
     const body = this.normalizeBody(request?.body);
-    const author = this.normalizeAuthor(request?.author);
-
     const comment = unwrapRepositoryResult(
       await this.commentRepository.create({
         matchId,
-        author,
+        author: {
+          kind: "account",
+          displayName: principal.displayName,
+          userId: principal.userId
+        },
         body
       }),
       "Unable to create match comment."
@@ -133,61 +128,4 @@ export class CommentsService {
     return normalized;
   }
 
-  private normalizeAuthor(
-    author: CreateCommentAuthorRequest | undefined
-  ): CommentAuthor {
-    if (author === undefined || author.kind === undefined) {
-      throw this.signInRequiredError();
-    }
-
-    if (author.kind === "guest") {
-      throw this.signInRequiredError();
-    }
-
-    if (author.kind !== "account" && author.kind !== "admin") {
-      throw new AppError({
-        code: "BAD_REQUEST",
-        message: "Comment author type is not supported.",
-        statusCode: HttpStatus.BAD_REQUEST,
-        details: [
-          {
-            code: "COMMENT_AUTHOR_UNSUPPORTED",
-            message: "Comment author type is not supported.",
-            path: "author.kind"
-          }
-        ]
-      });
-    }
-
-    return {
-      kind: author.kind,
-      displayName: this.normalizeDisplayName(author.displayName),
-      userId: author.userId?.trim() || undefined
-    };
-  }
-
-  private normalizeDisplayName(displayName: string | undefined): string {
-    const normalized = displayName?.trim() ?? "";
-
-    if (normalized.length === 0) {
-      return "Authenticated user";
-    }
-
-    return normalized;
-  }
-
-  private signInRequiredError(): AppError {
-    return new AppError({
-      code: "UNAUTHORIZED",
-      message: "Sign in to post comments.",
-      statusCode: HttpStatus.UNAUTHORIZED,
-      details: [
-        {
-          code: "COMMENT_SIGN_IN_REQUIRED",
-          message: "Sign in to post comments.",
-          path: "author"
-        }
-      ]
-    });
-  }
 }
