@@ -6,9 +6,11 @@
 import SwiftUI
 
 struct AccountSessionView: View {
-    @ObservedObject var session: LocalSessionRepository
+    @ObservedObject var session: AccountSessionStore
     @Environment(\.dismiss) private var dismiss
+    @State private var mode = AccountFormMode.signIn
     @State private var displayName = ""
+    @State private var password = ""
     @State private var errorMessage: String?
 
     var body: some View {
@@ -33,19 +35,32 @@ struct AccountSessionView: View {
                     }
                 }
             }
-            .onAppear(perform: syncDraftWithSession)
-            .onChange(of: session.current) { _, _ in
-                syncDraftWithSession()
+            .onChange(of: mode) { _, _ in
+                errorMessage = nil
             }
         }
     }
 
     private var guestControls: some View {
-        Section("Sign In") {
+        Section {
+            Picker("Account action", selection: $mode) {
+                ForEach(AccountFormMode.allCases) { mode in
+                    Text(mode.label).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("account.mode")
+
             TextField("Display name", text: $displayName)
-                .submitLabel(.done)
-                .onSubmit(signIn)
+                .textContentType(.username)
+                .autocorrectionDisabled()
                 .accessibilityIdentifier("account.displayName")
+
+            SecureField("Password", text: $password)
+                .textContentType(mode == .signIn ? .password : .newPassword)
+                .submitLabel(.go)
+                .onSubmit(submit)
+                .accessibilityIdentifier("account.password")
 
             if let errorMessage {
                 Text(errorMessage)
@@ -54,113 +69,119 @@ struct AccountSessionView: View {
                     .accessibilityIdentifier("account.error")
             }
 
-            Button(action: signIn) {
-                Label("Sign In", systemImage: "person.crop.circle.badge.plus")
+            Button(action: submit) {
+                if session.activity == .authenticating {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Label(mode.buttonLabel, systemImage: mode.systemImage)
+                        .frame(maxWidth: .infinity)
+                }
             }
-            .disabled(trimmedDisplayName.isEmpty)
-            .accessibilityIdentifier("account.signIn")
+            .disabled(!canSubmit)
+            .accessibilityIdentifier("account.submit")
+        } header: {
+            Text(mode.sectionTitle)
         }
     }
 
     private var signedInControls: some View {
         Section("Session") {
             Button(role: .destructive) {
-                session.signOut()
-                errorMessage = nil
-                displayName = ""
+                Task {
+                    do {
+                        try await session.signOut()
+                        errorMessage = nil
+                        displayName = ""
+                        password = ""
+                    } catch {
+                        errorMessage = AppErrorMessageFormatter.message(
+                            from: error,
+                            fallback: "Unable to sign out."
+                        )
+                    }
+                }
             } label: {
                 Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
             }
+            .disabled(session.activity != .idle)
             .accessibilityIdentifier("account.signOut")
-        }
-    }
 
-    private var trimmedDisplayName: String {
-        displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func signIn() {
-        let result = session.signIn(displayName: displayName)
-
-        switch result {
-        case .success:
-            errorMessage = nil
-            dismiss()
-        case .failure(let error):
-            errorMessage = error.message
-        }
-    }
-
-    private func syncDraftWithSession() {
-        switch session.current {
-        case .guest:
-            break
-        case .authenticated(let profile), .admin(let profile):
-            displayName = profile.displayName
-        }
-    }
-}
-
-private struct AccountStatusRow: View {
-    let session: UserSession
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: iconName)
-                .font(.title3)
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 28)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(session.displayName)
-                    .font(.body.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-
-                Text(statusText)
+            if let errorMessage {
+                Text(errorMessage)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.red)
+                    .accessibilityIdentifier("account.error")
             }
-
-            Spacer(minLength: 12)
-        }
-        .accessibilityIdentifier("account.status")
-    }
-
-    private var iconName: String {
-        switch session {
-        case .guest:
-            "person.crop.circle"
-        case .authenticated:
-            "person.crop.circle.fill"
-        case .admin:
-            "person.crop.circle.badge.checkmark"
         }
     }
 
-    private var statusText: String {
-        switch session {
-        case .guest:
-            "Guest"
-        case .authenticated(let profile), .admin(let profile):
-            profile.provider.displayName
+    private var canSubmit: Bool {
+        session.activity == .idle &&
+            !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !password.isEmpty
+    }
+
+    private func submit() {
+        guard canSubmit else {
+            return
+        }
+
+        Task {
+            do {
+                switch mode {
+                case .signIn:
+                    try await session.signIn(
+                        displayName: displayName,
+                        password: password
+                    )
+                case .createAccount:
+                    try await session.register(
+                        displayName: displayName,
+                        password: password
+                    )
+                }
+                errorMessage = nil
+                password = ""
+                dismiss()
+            } catch {
+                errorMessage = AppErrorMessageFormatter.message(
+                    from: error,
+                    fallback: "Unable to authenticate."
+                )
+            }
         }
     }
 }
 
-private extension SessionIdentityProvider {
-    var displayName: String {
+private enum AccountFormMode: String, CaseIterable, Identifiable {
+    case signIn
+    case createAccount
+
+    var id: String { rawValue }
+
+    var label: String {
         switch self {
-        case .localAccount:
-            "Local Account"
-        case .gameCenter:
-            "Game Center"
-        case .tauId:
-            "TAU ID"
-        case .adminToken:
-            "Admin"
-        case .unknown(let value):
-            value
+        case .signIn: "Sign In"
+        case .createAccount: "Create"
+        }
+    }
+
+    var sectionTitle: String {
+        switch self {
+        case .signIn: "Sign In"
+        case .createAccount: "Create Account"
+        }
+    }
+
+    var buttonLabel: String {
+        sectionTitle
+    }
+
+    var systemImage: String {
+        switch self {
+        case .signIn: "person.crop.circle.badge.checkmark"
+        case .createAccount: "person.crop.circle.badge.plus"
         }
     }
 }
