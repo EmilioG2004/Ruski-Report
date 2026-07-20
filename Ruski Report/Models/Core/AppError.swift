@@ -19,6 +19,7 @@ nonisolated enum AppError: Error, Equatable {
     case backend(code: String, message: String, details: [AppErrorDetail])
     case encodingFailed(String)
     case decodingFailed(String)
+    case secureStorage(String)
     case unsupported(String)
 }
 
@@ -39,6 +40,8 @@ nonisolated extension AppError: LocalizedError {
             "Unable to encode the request body: \(message)"
         case .decodingFailed(let message):
             "Unable to decode the server response: \(message)"
+        case .secureStorage(let message):
+            message
         case .unsupported(let message):
             message
         }
