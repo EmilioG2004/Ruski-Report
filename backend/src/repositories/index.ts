@@ -1,3 +1,5 @@
+export * from "./account-repository";
+export * from "./auth-session-repository";
 export * from "./comment-repository";
 export * from "./in-memory-comment.repository";
 export * from "./in-memory-tournament-snapshot.repository";
