@@ -80,49 +80,135 @@ struct SessionAuthorizationTests {
         #expect(!session.canPostComments)
     }
 
-    @Test func localSessionRepositorySignsInWithTrimmedDisplayName() async {
-        let repository = LocalSessionRepository(idFactory: { "local-test-user" })
+    @Test func accountSessionStorePersistsSuccessfulLogin() async throws {
+        let credentials = InMemorySessionCredentialStore()
+        let repository = StubAuthenticationRepository(
+            createdSession: authenticatedAccountSession()
+        )
+        let store = AccountSessionStore(
+            authentication: repository,
+            credentials: credentials
+        )
 
-        let result = repository.signIn(displayName: "  Jamie  ")
-        let session = await repository.currentSession()
+        try await store.signIn(displayName: "Jamie", password: "password-123")
 
-        if case .failure = result {
-            #expect(Bool(false))
-        }
+        #expect(await credentials.accessToken() == "opaque-token")
         #expect(
-            session == .authenticated(
-                UserProfile(
-                    id: "local-test-user",
-                    displayName: "Jamie",
-                    provider: .localAccount
+            await store.currentSession() ==
+                .authenticated(authenticatedAccountSession().profile)
+        )
+        #expect(store.activity == .idle)
+    }
+
+    @Test func accountSessionStoreRestoresAStoredServerSession() async {
+        let credentials = InMemorySessionCredentialStore(token: "opaque-token")
+        let repository = StubAuthenticationRepository(
+            currentProfile: .success(authenticatedAccountSession().profile)
+        )
+        let store = AccountSessionStore(
+            authentication: repository,
+            credentials: credentials
+        )
+
+        await store.restoreSession()
+
+        #expect(
+            await store.currentSession() ==
+                .authenticated(authenticatedAccountSession().profile)
+        )
+    }
+
+    @Test func accountSessionStoreClearsAnUnauthorizedStoredSession() async throws {
+        let credentials = InMemorySessionCredentialStore(token: "expired-token")
+        let repository = StubAuthenticationRepository(
+            currentProfile: .failure(
+                AppError.backend(
+                    code: "UNAUTHORIZED",
+                    message: "Sign in to continue.",
+                    details: []
                 )
             )
         )
-        #expect(session.canPostComments)
+        let store = AccountSessionStore(
+            authentication: repository,
+            credentials: credentials
+        )
+
+        await store.restoreSession()
+
+        #expect(await store.currentSession() == .guest)
+        #expect(await credentials.accessToken() == nil)
     }
 
-    @Test func localSessionRepositoryRejectsBlankDisplayName() async {
-        let repository = LocalSessionRepository(idFactory: { "local-test-user" })
+    @Test func accountSessionStoreClearsLocalSessionWhenRemoteSignOutFails() async throws {
+        let credentials = InMemorySessionCredentialStore(token: "opaque-token")
+        let repository = StubAuthenticationRepository(
+            createdSession: authenticatedAccountSession(),
+            signOutError: AppError.networkUnavailable("Offline")
+        )
+        let store = AccountSessionStore(
+            authentication: repository,
+            credentials: credentials
+        )
+        try await store.signIn(displayName: "Jamie", password: "password-123")
 
-        let result = repository.signIn(displayName: "   ")
-        let session = await repository.currentSession()
+        try await store.signOut()
 
-        if case .failure(let error) = result {
-            #expect(error == .invalid(message: "Enter a display name."))
-        } else {
-            #expect(Bool(false))
+        #expect(await store.currentSession() == .guest)
+        #expect(await credentials.accessToken() == nil)
+    }
+}
+
+private func authenticatedAccountSession() -> AuthenticatedAccountSession {
+    AuthenticatedAccountSession(
+        profile: UserProfile(
+            id: "user-1",
+            displayName: "Jamie",
+            provider: .localAccount
+        ),
+        token: "opaque-token",
+        expiresAt: "2026-08-20T12:00:00.000Z"
+    )
+}
+
+private final class StubAuthenticationRepository: AuthenticationRepository {
+    private let createdSession: AuthenticatedAccountSession
+    private let currentProfileResult: Result<UserProfile, Error>
+    private let signOutError: Error?
+
+    init(
+        createdSession: AuthenticatedAccountSession = authenticatedAccountSession(),
+        currentProfile: Result<UserProfile, Error> = .success(
+            authenticatedAccountSession().profile
+        ),
+        signOutError: Error? = nil
+    ) {
+        self.createdSession = createdSession
+        currentProfileResult = currentProfile
+        self.signOutError = signOutError
+    }
+
+    func register(
+        displayName: String,
+        password: String
+    ) async throws -> AuthenticatedAccountSession {
+        createdSession
+    }
+
+    func login(
+        displayName: String,
+        password: String
+    ) async throws -> AuthenticatedAccountSession {
+        createdSession
+    }
+
+    func currentProfile() async throws -> UserProfile {
+        try currentProfileResult.get()
+    }
+
+    func signOut() async throws {
+        if let signOutError {
+            throw signOutError
         }
-        #expect(session == .guest)
-    }
-
-    @Test func localSessionRepositorySignsOutToGuestSession() async {
-        let repository = LocalSessionRepository(idFactory: { "local-test-user" })
-
-        repository.signIn(displayName: "Jamie")
-        repository.signOut()
-        let session = await repository.currentSession()
-
-        #expect(session == .guest)
-        #expect(!session.canPostComments)
     }
 }
