@@ -9,6 +9,7 @@ import { RUSKI_GAME_TYPE } from "../definition";
 import { ruskiScorebookSchema } from "../scorebook";
 import { getHeaderMismatches, validationError } from "./ruski-validation";
 import { validateRuskiGameSheet } from "./ruski-game-sheet.validator";
+import { validateRuskiTournamentSheets } from "./ruski-tournament-sheet.validator";
 
 export class RuskiScorebookValidator {
   validateScorebook(parsed: ParsedScorebook): ValidationResult {
@@ -16,6 +17,7 @@ export class RuskiScorebookValidator {
       ...validateGameType(parsed),
       ...validateRequiredSheets(parsed),
       ...validateSheetHeaders(parsed),
+      ...validateRuskiTournamentSheets(parsed),
       ...parsed.sheets.flatMap(validateRuskiGameSheet)
     ];
 
