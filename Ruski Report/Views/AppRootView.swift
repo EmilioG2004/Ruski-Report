@@ -9,7 +9,7 @@ struct AppRootView: View {
     @StateObject private var navigation = AppNavigationController()
     @StateObject private var sheetRouter = AppSheetRouter()
     @StateObject private var homeController: HomeController
-    @StateObject private var session: LocalSessionRepository
+    @StateObject private var session: AccountSessionStore
 
     private let services: AppServices
 
@@ -60,6 +60,9 @@ struct AppRootView: View {
             case .account:
                 AccountSessionView(session: session)
             }
+        }
+        .task {
+            await session.restoreSession()
         }
         .environmentObject(navigation)
         .environmentObject(sheetRouter)

@@ -11,7 +11,7 @@ struct MatchDetailView: View {
 
     private let routeContext: MatchRouteContext
     private let comments: any CommentRepository
-    private let session: LocalSessionRepository
+    private let session: AccountSessionStore
     private let realtime: any RealtimeUpdateRepository
     private let logger: any AppLogger
 
@@ -20,7 +20,7 @@ struct MatchDetailView: View {
         matches: any MatchRepository,
         games: any GameRepository,
         comments: any CommentRepository,
-        session: LocalSessionRepository,
+        session: AccountSessionStore,
         realtime: any RealtimeUpdateRepository,
         logger: any AppLogger
     ) {
@@ -407,14 +407,14 @@ private struct MatchEventLogView: View {
 
 private struct MatchCommentsView: View {
     @StateObject private var controller: MatchCommentsController
-    @ObservedObject private var session: LocalSessionRepository
+    @ObservedObject private var session: AccountSessionStore
     @EnvironmentObject private var sheetRouter: AppSheetRouter
     @State private var draftComment = ""
 
     init(
         matchId: MatchPreview.ID,
         comments: any CommentRepository,
-        session: LocalSessionRepository,
+        session: AccountSessionStore,
         realtime: any RealtimeUpdateRepository,
         logger: any AppLogger
     ) {

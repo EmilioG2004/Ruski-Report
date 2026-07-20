@@ -12,7 +12,7 @@ struct AppServices {
     let tournaments: any TournamentRepository
     let matches: any MatchRepository
     let comments: any CommentRepository
-    let session: LocalSessionRepository
+    let session: AccountSessionStore
     let realtime: any RealtimeUpdateRepository
     let logger: any AppLogger
     let initialTournament: TournamentPreview
@@ -25,7 +25,11 @@ struct AppServices {
             tournaments: PreviewTournamentRepository(),
             matches: PreviewMatchRepository(),
             comments: PreviewCommentRepository(),
-            session: LocalSessionRepository(logger: logger),
+            session: AccountSessionStore(
+                authentication: PreviewAuthenticationRepository(),
+                credentials: InMemorySessionCredentialStore(),
+                logger: logger
+            ),
             realtime: NoopRealtimeUpdateRepository(),
             logger: logger,
             initialTournament: PreviewData.tournamentPreview
@@ -61,8 +65,16 @@ struct AppServices {
         config: AppConfig = .fallback,
         logger: any AppLogger = OSLogAppLogger()
     ) -> AppServices {
-        let apiClient = URLSessionAPIClient(baseURL: config.apiBaseURL)
-        let session = LocalSessionRepository(logger: logger)
+        let credentials = KeychainSessionCredentialStore()
+        let apiClient = URLSessionAPIClient(
+            baseURL: config.apiBaseURL,
+            authorizer: BearerTokenRequestAuthorizer(credentials: credentials)
+        )
+        let session = AccountSessionStore(
+            authentication: RemoteAuthenticationRepository(apiClient: apiClient),
+            credentials: credentials,
+            logger: logger
+        )
 
         return AppServices(
             games: RemoteGameRepository(apiClient: apiClient),
