@@ -41,4 +41,24 @@ extension Color {
         Color.gray.opacity(0.25)
         #endif
     }
+
+    static var appLive: Color {
+        #if canImport(UIKit)
+        Color(uiColor: UIColor.systemRed)
+        #elseif canImport(AppKit)
+        Color(nsColor: NSColor.systemRed)
+        #else
+        Color.red
+        #endif
+    }
+
+    static var appFinal: Color {
+        #if canImport(UIKit)
+        Color(uiColor: UIColor.systemGreen)
+        #elseif canImport(AppKit)
+        Color(nsColor: NSColor.systemGreen)
+        #else
+        Color.green
+        #endif
+    }
 }
