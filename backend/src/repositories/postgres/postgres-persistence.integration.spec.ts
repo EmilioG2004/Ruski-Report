@@ -13,6 +13,8 @@ import {
   sampleTournament
 } from "../../sample-data";
 import { PostgresCommentRepository } from "./postgres-comment.repository";
+import { PostgresAccountRepository } from "./postgres-account.repository";
+import { PostgresAuthSessionRepository } from "./postgres-auth-session.repository";
 import { PostgresTournamentReadRepository } from "./postgres-tournament-read.repository";
 import { PostgresTournamentSnapshotRepository } from "./postgres-tournament-snapshot.repository";
 import { PostgresUploadReportRepository } from "./postgres-upload-report.repository";
@@ -26,6 +28,8 @@ postgresDescribe("PostgreSQL persistence", () => {
   let snapshots: PostgresTournamentSnapshotRepository;
   let reads: PostgresTournamentReadRepository;
   let comments: PostgresCommentRepository;
+  let accounts: PostgresAccountRepository;
+  let authSessions: PostgresAuthSessionRepository;
   let uploadReports: PostgresUploadReportRepository;
 
   beforeAll(async () => {
@@ -39,11 +43,15 @@ postgresDescribe("PostgreSQL persistence", () => {
     snapshots = new PostgresTournamentSnapshotRepository(database);
     reads = new PostgresTournamentReadRepository(database);
     comments = new PostgresCommentRepository(database);
+    accounts = new PostgresAccountRepository(database);
+    authSessions = new PostgresAuthSessionRepository(database);
     uploadReports = new PostgresUploadReportRepository(database);
   });
 
   beforeEach(async () => {
-    await database.query("TRUNCATE tournaments, scorebook_sources CASCADE");
+    await database.query(
+      "TRUNCATE tournaments, scorebook_sources, user_accounts CASCADE"
+    );
   });
 
   afterAll(async () => {
@@ -100,12 +108,20 @@ postgresDescribe("PostgreSQL persistence", () => {
 
   it("preserves comments when a new snapshot becomes active", async () => {
     await publishSnapshot(createSnapshot("upload-comments-1"));
+    const account = await accounts.createLocalAccount({
+      displayName: "Score Watcher",
+      normalizedDisplayName: "score watcher",
+      passwordHash: "test-password-hash"
+    });
+    if (!account.ok) {
+      throw new Error(account.error.message);
+    }
     const created = await comments.create({
       matchId: sampleMatchDetail.id,
       author: {
         kind: "account",
         displayName: "Score Watcher",
-        userId: "user-1"
+        userId: account.value.id
       },
       body: "Great match."
     });
@@ -120,6 +136,35 @@ postgresDescribe("PostgreSQL persistence", () => {
         body: "Great match."
       }
     ]);
+  });
+
+  it("stores, verifies, and revokes hashed account sessions", async () => {
+    const account = await accounts.createLocalAccount({
+      displayName: "Alex",
+      normalizedDisplayName: "alex",
+      passwordHash: "test-password-hash"
+    });
+    if (!account.ok) {
+      throw new Error(account.error.message);
+    }
+
+    const created = await authSessions.create({
+      userId: account.value.id,
+      tokenHash: "a".repeat(64),
+      expiresAt: "2099-01-01T00:00:00.000Z"
+    });
+    const active = await authSessions.findActivePrincipalByTokenHash(
+      "a".repeat(64)
+    );
+    const revoked = await authSessions.revokeByTokenHash("a".repeat(64));
+    const missing = await authSessions.findActivePrincipalByTokenHash(
+      "a".repeat(64)
+    );
+
+    expect(created.ok && created.value.userId).toBe(account.value.id);
+    expect(active.ok && active.value?.displayName).toBe("Alex");
+    expect(revoked).toEqual({ ok: true, value: true });
+    expect(missing).toEqual({ ok: true, value: null });
   });
 
   it("stores failed and published upload reports", async () => {
