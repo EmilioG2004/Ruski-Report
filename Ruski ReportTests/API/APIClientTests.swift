@@ -7,6 +7,7 @@ import Foundation
 import Testing
 @testable import Ruski_Report
 
+@Suite(.serialized)
 struct APIClientTests {
     @Test func getDecodesSuccessfulJSONAndBuildsPath() async throws {
         let client = makeClient { request in
@@ -102,7 +103,7 @@ struct APIClientTests {
     @Test func postEncodesJSONBody() async throws {
         let client = makeClient { request in
             MockURLProtocol.lastRequest = request
-            MockURLProtocol.lastBody = request.httpBody
+            MockURLProtocol.lastBody = MockURLProtocol.bodyData(from: request)
 
             return (
                 HTTPURLResponse(
@@ -125,7 +126,53 @@ struct APIClientTests {
         #expect(MockURLProtocol.lastBody == Data(#"{"name":"hello"}"#.utf8))
     }
 
+    @Test func requestAuthorizerAddsBearerToken() async throws {
+        let credentials = InMemorySessionCredentialStore(token: "opaque-token")
+        let client = makeClient(
+            authorizer: BearerTokenRequestAuthorizer(credentials: credentials)
+        ) { request in
+            MockURLProtocol.lastRequest = request
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"name":"Ruski"}"#.utf8)
+            )
+        }
+
+        let _: TestResponseDTO = try await client.get("games")
+
+        #expect(
+            MockURLProtocol.lastRequest?.value(
+                forHTTPHeaderField: "Authorization"
+            ) == "Bearer opaque-token"
+        )
+    }
+
+    @Test func deleteBuildsADeleteRequestWithoutDecodingABody() async throws {
+        let client = makeClient { request in
+            MockURLProtocol.lastRequest = request
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 204,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data()
+            )
+        }
+
+        try await client.delete("auth/session")
+
+        #expect(MockURLProtocol.lastRequest?.httpMethod == "DELETE")
+    }
+
     private func makeClient(
+        authorizer: any RequestAuthorizer = NoopRequestAuthorizer(),
         handler: @escaping MockURLProtocol.RequestHandler
     ) -> URLSessionAPIClient {
         MockURLProtocol.requestHandler = handler
@@ -138,7 +185,8 @@ struct APIClientTests {
 
         return URLSessionAPIClient(
             baseURL: URL(string: "http://localhost:3000/api")!,
-            session: session
+            session: session,
+            authorizer: authorizer
         )
     }
 }
