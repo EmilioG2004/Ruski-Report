@@ -50,9 +50,23 @@ Health check:
 curl http://localhost:3000/api/health
 ```
 
+## Account Authentication
+
+Public accounts use a display name and password. Register with
+`POST /api/auth/register`, sign in with `POST /api/auth/login`, verify a bearer
+session with `GET /api/auth/session`, and revoke it with
+`DELETE /api/auth/session`. Registration and login return a random opaque token;
+clients send it as `Authorization: Bearer <token>`.
+
+The database stores scrypt password hashes and SHA-256 token hashes, never raw
+passwords or session tokens. Authenticated comment writes use the verified
+session identity. The separate `x-admin-token` header remains exclusive to
+scorebook administration.
+
 ## Structure
 
 - `src/controllers`: HTTP controller boundaries.
+- `src/auth`: Public account workflows, password hashing, and bearer-session guard.
 - `src/services`: Application and business workflow services.
 - `src/repositories`: Persistence interfaces and implementations.
 - `src/database`: PostgreSQL pool, transactions, and migration runner.
