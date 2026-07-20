@@ -39,27 +39,41 @@ private struct TournamentMatchCard: View {
 
     var body: some View {
         TournamentDetailCard {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(detail.participantsLabel(for: match))
-                        .font(.headline)
+            HStack(spacing: 12) {
+                StatusPill(status: match.status)
 
-                    if let phase = match.currentPhaseLabel {
-                        Text(phase)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                Spacer(minLength: 8)
+
+                if let phase = match.currentPhaseLabel {
+                    Text(phase)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-
-                Spacer(minLength: 12)
-
-                StatusPill(text: match.status.displayName)
             }
+
+            Text(detail.participantsLabel(for: match))
+                .font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
 
             if let score = detail.scoreLabel(for: match) {
                 Text(score)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.title3.weight(.bold).monospacedDigit())
             }
+
+            Divider()
+
+            HStack {
+                Text("Match details")
+                    .font(.subheadline.weight(.semibold))
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.subheadline.weight(.semibold))
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(Color.accentColor)
         }
     }
 }

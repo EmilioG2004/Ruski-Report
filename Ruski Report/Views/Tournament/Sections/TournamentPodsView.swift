@@ -73,7 +73,7 @@ private struct TournamentPodStandingRowView: View {
     let row: TournamentPodStandingRow
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 Text(rankText)
                     .font(.caption.weight(.semibold).monospacedDigit())
@@ -95,21 +95,24 @@ private struct TournamentPodStandingRowView: View {
                 Spacer(minLength: 0)
             }
 
-            HStack(alignment: .top, spacing: 10) {
-                TournamentPodStandingMetric(
-                    title: "Record",
-                    value: recordText
-                )
-                TournamentPodStandingMetric(
-                    title: "Diff",
-                    value: differentialText
-                )
-                TournamentPodStandingMetric(
-                    title: "Shooting",
-                    value: shootingText
-                )
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 16) {
+                    standingMetrics
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    standingMetrics
+                }
             }
         }
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder
+    private var standingMetrics: some View {
+        TournamentPodStandingMetric(title: "Record", value: recordText)
+        TournamentPodStandingMetric(title: "Cup Diff", value: differentialText)
+        TournamentPodStandingMetric(title: "Shooting", value: shootingText)
     }
 
     private var rankText: String {
@@ -179,6 +182,6 @@ private struct TournamentPodStandingMetric: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(minWidth: 72, maxWidth: .infinity, alignment: .leading)
     }
 }
