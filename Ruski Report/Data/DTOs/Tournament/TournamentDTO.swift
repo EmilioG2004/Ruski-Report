@@ -33,6 +33,7 @@ nonisolated struct TournamentDTO: Decodable, Equatable {
     let standings: [StandingDTO]
     let bracket: BracketDTO?
     let matchSummaries: [MatchSummaryDTO]
+    let statistics: [TournamentStatisticTableDTO]?
     let version: Int
     let updatedAt: String
     let metadata: [String: JSONValue]?
@@ -88,6 +89,7 @@ nonisolated struct StandingRecordDTO: Decodable, Equatable {
 
 nonisolated struct BracketDTO: Decodable, Equatable {
     let id: String
+    let name: String?
     let rounds: [BracketRoundDTO]
 }
 
@@ -102,4 +104,42 @@ nonisolated struct BracketRoundDTO: Decodable, Equatable {
 nonisolated struct BracketMatchDTO: Decodable, Equatable {
     let id: String
     let matchId: String?
+    let sequence: Int?
+    let status: String?
+    let slots: [BracketSlotDTO]?
+    let winnerTeamId: String?
+}
+
+nonisolated struct BracketSlotDTO: Decodable, Equatable {
+    let seed: Int?
+    let teamId: String?
+    let source: BracketSlotSourceDTO?
+}
+
+nonisolated struct BracketSlotSourceDTO: Decodable, Equatable {
+    let type: String
+    let sourceMatchId: String?
+    let label: String?
+}
+
+nonisolated struct TournamentStatisticTableDTO: Decodable, Equatable {
+    let id: String
+    let name: String
+    let scope: String
+    let subjectType: String
+    let statKeys: [String]
+    let rows: [TournamentStatisticRowDTO]
+}
+
+nonisolated struct TournamentStatisticRowDTO: Decodable, Equatable {
+    let rank: Int
+    let subject: TournamentStatisticSubjectDTO
+    let values: [String: JSONValue]
+}
+
+nonisolated struct TournamentStatisticSubjectDTO: Decodable, Equatable {
+    let type: String
+    let label: String
+    let playerId: String?
+    let teamId: String?
 }
