@@ -5,12 +5,7 @@ import {
   ruskiGamePlugin
 } from "../games";
 import {
-  InMemoryTournamentSnapshotRepository,
-  InMemoryTransactionManager,
-  InMemoryUploadReportRepository,
-  TOURNAMENT_SNAPSHOT_REPOSITORY,
-  TRANSACTION_MANAGER,
-  UPLOAD_REPORT_REPOSITORY
+  PersistenceModule
 } from "../repositories";
 import { RealtimeModule } from "../realtime";
 import { AdminAuthGuard } from "./admin-auth.guard";
@@ -18,7 +13,7 @@ import { AdminScorebookController } from "./admin-scorebook.controller";
 import { AdminScorebookService } from "./admin-scorebook.service";
 
 @Module({
-  imports: [RealtimeModule],
+  imports: [PersistenceModule, RealtimeModule],
   controllers: [AdminScorebookController],
   providers: [
     AdminAuthGuard,
@@ -26,18 +21,6 @@ import { AdminScorebookService } from "./admin-scorebook.service";
     {
       provide: GamePluginRegistry,
       useFactory: () => new GamePluginRegistry([ruskiGamePlugin])
-    },
-    {
-      provide: UPLOAD_REPORT_REPOSITORY,
-      useClass: InMemoryUploadReportRepository
-    },
-    {
-      provide: TOURNAMENT_SNAPSHOT_REPOSITORY,
-      useClass: InMemoryTournamentSnapshotRepository
-    },
-    {
-      provide: TRANSACTION_MANAGER,
-      useClass: InMemoryTransactionManager
     }
   ],
   exports: [AdminScorebookService]

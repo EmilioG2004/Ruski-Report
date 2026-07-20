@@ -4,6 +4,8 @@ export * from "./in-memory-tournament-snapshot.repository";
 export * from "./in-memory-tournament-read.repository";
 export * from "./in-memory-transaction.manager";
 export * from "./in-memory-upload-report.repository";
+export * from "./persistence.module";
+export * from "./postgres";
 export * from "./repository-result";
 export * from "./tournament-read-repository";
 export * from "./tournament-snapshot-repository";

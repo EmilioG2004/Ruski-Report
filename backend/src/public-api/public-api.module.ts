@@ -5,10 +5,7 @@ import {
   InMemoryGameDefinitionRepository
 } from "../games";
 import {
-  COMMENT_REPOSITORY,
-  InMemoryCommentRepository,
-  InMemoryTournamentReadRepository,
-  TOURNAMENT_READ_REPOSITORY
+  PersistenceModule
 } from "../repositories";
 import { RealtimeModule } from "../realtime";
 import { CommentsController } from "./comments.controller";
@@ -21,7 +18,7 @@ import { TournamentsController } from "./tournaments.controller";
 import { TournamentsService } from "./tournaments.service";
 
 @Module({
-  imports: [RealtimeModule],
+  imports: [PersistenceModule, RealtimeModule],
   controllers: [
     GamesController,
     TournamentsController,
@@ -36,14 +33,6 @@ import { TournamentsService } from "./tournaments.service";
     {
       provide: GAME_DEFINITION_REPOSITORY,
       useClass: InMemoryGameDefinitionRepository
-    },
-    {
-      provide: TOURNAMENT_READ_REPOSITORY,
-      useClass: InMemoryTournamentReadRepository
-    },
-    {
-      provide: COMMENT_REPOSITORY,
-      useClass: InMemoryCommentRepository
     }
   ],
   exports: [GamesService, TournamentsService, MatchesService, CommentsService]
