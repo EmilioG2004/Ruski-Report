@@ -12,6 +12,7 @@ import {
 import { MatchSummary } from "./match";
 import { Standing } from "./standing";
 import { Team } from "./team";
+import { TournamentStatisticTable } from "./tournament-statistics";
 
 export type TournamentStatus =
   | "scheduled"
@@ -64,4 +65,5 @@ export interface Tournament extends TournamentSummary {
   standings: Standing[];
   bracket?: Bracket;
   matchSummaries: MatchSummary[];
+  statistics?: TournamentStatisticTable[];
 }

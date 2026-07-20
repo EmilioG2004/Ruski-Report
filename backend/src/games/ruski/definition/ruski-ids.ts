@@ -25,5 +25,11 @@ export const RUSKI_STAT_KEYS = {
   guys: "guys",
   tris: "tris",
   dis: "dis",
+  uns: "uns",
   voms: "voms"
+} as const;
+
+export const RUSKI_STANDING_METRIC_KEYS = {
+  cupDifferential: "cupDifferential",
+  shootingPercentage: "shootingPercentage"
 } as const;

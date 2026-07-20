@@ -197,6 +197,16 @@ export const ruskiGameDefinition: GameDefinition = {
       valueType: "count"
     },
     {
+      key: RUSKI_STAT_KEYS.uns,
+      label: "Un",
+      scope: "player",
+      valueType: "count",
+      metadata: {
+        sourceOnly: true,
+        documentedInRules: false
+      }
+    },
+    {
       key: RUSKI_STAT_KEYS.voms,
       label: "Vom",
       scope: "player",

@@ -39,6 +39,7 @@ export const ruskiDisplayRules: Metadata = {
       RUSKI_STAT_KEYS.guys,
       RUSKI_STAT_KEYS.tris,
       RUSKI_STAT_KEYS.dis,
+      RUSKI_STAT_KEYS.uns,
       RUSKI_STAT_KEYS.voms
     ]
   }
