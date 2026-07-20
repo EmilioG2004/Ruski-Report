@@ -2,6 +2,7 @@ export type ErrorCode =
   | "BAD_REQUEST"
   | "UNAUTHORIZED"
   | "FORBIDDEN"
+  | "CONFLICT"
   | "NOT_FOUND"
   | "VALIDATION_FAILED"
   | "UNSUPPORTED_GAME_TYPE"
