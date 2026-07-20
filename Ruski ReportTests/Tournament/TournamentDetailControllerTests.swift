@@ -12,12 +12,20 @@ struct TournamentDetailControllerTests {
         let controller = TournamentDetailController(
             tournamentId: "tournament-2026",
             tournaments: StubTournamentRepository(),
+            games: StubGameRepository(),
             logger: NoopAppLogger()
         )
 
         await controller.loadTournament()
 
-        #expect(controller.state == .loaded(PreviewData.tournamentDetail))
+        #expect(
+            controller.state == .loaded(
+                TournamentDetailScreen(
+                    detail: PreviewData.tournamentDetail,
+                    gameDefinition: PreviewData.gameDefinition
+                )
+            )
+        )
     }
 
     @Test func loadTournamentPublishesFailureMessage() async {
@@ -28,6 +36,7 @@ struct TournamentDetailControllerTests {
                     AppError.badStatus(code: 404, message: "Tournament not found.")
                 )
             ),
+            games: StubGameRepository(),
             logger: NoopAppLogger()
         )
 
@@ -42,6 +51,7 @@ struct TournamentDetailControllerTests {
         let controller = TournamentDetailController(
             tournamentId: "tournament-2026",
             tournaments: tournaments,
+            games: StubGameRepository(),
             realtime: realtime,
             logger: NoopAppLogger()
         )
@@ -73,6 +83,26 @@ struct TournamentDetailControllerTests {
                 "tournament-2026"
             ]
         )
+    }
+
+    @Test func statisticColumnsUseGameDefinitionMetadataAndFallbackLabels() {
+        let screen = TournamentDetailScreen(
+            detail: PreviewData.tournamentDetail,
+            gameDefinition: PreviewData.gameDefinition
+        )
+        let table = TournamentStatisticTable(
+            id: "test-stats",
+            name: "Test Stats",
+            scope: "season",
+            subjectType: "player",
+            statKeys: ["makes", "customMetric"],
+            rows: []
+        )
+
+        let columns = screen.statisticColumns(for: table)
+
+        #expect(columns.map(\.label) == ["Cups Made", "Custom Metric"])
+        #expect(columns.map(\.valueType) == ["count", "number"])
     }
 }
 

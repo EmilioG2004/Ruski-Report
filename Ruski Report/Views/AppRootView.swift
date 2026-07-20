@@ -72,6 +72,7 @@ struct AppRootView: View {
             TournamentDetailView(
                 tournamentId: id,
                 tournaments: services.tournaments,
+                games: services.games,
                 realtime: services.realtime,
                 logger: services.logger
             )

@@ -12,17 +12,20 @@ final class TournamentDetailController: ObservableObject {
 
     private let tournamentId: TournamentPreview.ID
     private let tournaments: any TournamentRepository
+    private let games: any GameRepository
     private let realtime: any RealtimeUpdateRepository
     private let logger: any AppLogger
 
     init(
         tournamentId: TournamentPreview.ID,
         tournaments: any TournamentRepository,
+        games: any GameRepository,
         realtime: any RealtimeUpdateRepository = NoopRealtimeUpdateRepository(),
         logger: any AppLogger
     ) {
         self.tournamentId = tournamentId
         self.tournaments = tournaments
+        self.games = games
         self.realtime = realtime
         self.logger = logger
     }
@@ -51,7 +54,15 @@ final class TournamentDetailController: ObservableObject {
         }
 
         do {
-            state = .loaded(try await tournaments.tournament(id: tournamentId))
+            let detail = try await tournaments.tournament(id: tournamentId)
+            let definition = await loadGameDefinition(for: detail.gameType)
+
+            state = .loaded(
+                TournamentDetailScreen(
+                    detail: detail,
+                    gameDefinition: definition
+                )
+            )
         } catch {
             logger.log(
                 .warning,
@@ -69,6 +80,23 @@ final class TournamentDetailController: ObservableObject {
                     )
                 )
             }
+        }
+    }
+
+    private func loadGameDefinition(for gameType: String) async -> GameDefinition? {
+        do {
+            return try await games.games().first { $0.gameType == gameType }
+        } catch {
+            logger.log(
+                .warning,
+                "Unable to load game definition for tournament statistics",
+                metadata: [
+                    "error": String(describing: error),
+                    "gameType": gameType,
+                    "tournamentId": tournamentId
+                ]
+            )
+            return nil
         }
     }
 }
