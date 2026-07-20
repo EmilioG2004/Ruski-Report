@@ -12,6 +12,7 @@ struct TournamentDetailView: View {
     init(
         tournamentId: TournamentPreview.ID,
         tournaments: any TournamentRepository,
+        games: any GameRepository,
         realtime: any RealtimeUpdateRepository,
         logger: any AppLogger
     ) {
@@ -19,6 +20,7 @@ struct TournamentDetailView: View {
             wrappedValue: TournamentDetailController(
                 tournamentId: tournamentId,
                 tournaments: tournaments,
+                games: games,
                 realtime: realtime,
                 logger: logger
             )
@@ -32,8 +34,8 @@ struct TournamentDetailView: View {
                 ProgressView("Loading tournament")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .accessibilityIdentifier("tournament.loading")
-            case .loaded(let detail):
-                detailContent(detail)
+            case .loaded(let screen):
+                detailContent(screen)
             case .failed(let message):
                 errorContent(message)
             }
@@ -49,10 +51,10 @@ struct TournamentDetailView: View {
         }
     }
 
-    private func detailContent(_ detail: TournamentDetail) -> some View {
+    private func detailContent(_ screen: TournamentDetailScreen) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                TournamentOverviewHeader(detail: detail)
+                TournamentOverviewHeader(detail: screen.detail)
 
                 Picker("Tournament section", selection: $selectedSection) {
                     ForEach(TournamentDetailSection.allCases) { section in
@@ -62,7 +64,7 @@ struct TournamentDetailView: View {
                 .pickerStyle(.segmented)
                 .accessibilityIdentifier("tournament.sectionPicker")
 
-                sectionContent(detail)
+                sectionContent(screen)
             }
             .padding(20)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -70,18 +72,18 @@ struct TournamentDetailView: View {
     }
 
     @ViewBuilder
-    private func sectionContent(_ detail: TournamentDetail) -> some View {
+    private func sectionContent(_ screen: TournamentDetailScreen) -> some View {
         switch selectedSection {
         case .overview:
-            TournamentOverviewView(detail: detail)
+            TournamentOverviewView(detail: screen.detail)
         case .pods:
-            TournamentPodsView(detail: detail)
+            TournamentPodsView(detail: screen.detail)
         case .matches:
-            TournamentMatchesView(detail: detail)
+            TournamentMatchesView(detail: screen.detail)
         case .bracket:
-            TournamentBracketView(detail: detail)
+            TournamentBracketView(detail: screen.detail)
         case .stats:
-            TournamentStatsView(detail: detail)
+            TournamentStatsView(screen: screen)
         }
     }
 
