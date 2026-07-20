@@ -11,50 +11,45 @@ struct TournamentCardView: View {
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(tournament.name)
-                            .font(.title2.bold())
-                            .foregroundStyle(.primary)
+            AppSurface {
+                HStack(spacing: 12) {
+                    StatusPill(status: tournament.status)
 
-                        Text(tournament.locationName)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                    Spacer(minLength: 8)
 
-                    Spacer(minLength: 12)
-
-                    StatusPill(text: tournament.status.displayName)
+                    Text(tournament.year.formatted())
+                        .font(.subheadline.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
                 }
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Label(tournament.formatSummary, systemImage: "trophy")
-                    Label("\(tournament.year) season", systemImage: "calendar")
-                    Label(featuredMatchText, systemImage: "sportscourt")
-                }
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                Text(tournament.name)
+                    .font(.title2.bold())
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Label(tournament.locationName, systemImage: "mappin.and.ellipse")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(tournament.formatSummary)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Divider()
 
                 HStack {
-                    Label("Open Tournament", systemImage: "arrow.right.circle.fill")
+                    Label(featuredMatchText, systemImage: "sportscourt")
                         .font(.headline)
 
                     Spacer()
 
-                    Image(systemName: "chevron.right")
-                        .font(.headline.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                    Image(systemName: "arrow.right.circle.fill")
+                        .font(.title3)
+                        .accessibilityHidden(true)
                 }
                 .foregroundStyle(Color.accentColor)
-            }
-            .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color.appSecondaryGroupedBackground)
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(Color.appSeparator, lineWidth: 0.5)
             }
         }
         .buttonStyle(.plain)

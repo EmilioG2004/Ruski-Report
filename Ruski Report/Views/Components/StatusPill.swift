@@ -14,6 +14,26 @@ struct StatusPill: View {
         self.style = style
     }
 
+    init(status: TournamentPreviewStatus) {
+        text = status.displayName
+        switch status {
+        case .active: style = .live
+        case .completed: style = .final
+        case .scheduled: style = .scheduled
+        case .archived, .unknown: style = .neutral
+        }
+    }
+
+    init(status: MatchStatus) {
+        text = status.displayName
+        switch status {
+        case .inProgress: style = .live
+        case .final: style = .final
+        case .scheduled: style = .scheduled
+        case .unknown: style = .neutral
+        }
+    }
+
     var body: some View {
         Label(text, systemImage: style.systemImage)
             .font(.caption.weight(.semibold))
