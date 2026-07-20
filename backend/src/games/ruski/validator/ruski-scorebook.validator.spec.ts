@@ -118,6 +118,52 @@ describe("RuskiScorebookValidator", () => {
       })
     );
   });
+
+  it("reports cross-sheet team identity mismatches", async () => {
+    const parsed = await parseFixture();
+    const teamStats = parsed.sheets.find(
+      (sheet) => sheet.name === RUSKI_SCOREBOOK_SHEET_NAMES.teamStats
+    );
+
+    if (teamStats?.rows?.[0] === undefined) {
+      throw new Error("Expected parsed Team Stats rows.");
+    }
+    teamStats.rows[0].values.shootingPercentage = 0.999;
+
+    const result = new RuskiScorebookValidator().validateScorebook(parsed);
+
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({
+        code: "TEAM_STAT_IDENTITY_MISMATCH",
+        path: "sheets.Team Stats.rows"
+      })
+    );
+  });
+
+  it("reports malformed bracket round topology", async () => {
+    const parsed = await parseFixture();
+    const bracket = parsed.sheets.find(
+      (sheet) => sheet.name === RUSKI_SCOREBOOK_SHEET_NAMES.playoffBracket
+    );
+
+    if (bracket?.rows === undefined) {
+      throw new Error("Expected parsed playoff bracket rows.");
+    }
+    bracket.rows = bracket.rows.filter(
+      (row) =>
+        row.values.bracketMatchId !== "sweet-16-1" ||
+        row.values.slotSequence !== 1
+    );
+
+    const result = new RuskiScorebookValidator().validateScorebook(parsed);
+
+    expect(result.errors).toContainEqual(
+      expect.objectContaining({
+        code: "INVALID_BRACKET_ROUND_SIZE",
+        path: "sheets.Playoff Bracket (16).rounds.sweet-16"
+      })
+    );
+  });
 });
 
 async function parseFixture(): Promise<ParsedScorebook> {
