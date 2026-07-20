@@ -1,4 +1,5 @@
 import {
+  AuthenticatedPrincipal,
   Comment,
   GameDefinition,
   MatchDetail,
@@ -88,12 +89,14 @@ describe("public API controllers", () => {
       createdAt: "2026-06-17T12:00:00.000Z"
     };
     const request: CreateCommentRequest = {
-      body: "Great match.",
-      author: {
-        kind: "account",
-        displayName: "Alex",
-        userId: "user-1"
-      }
+      body: "Great match."
+    };
+    const principal: AuthenticatedPrincipal = {
+      userId: "user-1",
+      displayName: "Alex",
+      provider: "local_account",
+      sessionId: "session-1",
+      expiresAt: "2026-07-30T12:00:00.000Z"
     };
     const service = {
       getMatchComments: jest
@@ -109,12 +112,13 @@ describe("public API controllers", () => {
       controller.getMatchComments("match-2026-001")
     ).resolves.toEqual([comment]);
     await expect(
-      controller.createMatchComment("match-2026-001", request)
+      controller.createMatchComment("match-2026-001", request, principal)
     ).resolves.toBe(comment);
     expect(service.getMatchComments).toHaveBeenCalledWith("match-2026-001");
     expect(service.createMatchComment).toHaveBeenCalledWith(
       "match-2026-001",
-      request
+      request,
+      principal
     );
   });
 });

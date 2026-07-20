@@ -1,4 +1,5 @@
 import {
+  AuthenticatedPrincipal,
   Comment,
   GameDefinition,
   MatchDetail,
@@ -55,6 +56,14 @@ class EmptyGameDefinitionRepository implements GameDefinitionRepository {
 }
 
 describe("public API services", () => {
+  const authenticatedPrincipal: AuthenticatedPrincipal = {
+    userId: "user-1",
+    displayName: "Alex",
+    provider: "local_account",
+    sessionId: "session-1",
+    expiresAt: "2026-07-30T12:00:00.000Z"
+  };
+
   it("lists supported games", async () => {
     const service = new GamesService(new InMemoryGameDefinitionRepository());
 
@@ -143,14 +152,11 @@ describe("public API services", () => {
       realtimeUpdates
     );
 
-    const created = await service.createMatchComment("match-2026-001", {
-      body: "Great match.",
-      author: {
-        kind: "account",
-        displayName: "Alex",
-        userId: "user-1"
-      }
-    });
+    const created = await service.createMatchComment(
+      "match-2026-001",
+      { body: "Great match." },
+      authenticatedPrincipal
+    );
     const comments = await service.getMatchComments("match-2026-001");
 
     expect(created).toMatchObject({
@@ -172,25 +178,28 @@ describe("public API services", () => {
     });
   });
 
-  it("rejects guest comments", async () => {
+  it("derives the comment author from the authenticated principal", async () => {
     const service = new CommentsService(
       new InMemoryCommentRepository(),
       new InMemoryTournamentReadRepository(),
       createRealtimeUpdates()
     );
 
-    await expect(
-      service.createMatchComment("match-2026-001", {
-        body: "Great match.",
-        author: {
-          kind: "guest",
-          displayName: "Guest"
-        }
-      })
-    ).rejects.toMatchObject({
-      code: "UNAUTHORIZED",
-      statusCode: 401
-    } satisfies Partial<AppError>);
+    const request = {
+      body: "Great match.",
+      author: { kind: "admin", displayName: "Spoofed", userId: "admin-1" }
+    };
+    const comment = await service.createMatchComment(
+      "match-2026-001",
+      request,
+      authenticatedPrincipal
+    );
+
+    expect(comment.author).toEqual({
+      kind: "account",
+      displayName: "Alex",
+      userId: "user-1"
+    });
   });
 
   it("rejects invalid comment bodies", async () => {
@@ -202,12 +211,8 @@ describe("public API services", () => {
 
     await expect(
       service.createMatchComment("match-2026-001", {
-        body: "   ",
-        author: {
-          kind: "account",
-          displayName: "Alex"
-        }
-      })
+        body: "   "
+      }, authenticatedPrincipal)
     ).rejects.toMatchObject({
       code: "BAD_REQUEST",
       statusCode: 400
