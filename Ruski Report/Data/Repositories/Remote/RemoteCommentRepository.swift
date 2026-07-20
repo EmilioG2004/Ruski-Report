@@ -35,33 +35,9 @@ nonisolated final class RemoteCommentRepository: CommentRepository {
 
         let dto: CommentDTO = try await apiClient.post(
             "matches/\(matchId)/comments",
-            body: CreateCommentRequestDTO(
-                body: body,
-                author: try createAuthorDTO(from: currentSession)
-            )
+            body: CreateCommentRequestDTO(body: body)
         )
         return CommentMapper.map(dto)
-    }
-
-    private func createAuthorDTO(
-        from session: UserSession
-    ) throws -> CreateCommentAuthorDTO {
-        switch session {
-        case .guest:
-            throw AppError.unsupported("Sign in to post comments.")
-        case .authenticated(let profile):
-            return CreateCommentAuthorDTO(
-                kind: "account",
-                displayName: profile.displayName,
-                userId: profile.id
-            )
-        case .admin(let profile):
-            return CreateCommentAuthorDTO(
-                kind: "admin",
-                displayName: profile.displayName,
-                userId: profile.id
-            )
-        }
     }
 
     private func signInMessage(from authorization: CommentPostingAuthorization) -> String {
