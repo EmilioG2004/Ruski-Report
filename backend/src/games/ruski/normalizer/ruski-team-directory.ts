@@ -2,20 +2,19 @@ import {
   Metadata,
   Player,
   PlayerId,
-  Pod,
   Team,
   TeamId,
   TeamSeed,
   TournamentId
 } from "../../../domain";
-import { ParsedScorebookSide } from "../../parsed-scorebook";
+import { ParsedScorebookSheet } from "../../parsed-scorebook";
+import { createStableId, getLastName, normalizeName } from "./ruski-id";
 import {
-  createStableId,
-  createTeamKey,
-  createTeamName,
-  getLastName,
-  normalizeName
-} from "./ruski-id";
+  RuskiCanonicalTeamIdentity,
+  RuskiTeamIdentityCandidate,
+  RuskiTeamIdentityResolver
+} from "./ruski-team-identity-resolver";
+import { RuskiTournamentSource } from "./ruski-tournament-source";
 
 export interface RuskiConfirmedTeam {
   id?: TeamId;
@@ -32,157 +31,156 @@ export interface RuskiTeamResolution {
   playerIds: PlayerId[];
 }
 
-interface TeamEntry {
+interface CanonicalTeamEntry extends RuskiTeamIdentityCandidate {
   team: Team;
-  playerIdsByName: Map<string, PlayerId>;
-  podId?: string;
-  podName?: string;
 }
 
 export class RuskiTeamDirectory {
-  private readonly entriesByKey = new Map<string, TeamEntry>();
-  private readonly entriesByTeamId = new Map<TeamId, TeamEntry>();
+  private readonly entries: CanonicalTeamEntry[];
+  private readonly entriesByTeamId = new Map<TeamId, CanonicalTeamEntry>();
+  private readonly playersById = new Map<PlayerId, Player>();
+  private readonly playerIdsByName = new Map<string, PlayerId>();
 
   constructor(
     private readonly tournamentId: TournamentId,
-    confirmedTeams: readonly RuskiConfirmedTeam[] = []
+    source: RuskiTournamentSource,
+    confirmedTeams: readonly RuskiConfirmedTeam[] = [],
+    private readonly identityResolver = new RuskiTeamIdentityResolver()
   ) {
-    confirmedTeams.forEach((team) => this.addConfirmedTeam(team));
+    this.entries = identityResolver
+      .buildCanonicalIdentities(source)
+      .map((identity) => this.createCanonicalEntry(identity, confirmedTeams));
+    this.entries.forEach((entry) => {
+      this.entriesByTeamId.set(entry.team.id, entry);
+      entry.players.forEach((player) => this.registerPlayer(player));
+    });
+    source.seasonPlayerStatistics.forEach((row) =>
+      this.registerPlayer(createPlayer(row.subjectLabel))
+    );
+    source.playoffPlayerStatistics.forEach((row) =>
+      this.registerPlayer(createPlayer(row.subjectLabel))
+    );
   }
 
-  resolveSide(side: ParsedScorebookSide): RuskiTeamResolution {
-    const playerNames = side.players.map((player) => player.name);
-    const key = createTeamKey(playerNames);
-    const existing = this.entriesByKey.get(key);
+  resolveGameSheet(sheet: ParsedScorebookSheet): RuskiTeamResolution[] {
+    const teamIds = this.identityResolver.resolveGameSheet(sheet, this.entries);
 
-    if (existing !== undefined) {
+    return teamIds.map((teamId, index) => {
+      const entry = this.entriesByTeamId.get(teamId);
+      if (entry === undefined) {
+        throw new Error(`Identity resolver returned unknown team '${teamId}'.`);
+      }
+
       return {
-        team: existing.team,
-        playerIds: playerNames.flatMap((name) =>
-          existing.playerIdsByName.get(normalizeName(name)) ?? []
-        )
+        team: entry.team,
+        playerIds: sheet.game?.sides[index].players.map((player) =>
+          this.requirePlayerId(player.name)
+        ) ?? []
       };
-    }
-
-    const team = createTeamFromNames(this.tournamentId, playerNames);
-    const entry = createEntry(team);
-    this.entriesByKey.set(key, entry);
-    this.entriesByTeamId.set(team.id, entry);
-
-    return {
-      team,
-      playerIds: team.players.map((player) => player.id)
-    };
+    });
   }
 
-  resolveShooter(
-    teamId: TeamId,
-    shooterName: string | null
-  ): PlayerId | undefined {
+  resolveTeamLabel(label: string): Team | undefined {
+    const teamId = this.identityResolver.resolveTeamLabel(label, this.entries);
+    return teamId === undefined ? undefined : this.entriesByTeamId.get(teamId)?.team;
+  }
+
+  resolveShooter(teamId: TeamId, shooterName: string | null): PlayerId | undefined {
     if (shooterName === null) {
       return undefined;
     }
 
-    const entry = this.entriesByTeamId.get(teamId);
-
-    if (entry === undefined) {
-      return undefined;
-    }
-
-    const normalizedShooter = normalizeName(shooterName);
-    const directMatch = entry.playerIdsByName.get(normalizedShooter);
-
+    const directMatch = this.playerIdsByName.get(normalizeName(shooterName));
     if (directMatch !== undefined) {
       return directMatch;
     }
 
-    return entry.team.players.find((player) => {
-      return normalizeName(getLastName(player.displayName)) === normalizedShooter;
-    })?.id;
+    const normalizedShooter = normalizeName(shooterName);
+    const teamPlayer = this.entriesByTeamId.get(teamId)?.players.find(
+      (player) => normalizeName(getLastName(player.displayName)) === normalizedShooter
+    );
+    if (teamPlayer !== undefined) {
+      return teamPlayer.id;
+    }
+
+    const surnameMatches = [...this.playersById.values()].filter(
+      (player) => normalizeName(getLastName(player.displayName)) === normalizedShooter
+    );
+    return surnameMatches.length === 1 ? surnameMatches[0].id : undefined;
+  }
+
+  getPlayer(playerId: PlayerId): Player | undefined {
+    return this.playersById.get(playerId);
   }
 
   getTeams(): Team[] {
-    return [...this.entriesByTeamId.values()].map((entry) => entry.team);
+    return this.entries.map((entry) => entry.team);
   }
 
-  buildPods(
-    matchIds: readonly string[],
-    standingIdsByTeamId: ReadonlyMap<TeamId, string>
-  ): Pod[] {
-    const teams = this.getTeams();
+  findTeamIdForPlayer(playerId: PlayerId): TeamId | undefined {
+    return this.entries.find((entry) =>
+      entry.players.some((player) => player.id === playerId)
+    )?.team.id;
+  }
 
-    return [
-      {
-        id: "pod-confirmed-teams",
-        tournamentId: this.tournamentId,
-        name: "Confirmed Teams",
-        sequence: 1,
-        teamIds: teams.map((team) => team.id),
-        matchIds: [...matchIds],
-        standingIds: teams.flatMap((team) =>
-          standingIdsByTeamId.get(team.id) ?? []
-        ),
-        metadata: {
-          source: "season-team-directory"
-        }
+  private createCanonicalEntry(
+    identity: RuskiCanonicalTeamIdentity,
+    confirmedTeams: readonly RuskiConfirmedTeam[]
+  ): CanonicalTeamEntry {
+    const confirmed = findConfirmedTeam(confirmedTeams, identity.playerNames);
+    const players = identity.playerNames.map(createPlayer);
+    const team: Team = {
+      id: confirmed?.id ?? createStableId("team", identity.sourceName),
+      tournamentId: this.tournamentId,
+      name: confirmed?.name ?? identity.sourceName,
+      seed: confirmed?.seed ?? {
+        pod: identity.seed,
+        label: String(identity.seed)
+      },
+      players,
+      metadata: {
+        source: confirmed === undefined
+          ? "regular-season-standings"
+          : "season-confirmed-team",
+        sourceName: identity.sourceName,
+        aliases: identity.aliases,
+        ...confirmed?.metadata
       }
-    ];
+    };
+
+    return {
+      teamId: team.id,
+      team,
+      aliases: identity.aliases,
+      players
+    };
   }
 
-  private addConfirmedTeam(confirmedTeam: RuskiConfirmedTeam): void {
-    const team = createTeamFromNames(
-      this.tournamentId,
-      confirmedTeam.players,
-      confirmedTeam
-    );
-    const entry = createEntry(team, confirmedTeam);
+  private registerPlayer(player: Player): void {
+    this.playersById.set(player.id, player);
+    this.playerIdsByName.set(normalizeName(player.displayName), player.id);
+  }
 
-    this.entriesByKey.set(createTeamKey(confirmedTeam.players), entry);
-    this.entriesByTeamId.set(team.id, entry);
+  private requirePlayerId(displayName: string): PlayerId {
+    const player = createPlayer(displayName);
+    this.registerPlayer(player);
+    return player.id;
   }
 }
 
-function createTeamFromNames(
-  tournamentId: TournamentId,
-  playerNames: readonly string[],
-  confirmedTeam?: RuskiConfirmedTeam
-): Team {
-  const players = playerNames.map(createPlayer);
-  const teamName = confirmedTeam?.name ?? createTeamName(playerNames);
-
-  return {
-    id: confirmedTeam?.id ?? createStableId("team", createTeamKey(playerNames)),
-    tournamentId,
-    name: teamName,
-    seed: confirmedTeam?.seed,
-    players,
-    metadata: {
-      source:
-        confirmedTeam === undefined
-          ? "game-sheet-derived-team"
-          : "season-confirmed-team",
-      ...confirmedTeam?.metadata
-    }
-  };
+function findConfirmedTeam(
+  confirmedTeams: readonly RuskiConfirmedTeam[],
+  playerNames: readonly string[]
+): RuskiConfirmedTeam | undefined {
+  const playerKey = playerNames.map(normalizeName).sort().join("|");
+  return confirmedTeams.find(
+    (team) => team.players.map(normalizeName).sort().join("|") === playerKey
+  );
 }
 
 function createPlayer(displayName: string): Player {
   return {
     id: createStableId("player", displayName),
     displayName
-  };
-}
-
-function createEntry(
-  team: Team,
-  confirmedTeam?: RuskiConfirmedTeam
-): TeamEntry {
-  return {
-    team,
-    playerIdsByName: new Map(
-      team.players.map((player) => [normalizeName(player.displayName), player.id])
-    ),
-    podId: confirmedTeam?.podId,
-    podName: confirmedTeam?.podName
   };
 }

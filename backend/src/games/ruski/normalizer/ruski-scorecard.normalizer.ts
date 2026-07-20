@@ -41,10 +41,12 @@ export function normalizeRuskiScorecard(
   let sequence = 1;
 
   const rows = normalizedSides.flatMap(({ side, resolution }) => {
-    resolution.team.players.forEach((player) => {
-      subjects.set(player.id, {
-        label: player.displayName,
-        playerId: player.id,
+    resolution.playerIds.forEach((playerId) => {
+      const player = teamDirectory.getPlayer(playerId);
+
+      subjects.set(playerId, {
+        label: player?.displayName ?? playerId,
+        playerId,
         teamId: resolution.team.id
       });
     });

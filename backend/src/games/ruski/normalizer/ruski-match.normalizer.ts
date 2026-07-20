@@ -37,9 +37,10 @@ export function normalizeRuskiGameSheet(
   }
 
   const matchId = createStableId("match", sheet.name);
-  const normalizedSides = sheet.game.sides.map((side) => ({
+  const resolutions = teamDirectory.resolveGameSheet(sheet);
+  const normalizedSides = sheet.game.sides.map((side, index) => ({
     side,
-    resolution: teamDirectory.resolveSide(side)
+    resolution: resolutions[index]
   }));
   const { rows, events, subjects } = normalizeRuskiScorecard(
     matchId,
@@ -88,7 +89,8 @@ export function normalizeRuskiGameSheet(
       count: 0
     },
     metadata: {
-      sourceSheetName: sheet.name
+      sourceSheetName: sheet.name,
+      sourceSheetIndex: sheet.index
     },
     version: 1,
     updatedAt

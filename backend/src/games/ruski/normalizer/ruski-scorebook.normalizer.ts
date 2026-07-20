@@ -1,15 +1,18 @@
 import {
   MatchSummary,
-  TeamId,
   Tournament,
   TournamentId
 } from "../../../domain";
 import { ParsedScorebook } from "../../parsed-scorebook";
 import { TournamentSnapshot } from "../../tournament-snapshot";
 import { RUSKI_GAME_TYPE, ruskiGameDefinition } from "../definition";
+import { ruskiTournamentConfig } from "../config/ruski-tournament-config";
 import { RuskiScorebookValidator } from "../validator";
+import { normalizeRuskiBracket } from "./ruski-bracket.normalizer";
 import { normalizeRuskiGameSheet } from "./ruski-match.normalizer";
-import { buildRuskiStandings } from "./ruski-standings";
+import { normalizeRuskiTournamentStatistics } from "./ruski-tournament-statistics.normalizer";
+import { normalizeRuskiTournamentStructure } from "./ruski-tournament-structure.normalizer";
+import { readRuskiTournamentSource } from "./ruski-tournament-source";
 import {
   RuskiConfirmedTeam,
   RuskiTeamDirectory
@@ -41,23 +44,33 @@ export class RuskiScorebookNormalizer {
     const year = getTournamentYear(parsed, this.options.year);
     const tournamentId = this.options.tournamentId ?? `tournament-${year}`;
     const generatedAt = this.options.now?.() ?? new Date().toISOString();
+    const source = readRuskiTournamentSource(parsed);
     const teamDirectory = new RuskiTeamDirectory(
       tournamentId,
+      source,
       this.options.confirmedTeams
     );
-    const matches = parsed.sheets
-      .filter((sheet) => sheet.role === "game" && sheet.game !== undefined)
+    const parsedMatches = source.gameSheets
       .map((sheet) =>
         normalizeRuskiGameSheet(sheet, tournamentId, teamDirectory, generatedAt)
       );
-    const teams = teamDirectory.getTeams();
-    const standings = buildRuskiStandings(tournamentId, teams, matches);
-    const standingIdsByTeamId = new Map<TeamId, string>(
-      standings.map((standing) => [standing.teamId, standing.id])
+    const { bracket, matches } = normalizeRuskiBracket(
+      tournamentId,
+      source.bracketRows,
+      teamDirectory,
+      parsedMatches
     );
-    const pods = teamDirectory.buildPods(
-      matches.map((match) => match.id),
-      standingIdsByTeamId
+    const teams = teamDirectory.getTeams();
+    const structure = normalizeRuskiTournamentStructure(
+      tournamentId,
+      source.standings,
+      teamDirectory,
+      matches
+    );
+    const statistics = normalizeRuskiTournamentStatistics(
+      source,
+      teamDirectory,
+      structure.matches
     );
     const tournament: Tournament = {
       id: tournamentId,
@@ -69,26 +82,28 @@ export class RuskiScorebookNormalizer {
         : "completed",
       format: {
         type: "pod_and_bracket",
-        podCount: pods.length,
-        teamsPerPod: teams.length,
-        bracketSize: 16,
-        description:
-          "Season teams are confirmed by the admin before scorebook ingestion.",
+        podCount: structure.pods.length,
+        teamsPerPod: ruskiTournamentConfig.teamsPerPod,
+        bracketSize: ruskiTournamentConfig.bracketSize,
+        description: "Eight four-team pods followed by a 16-team playoff bracket.",
         metadata: {
-          teamSource: "season-confirmed-teams",
-          matchSource: "game-sheets"
+          teamSource: "regular-season-standings",
+          matchSource: "game-sheets",
+          bracketSource: "playoff-bracket-sheet"
         }
       },
-      activeMatchIds: matches
+      activeMatchIds: structure.matches
         .filter((match) => match.status === "in_progress")
         .map((match) => match.id),
-      featuredMatchIds: matches.slice(0, 3).map((match) => match.id),
-      pods,
+      featuredMatchIds: structure.matches.slice(0, 3).map((match) => match.id),
+      pods: structure.pods,
       teams,
-      standings,
-      matchSummaries: matches.map(toMatchSummary),
+      standings: structure.standings,
+      bracket,
+      matchSummaries: structure.matches.map(toMatchSummary),
+      statistics,
       metadata: {
-        normalizedFrom: "ruski-game-sheets",
+        normalizedFrom: "ruski-scorebook",
         allDataRequired: false
       },
       version: 1,
@@ -97,7 +112,7 @@ export class RuskiScorebookNormalizer {
 
     return {
       tournament,
-      matches,
+      matches: structure.matches,
       gameDefinition: ruskiGameDefinition,
       source: parsed.source,
       validation,
