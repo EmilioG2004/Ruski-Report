@@ -134,7 +134,7 @@ struct RepositoryTests {
         #expect(comments.first?.matchId == "match-1")
     }
 
-    @Test func commentRepositoryPostsAuthenticatedAuthorPayload() async throws {
+    @Test func commentRepositoryPostsOnlyTheCommentBody() async throws {
         let apiClient = RecordingAPIClient()
         apiClient.responses["matches/match-1/comments"] = commentDTO()
         let repository = RemoteCommentRepository(
@@ -159,14 +159,38 @@ struct RepositoryTests {
         #expect(comment.id == "comment-1")
         #expect(
             apiClient.postedBodies["matches/match-1/comments"] as? CreateCommentRequestDTO ==
-                CreateCommentRequestDTO(
-                    body: "Great match.",
-                    author: CreateCommentAuthorDTO(
-                        kind: "account",
-                        displayName: "Alex",
-                        userId: "user-1"
-                    )
+                CreateCommentRequestDTO(body: "Great match.")
+        )
+    }
+
+    @Test func authenticationRepositoryMapsCreatedSession() async throws {
+        let apiClient = RecordingAPIClient()
+        apiClient.responses["auth/login"] = CreatedSessionDTO(
+            user: AuthenticatedUserDTO(
+                id: "user-1",
+                displayName: "Alex",
+                provider: "local_account"
+            ),
+            expiresAt: "2026-08-20T12:00:00.000Z",
+            token: "opaque-token"
+        )
+        let repository = RemoteAuthenticationRepository(apiClient: apiClient)
+
+        let session = try await repository.login(
+            displayName: "Alex",
+            password: "password-123"
+        )
+
+        #expect(apiClient.requestedPaths == ["auth/login"])
+        #expect(
+            apiClient.postedBodies["auth/login"] as? AuthCredentialsDTO ==
+                AuthCredentialsDTO(
+                    displayName: "Alex",
+                    password: "password-123"
                 )
         )
+        #expect(session.profile.id == "user-1")
+        #expect(session.profile.provider == .localAccount)
+        #expect(session.token == "opaque-token")
     }
 }
