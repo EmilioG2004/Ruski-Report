@@ -9,16 +9,8 @@ struct TournamentDetailCard<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        AppSurface {
             content
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(Color.appSecondaryGroupedBackground)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(Color.appSeparator, lineWidth: 0.5)
         }
     }
 }
@@ -53,7 +45,6 @@ struct TournamentEmptySectionView: View {
     let systemImage: String
 
     var body: some View {
-        ContentUnavailableView(title, systemImage: systemImage)
-            .frame(maxWidth: .infinity, minHeight: 180)
+        AppEmptyStateView(title: title, systemImage: systemImage)
     }
 }

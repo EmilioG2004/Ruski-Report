@@ -31,8 +31,10 @@ struct TournamentDetailView: View {
         Group {
             switch controller.state {
             case .loading:
-                ProgressView("Loading tournament")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                AppLoadingStateView(
+                    title: "Loading tournament",
+                    message: "Fetching standings, matches, and bracket results."
+                )
                     .accessibilityIdentifier("tournament.loading")
             case .loaded(let screen):
                 detailContent(screen)
@@ -56,18 +58,16 @@ struct TournamentDetailView: View {
             VStack(alignment: .leading, spacing: 18) {
                 TournamentOverviewHeader(detail: screen.detail)
 
-                Picker("Tournament section", selection: $selectedSection) {
-                    ForEach(TournamentDetailSection.allCases) { section in
-                        Text(section.title).tag(section)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("tournament.sectionPicker")
+                TournamentSectionPicker(selection: $selectedSection)
 
                 sectionContent(screen)
             }
-            .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(AppLayout.pagePadding)
+            .frame(
+                maxWidth: AppLayout.maximumContentWidth,
+                alignment: .leading
+            )
+            .frame(maxWidth: .infinity)
         }
     }
 
@@ -88,42 +88,14 @@ struct TournamentDetailView: View {
     }
 
     private func errorContent(_ message: String) -> some View {
-        ContentUnavailableView {
-            Label("Tournament unavailable", systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(message)
-        } actions: {
-            Button("Retry") {
-                Task {
-                    await controller.loadTournament()
-                }
+        AppErrorStateView(
+            title: "Tournament unavailable",
+            message: message
+        ) {
+            Task {
+                await controller.loadTournament()
             }
-            .accessibilityIdentifier("tournament.retry")
         }
-    }
-}
-
-private enum TournamentDetailSection: String, CaseIterable, Identifiable {
-    case overview
-    case pods
-    case matches
-    case bracket
-    case stats
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .overview:
-            "Overview"
-        case .pods:
-            "Pods"
-        case .matches:
-            "Matches"
-        case .bracket:
-            "Bracket"
-        case .stats:
-            "Stats"
-        }
+        .accessibilityIdentifier("tournament.error")
     }
 }

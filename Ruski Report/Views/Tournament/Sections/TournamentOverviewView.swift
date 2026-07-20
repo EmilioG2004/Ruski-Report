@@ -9,25 +9,22 @@ struct TournamentOverviewHeader: View {
     let detail: TournamentDetail
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(detail.preview.name)
-                        .font(.title.bold())
+        VStack(alignment: .leading, spacing: 8) {
+            StatusPill(status: detail.preview.status)
 
-                    Text(detail.preview.formatSummary)
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                }
+            Text(detail.preview.name)
+                .font(.title.bold())
+                .fixedSize(horizontal: false, vertical: true)
 
-                Spacer(minLength: 12)
+            Text(detail.preview.formatSummary)
+                .font(.headline)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
 
-                StatusPill(text: detail.preview.status.displayName)
-            }
-
-            Text(detail.preview.locationName)
+            Label(detail.preview.locationName, systemImage: "mappin.and.ellipse")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityIdentifier("tournament.header")
     }
