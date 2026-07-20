@@ -1,3 +1,5 @@
+export * from "./postgres-account.repository";
+export * from "./postgres-auth-session.repository";
 export * from "./postgres-comment.repository";
 export * from "./postgres-tournament-read.repository";
 export * from "./postgres-tournament-snapshot.repository";
