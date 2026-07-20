@@ -114,4 +114,15 @@ describe("Ruski game config", () => {
       ].sort()
     );
   });
+
+  it("externalizes the tournament dimensions used by normalization", () => {
+    expect(ruskiGameConfig.tournament).toMatchObject({
+      podCount: 8,
+      teamsPerPod: 4,
+      bracketSize: 16,
+      identity: {
+        minimumResolutionScore: expect.any(Number)
+      }
+    });
+  });
 });
