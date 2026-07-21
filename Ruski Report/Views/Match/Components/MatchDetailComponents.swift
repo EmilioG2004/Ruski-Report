@@ -82,11 +82,14 @@ extension Text {
             .frame(width: width, alignment: alignment)
     }
 
-    func scorecardHeaderStyle(width: CGFloat) -> some View {
+    func scorecardHeaderStyle(
+        width: CGFloat,
+        alignment: Alignment
+    ) -> some View {
         font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
             .lineLimit(2)
             .fixedSize(horizontal: false, vertical: true)
-            .frame(width: width, alignment: .leading)
+            .frame(width: width, alignment: alignment)
     }
 }
