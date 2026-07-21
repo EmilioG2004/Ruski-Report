@@ -181,65 +181,14 @@ private struct MatchCommentsView: View {
                 }
             }
 
-            postingContent(content)
-        }
-    }
-
-    @ViewBuilder
-    private func postingContent(_ content: MatchCommentsContent) -> some View {
-        switch content.postingAuthorization {
-        case .allowed:
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top, spacing: 10) {
-                    TextField("Add a comment", text: $draftComment, axis: .vertical)
-                        .lineLimit(2...4)
-                        .textFieldStyle(.roundedBorder)
-                        .accessibilityIdentifier("match.comments.input")
-
-                    Button {
-                        submitComment()
-                    } label: {
-                        if content.isPosting {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Label("Post", systemImage: "paperplane.fill")
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(content.isPosting || trimmedDraft.isEmpty)
-                    .accessibilityIdentifier("match.comments.post")
-                }
-
-                if let postErrorMessage = content.postErrorMessage {
-                    Text(postErrorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .accessibilityIdentifier("match.comments.postError")
-                }
-            }
-        case .requiresSignIn(let message):
-            VStack(alignment: .leading, spacing: 8) {
-                Label(message, systemImage: "person.crop.circle.badge.exclamationmark")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .accessibilityIdentifier("match.comments.signInPrompt")
-
-                Button {
-                    sheetRouter.showAccount()
-                } label: {
-                    Label("Sign In", systemImage: "person.crop.circle.badge.plus")
-                }
-                .buttonStyle(.bordered)
-                .accessibilityIdentifier("match.comments.signIn")
-
-                if let postErrorMessage = content.postErrorMessage {
-                    Text(postErrorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .accessibilityIdentifier("match.comments.postError")
-                }
-            }
+            MatchCommentComposer(
+                authorization: content.postingAuthorization,
+                draft: $draftComment,
+                isPosting: content.isPosting,
+                errorMessage: content.postErrorMessage,
+                submit: submitComment,
+                openSignIn: sheetRouter.showAccount
+            )
         }
     }
 
@@ -260,10 +209,6 @@ private struct MatchCommentsView: View {
             .accessibilityIdentifier("match.comments.retry")
         }
         .padding(.vertical, 8)
-    }
-
-    private var trimmedDraft: String {
-        draftComment.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func submitComment() {
