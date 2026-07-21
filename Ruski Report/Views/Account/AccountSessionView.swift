@@ -27,6 +27,8 @@ struct AccountSessionView: View {
                     signedInControls
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(Color.appGroupedBackground)
             .navigationTitle("Account")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -63,10 +65,7 @@ struct AccountSessionView: View {
                 .accessibilityIdentifier("account.password")
 
             if let errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .accessibilityIdentifier("account.error")
+                AccountErrorText(message: errorMessage)
             }
 
             Button(action: submit) {
@@ -80,40 +79,26 @@ struct AccountSessionView: View {
             }
             .disabled(!canSubmit)
             .accessibilityIdentifier("account.submit")
-        } header: {
+        }
+        header: {
             Text(mode.sectionTitle)
         }
+        .accessibilityIdentifier("account.guest")
     }
 
     private var signedInControls: some View {
         Section("Session") {
-            Button(role: .destructive) {
-                Task {
-                    do {
-                        try await session.signOut()
-                        errorMessage = nil
-                        displayName = ""
-                        password = ""
-                    } catch {
-                        errorMessage = AppErrorMessageFormatter.message(
-                            from: error,
-                            fallback: "Unable to sign out."
-                        )
-                    }
-                }
-            } label: {
+            Button(role: .destructive, action: signOut) {
                 Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
             }
             .disabled(session.activity != .idle)
             .accessibilityIdentifier("account.signOut")
 
             if let errorMessage {
-                Text(errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .accessibilityIdentifier("account.error")
+                AccountErrorText(message: errorMessage)
             }
         }
+        .accessibilityIdentifier("account.authenticated")
     }
 
     private var canSubmit: Bool {
@@ -151,6 +136,34 @@ struct AccountSessionView: View {
                 )
             }
         }
+    }
+
+    private func signOut() {
+        Task {
+            do {
+                try await session.signOut()
+                errorMessage = nil
+                displayName = ""
+                password = ""
+            } catch {
+                errorMessage = AppErrorMessageFormatter.message(
+                    from: error,
+                    fallback: "Unable to sign out."
+                )
+            }
+        }
+    }
+}
+
+private struct AccountErrorText: View {
+    let message: String
+
+    var body: some View {
+        Label(message, systemImage: "exclamationmark.circle")
+            .font(.caption)
+            .foregroundStyle(.red)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("account.error")
     }
 }
 

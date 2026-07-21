@@ -12,23 +12,23 @@ struct AccountStatusRow: View {
         HStack(spacing: 12) {
             Image(systemName: iconName)
                 .font(.title3)
-                .foregroundStyle(Color.accentColor)
+                .foregroundStyle(iconColor)
                 .frame(width: 28)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(session.displayName)
                     .font(.body.weight(.semibold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 Text(statusText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Spacer(minLength: 12)
         }
-        .accessibilityIdentifier("account.status")
+        .accessibilityIdentifier("account.status.\(session.kind.rawValue)")
     }
 
     private var iconName: String {
@@ -42,10 +42,14 @@ struct AccountStatusRow: View {
     private var statusText: String {
         switch session {
         case .guest:
-            "Guest"
+            "Browsing as a guest"
         case .authenticated(let profile), .admin(let profile):
-            profile.provider.displayName
+            "Signed in with \(profile.provider.displayName)"
         }
+    }
+
+    private var iconColor: Color {
+        session.kind == .guest ? .secondary : .appFinal
     }
 }
 
