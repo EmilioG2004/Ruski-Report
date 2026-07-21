@@ -45,7 +45,6 @@ struct MatchCommentsView: View {
                     failedContent(message)
                 }
             }
-            .accessibilityIdentifier("match.comments")
         }
         .task(id: session.current) {
             await controller.loadComments()

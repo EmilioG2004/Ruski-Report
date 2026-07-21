@@ -11,18 +11,10 @@ struct MatchScoreHeaderView: View {
 
     var body: some View {
         AppSurface {
-            HStack(spacing: 12) {
-                StatusPill(status: screen.match.preview.status)
-
-                Spacer(minLength: 8)
-
-                if let phase = screen.match.preview.currentPhaseLabel {
-                    Text(phase)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
+            StatusMetadataLine(
+                status: screen.match.preview.status,
+                metadata: screen.match.preview.currentPhaseLabel
+            )
 
             Text(routeContext.title)
                 .font(.title2.weight(.bold))

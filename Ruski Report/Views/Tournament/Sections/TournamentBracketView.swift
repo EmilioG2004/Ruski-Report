@@ -88,7 +88,6 @@ private struct TournamentBracketRoundSectionView: View {
                 }
             }
         }
-        .accessibilityIdentifier("tournament.bracket.round.\(section.id)")
     }
 
     private var matchCountText: String {
@@ -107,17 +106,11 @@ private struct TournamentBracketMatchupCard: View {
 
     var body: some View {
         TournamentDetailCard {
-            HStack(spacing: 10) {
-                StatusPill(text: matchup.statusText, style: statusStyle)
-
-                Spacer(minLength: 8)
-
-                Text(matchup.matchId ?? matchup.id)
-                    .font(.caption2.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
+            StatusMetadataLine(
+                text: matchup.statusText,
+                style: statusStyle,
+                metadata: matchup.matchId ?? matchup.id
+            )
 
             Text(matchup.title)
                 .font(.subheadline.weight(.semibold))

@@ -38,18 +38,10 @@ private struct TournamentMatchCard: View {
 
     var body: some View {
         TournamentDetailCard {
-            HStack(spacing: 12) {
-                StatusPill(status: match.status)
-
-                Spacer(minLength: 8)
-
-                if let phase = match.currentPhaseLabel {
-                    Text(phase)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-            }
+            StatusMetadataLine(
+                status: match.status,
+                metadata: match.currentPhaseLabel
+            )
 
             Text(detail.participantsLabel(for: match))
                 .font(.headline)

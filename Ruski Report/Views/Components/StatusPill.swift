@@ -26,12 +26,7 @@ struct StatusPill: View {
 
     init(status: MatchStatus) {
         text = status.displayName
-        switch status {
-        case .inProgress: style = .live
-        case .final: style = .final
-        case .scheduled: style = .scheduled
-        case .unknown: style = .neutral
-        }
+        style = Style(status: status)
     }
 
     var body: some View {
@@ -51,6 +46,15 @@ struct StatusPill: View {
         case final
         case scheduled
         case neutral
+
+        init(status: MatchStatus) {
+            switch status {
+            case .inProgress: self = .live
+            case .final: self = .final
+            case .scheduled: self = .scheduled
+            case .unknown: self = .neutral
+            }
+        }
 
         fileprivate var color: Color {
             switch self {
@@ -74,6 +78,53 @@ struct StatusPill: View {
             case .live: "Live, \(text)"
             case .final, .scheduled, .neutral: text
             }
+        }
+    }
+}
+
+struct StatusMetadataLine: View {
+    let statusText: String
+    let style: StatusPill.Style
+    let metadata: String?
+
+    init(status: MatchStatus, metadata: String?) {
+        statusText = status.displayName
+        style = StatusPill.Style(status: status)
+        self.metadata = metadata
+    }
+
+    init(text: String, style: StatusPill.Style, metadata: String?) {
+        statusText = text
+        self.style = style
+        self.metadata = metadata
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                status
+                Spacer(minLength: 8)
+                metadataText
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                status
+                metadataText
+            }
+        }
+    }
+
+    private var status: some View {
+        StatusPill(text: statusText, style: style)
+    }
+
+    @ViewBuilder
+    private var metadataText: some View {
+        if let metadata {
+            Text(metadata)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
