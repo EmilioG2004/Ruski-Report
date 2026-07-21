@@ -45,8 +45,10 @@ struct MatchDetailView: View {
         Group {
             switch controller.state {
             case .loading:
-                ProgressView("Loading match")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                AppLoadingStateView(
+                    title: "Loading match",
+                    message: "Fetching the official scorecard and match activity."
+                )
                     .accessibilityIdentifier("match.loading")
             case .loaded(let screen):
                 detailContent(screen)
@@ -90,94 +92,23 @@ struct MatchDetailView: View {
                     logger: logger
                 )
             }
-            .padding(20)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(AppLayout.pagePadding)
+            .frame(
+                maxWidth: AppLayout.maximumContentWidth,
+                alignment: .leading
+            )
+            .frame(maxWidth: .infinity)
         }
         .accessibilityIdentifier("match.detail")
     }
 
     private func errorContent(_ message: String) -> some View {
-        ContentUnavailableView {
-            Label("Match unavailable", systemImage: "exclamationmark.triangle")
-        } description: {
-            Text(message)
-        } actions: {
-            Button("Retry") {
-                Task {
-                    await controller.loadMatch()
-                }
+        AppErrorStateView(title: "Match unavailable", message: message) {
+            Task {
+                await controller.loadMatch()
             }
-            .accessibilityIdentifier("match.retry")
         }
         .accessibilityIdentifier("match.error")
-    }
-}
-
-private struct MatchScoreHeaderView: View {
-    let screen: MatchDetailScreen
-    let routeContext: MatchRouteContext
-
-    var body: some View {
-        TournamentDetailCard {
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(routeContext.title)
-                        .font(.title3.weight(.bold))
-                        .lineLimit(2)
-                        .minimumScaleFactor(0.85)
-
-                    if let phase = screen.match.preview.currentPhaseLabel {
-                        Text(phase)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Spacer(minLength: 12)
-
-                StatusPill(text: screen.match.preview.status.displayName)
-            }
-
-            VStack(spacing: 10) {
-                ForEach(screen.match.preview.participants, id: \.teamId) { participant in
-                    HStack(spacing: 12) {
-                        Text(routeContext.teamName(for: participant.teamId) ?? participant.teamId)
-                            .font(.body.weight(.medium))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.75)
-
-                        Spacer(minLength: 12)
-
-                        Text(scoreText(for: participant))
-                            .font(.title3.weight(.semibold).monospacedDigit())
-                            .foregroundStyle(scoreColor(for: participant))
-                    }
-                }
-            }
-            .accessibilityIdentifier("match.scoreHeader")
-        }
-    }
-
-    private func scoreText(for participant: MatchParticipant) -> String {
-        if let score = participant.score {
-            return "\(score)"
-        }
-
-        if let score = screen.match.preview.score?.participants.first(
-            where: { $0.teamId == participant.teamId }
-        )?.score {
-            return "\(score)"
-        }
-
-        return "-"
-    }
-
-    private func scoreColor(for participant: MatchParticipant) -> Color {
-        guard screen.match.preview.score?.winnerTeamId == participant.teamId else {
-            return .primary
-        }
-
-        return .accentColor
     }
 }
 
