@@ -17,7 +17,7 @@ struct TournamentCardView: View {
 
                     Spacer(minLength: 8)
 
-                    Text(tournament.year.formatted())
+                    Text(verbatim: String(tournament.year))
                         .font(.subheadline.weight(.semibold).monospacedDigit())
                         .foregroundStyle(.secondary)
                 }

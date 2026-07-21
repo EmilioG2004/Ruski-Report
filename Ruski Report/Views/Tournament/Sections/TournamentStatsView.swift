@@ -37,7 +37,6 @@ struct TournamentStatsView: View {
             .onAppear {
                 selectedTableID = selectedTableID ?? screen.detail.statistics.first?.id
             }
-            .accessibilityIdentifier("tournament.stats")
         }
     }
 

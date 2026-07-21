@@ -28,7 +28,6 @@ struct TournamentMatchesView: View {
                     .accessibilityIdentifier("tournament.match.\(match.id)")
                 }
             }
-            .accessibilityIdentifier("tournament.matches")
         }
     }
 }

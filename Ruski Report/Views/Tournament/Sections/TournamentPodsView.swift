@@ -20,7 +20,6 @@ struct TournamentPodsView: View {
                     TournamentPodCard(detail: detail, pod: pod)
                 }
             }
-            .accessibilityIdentifier("tournament.pods")
         }
     }
 }

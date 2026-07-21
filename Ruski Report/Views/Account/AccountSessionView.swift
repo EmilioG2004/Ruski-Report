@@ -83,7 +83,6 @@ struct AccountSessionView: View {
         header: {
             Text(mode.sectionTitle)
         }
-        .accessibilityIdentifier("account.guest")
     }
 
     private var signedInControls: some View {
@@ -98,7 +97,6 @@ struct AccountSessionView: View {
                 AccountErrorText(message: errorMessage)
             }
         }
-        .accessibilityIdentifier("account.authenticated")
     }
 
     private var canSubmit: Bool {

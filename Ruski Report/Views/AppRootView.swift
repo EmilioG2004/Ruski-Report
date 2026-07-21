@@ -34,6 +34,17 @@ struct AppRootView: View {
                     await homeController.loadActiveTournament()
                 }
             )
+                .toolbar {
+                    ToolbarItem(placement: accountToolbarPlacement) {
+                        Button {
+                            sheetRouter.showAccount()
+                        } label: {
+                            Label("Account", systemImage: accountIconName)
+                                .labelStyle(.iconOnly)
+                        }
+                        .accessibilityIdentifier("account.toolbar")
+                    }
+                }
                 .task {
                     await homeController.loadActiveTournament()
                 }
@@ -43,17 +54,6 @@ struct AppRootView: View {
                 .navigationDestination(for: AppRoute.self) { route in
                     destination(for: route)
                 }
-        }
-        .toolbar {
-            ToolbarItem(placement: accountToolbarPlacement) {
-                Button {
-                    sheetRouter.showAccount()
-                } label: {
-                    Label("Account", systemImage: accountIconName)
-                        .labelStyle(.iconOnly)
-                }
-                .accessibilityIdentifier("account.toolbar")
-            }
         }
         .sheet(item: $sheetRouter.presentedSheet) { destination in
             switch destination {
