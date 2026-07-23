@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { AuthModule } from "../auth";
+import { CommentModerationModule } from "../comments";
 import {
   GAME_DEFINITION_REPOSITORY,
   InMemoryGameDefinitionRepository
@@ -19,7 +20,12 @@ import { TournamentsController } from "./tournaments.controller";
 import { TournamentsService } from "./tournaments.service";
 
 @Module({
-  imports: [AuthModule, PersistenceModule, RealtimeModule],
+  imports: [
+    AuthModule,
+    CommentModerationModule,
+    PersistenceModule,
+    RealtimeModule
+  ],
   controllers: [
     GamesController,
     TournamentsController,
