@@ -2,6 +2,7 @@ export * from "./account";
 export * from "./box-score";
 export * from "./bracket";
 export * from "./comment";
+export * from "./comment-report";
 export * from "./common";
 export * from "./event";
 export * from "./game-definition";

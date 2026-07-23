@@ -5,6 +5,7 @@ export type BracketId = string;
 export type BracketMatchId = string;
 export type BracketRoundId = string;
 export type CommentId = string;
+export type CommentReportId = string;
 export type GameEventId = string;
 export type GamePhaseId = string;
 export type GameType = string;
