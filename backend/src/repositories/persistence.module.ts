@@ -9,6 +9,7 @@ import {
 import {
   PostgresAccountRepository,
   PostgresAuthSessionRepository,
+  PostgresCommentReportRepository,
   PostgresCommentRepository,
   PostgresTournamentReadRepository,
   PostgresTournamentSnapshotRepository,
@@ -17,6 +18,7 @@ import {
 import { ACCOUNT_REPOSITORY } from "./account-repository";
 import { AUTH_SESSION_REPOSITORY } from "./auth-session-repository";
 import { COMMENT_REPOSITORY } from "./comment-repository";
+import { COMMENT_REPORT_REPOSITORY } from "./comment-report-repository";
 import { TOURNAMENT_READ_REPOSITORY } from "./tournament-read-repository";
 import { TOURNAMENT_SNAPSHOT_REPOSITORY } from "./tournament-snapshot-repository";
 import { TRANSACTION_MANAGER } from "./transaction";
@@ -34,6 +36,10 @@ const repositoryProviders = [
   {
     provide: COMMENT_REPOSITORY,
     useExisting: PostgresCommentRepository
+  },
+  {
+    provide: COMMENT_REPORT_REPOSITORY,
+    useExisting: PostgresCommentReportRepository
   },
   {
     provide: TOURNAMENT_READ_REPOSITORY,
@@ -63,6 +69,7 @@ const repositoryProviders = [
     PostgresTransactionManager,
     PostgresAccountRepository,
     PostgresAuthSessionRepository,
+    PostgresCommentReportRepository,
     PostgresCommentRepository,
     PostgresTournamentReadRepository,
     PostgresTournamentSnapshotRepository,
