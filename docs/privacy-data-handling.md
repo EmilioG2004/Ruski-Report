@@ -23,6 +23,14 @@ Comments store their body, creation time, match identifier, author display name,
 and author account identifier. They are public within the associated match and
 exist so authenticated users can participate in match discussion.
 
+Before storage, submissions pass through automated content and spam checks.
+Rejected comment text is not stored. Moderation logs contain the decision code,
+match identifier, character count, and a non-content rule identifier; they do
+not contain the rejected body, display name, password, or session token.
+Allowed comments store a SHA-256 fingerprint of their normalized comparison
+form so recent duplicates can be detected without storing a second readable
+copy of the body.
+
 Tournament rosters, scores, and player statistics are imported from scorebooks.
 They are tournament records rather than public-account profile data and are not
 created or controlled by the local account system.

@@ -71,6 +71,19 @@ comment refresh events only after commit. See
 [`docs/privacy-data-handling.md`](../docs/privacy-data-handling.md) for the
 client recovery and retention contract.
 
+## Comment Moderation
+
+Authenticated comment submissions are normalized and evaluated by the backend
+before persistence. Configured prohibited phrases, excessive links, repeated
+characters, repeated words, and recently duplicated comments are rejected with
+stable error codes. Rejected content is never persisted or included in
+moderation logs.
+
+Moderation thresholds use the `COMMENT_*` environment variables documented in
+`src/config/README.md`. Prohibited phrases come from
+`config/comment-moderation-rules.json` by default; production can set
+`COMMENT_MODERATION_RULES_PATH` to a mounted operator-maintained file.
+
 ## Structure
 
 - `src/controllers`: HTTP controller boundaries.

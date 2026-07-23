@@ -6,6 +6,7 @@ Ruski Report is a Swift/Xcode app.
 
 - [Product scope](docs/product-scope.md)
 - [Design plan](docs/design-plan.md)
+- [Community standards](docs/community-standards.md)
 - [Project management](docs/project-management/README.md)
 - [Decision records](docs/decisions/README.md)
 

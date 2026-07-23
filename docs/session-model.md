@@ -75,6 +75,15 @@ Client-supplied author fields have no effect. Guest comment reads remain public.
 The iOS `CommentAuthorizationPolicy` still prevents guest posting attempts in
 the UI, but it is a convenience rather than the security boundary.
 
+Before persistence, the backend normalizes comment text and applies the
+configured moderation and spam rules. Rejections use stable detail codes while
+the iOS composer maps moderation failures to controlled local messages. Raw
+rejected text and private rule contents are not written to moderation logs.
+Recently repeated comments are rejected atomically per account and match.
+
+See [community-standards.md](community-standards.md) for prohibited content and
+the current enforcement scope.
+
 ## Admin Uploads
 
 `AdminScorebookController` remains protected by `AdminAuthGuard` and the
