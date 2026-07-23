@@ -112,6 +112,85 @@ struct MatchCommentsControllerTests {
         #expect(controller.state == .failed(message: "Comments are offline."))
     }
 
+    @Test func moderationFailureUsesSafeLocalCopy() async {
+        let repository = StubCommentRepository(
+            commentsResult: .success([Self.existingComment]),
+            postResult: .failure(
+                AppError.backend(
+                    code: "VALIDATION_FAILED",
+                    message: "Unsafe backend moderation details.",
+                    details: [
+                        AppErrorDetail(
+                            code: "COMMENT_CONTENT_NOT_ALLOWED",
+                            message: "Matched a private moderation rule.",
+                            path: "body"
+                        )
+                    ]
+                )
+            )
+        )
+        let controller = MatchCommentsController(
+            matchId: "match-1",
+            comments: repository,
+            session: StubSessionRepository(session: Self.authenticatedSession),
+            logger: NoopAppLogger()
+        )
+
+        await controller.loadComments()
+        let posted = await controller.postComment(body: "Rejected draft")
+
+        #expect(!posted)
+        #expect(
+            controller.state == .loaded(
+                MatchCommentsContent(
+                    comments: [Self.existingComment],
+                    postingAuthorization: .allowed,
+                    isPosting: false,
+                    postErrorMessage:
+                        "That comment doesn’t meet the community standards. Edit it and try again."
+                )
+            )
+        )
+    }
+
+    @Test func repeatedCommentFailureUsesActionableLocalCopy() async {
+        let repository = StubCommentRepository(
+            commentsResult: .success([]),
+            postResult: .failure(
+                AppError.backend(
+                    code: "CONFLICT",
+                    message: "Server duplicate detail.",
+                    details: [
+                        AppErrorDetail(
+                            code: "COMMENT_RECENTLY_REPEATED",
+                            message: "Internal duplicate window detail.",
+                            path: "body"
+                        )
+                    ]
+                )
+            )
+        )
+        let controller = MatchCommentsController(
+            matchId: "match-1",
+            comments: repository,
+            session: StubSessionRepository(session: Self.authenticatedSession),
+            logger: NoopAppLogger()
+        )
+
+        await controller.loadComments()
+        let posted = await controller.postComment(body: "Same comment")
+
+        #expect(!posted)
+        guard case .loaded(let content) = controller.state else {
+            Issue.record("Expected loaded comments after a rejected post.")
+            return
+        }
+        #expect(
+            content.postErrorMessage ==
+                "You recently posted that comment. Wait a moment before trying again."
+        )
+    }
+
     @Test func realtimeCommentsUpdateReloadsVisibleComments() async {
         let comments = StubCommentRepository(
             commentsResult: .success([Self.existingComment])

@@ -104,6 +104,30 @@ final class Ruski_ReportUITests: XCTestCase {
     }
 
     @MainActor
+    func testShowsSafeModerationErrorAndPreservesDraft() throws {
+        let app = launchPreviewApp(scenario: "moderationRejected")
+
+        openLiveMatch(in: app)
+        let scrollView = app.scrollViews["match.detail"]
+        let input = app.textFields["match.comments.input"]
+        scrollUntilHittable(input, in: scrollView)
+        input.tap()
+        input.typeText("Rejected draft")
+
+        let postButton = app.buttons["match.comments.post"]
+        assertExists(postButton)
+        postButton.tap()
+
+        let error = app.descendants(matching: .any)["match.comments.postError"]
+        assertExists(error)
+        XCTAssertEqual(
+            error.label,
+            "That comment doesn’t meet the community standards. Edit it and try again."
+        )
+        XCTAssertEqual(input.value as? String, "Rejected draft")
+    }
+
+    @MainActor
     private func launchPreviewApp(scenario: String = "standard") -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -121,6 +145,35 @@ final class Ruski_ReportUITests: XCTestCase {
         assertExists(accountButton)
         accountButton.tap()
         assertExists(app.navigationBars["Account"])
+    }
+
+    @MainActor
+    private func openLiveMatch(in app: XCUIApplication) {
+        let tournament = app.buttons["home.tournamentCard"]
+        assertExists(tournament)
+        tournament.tap()
+
+        let matches = app.buttons["tournament.section.matches"]
+        assertExists(matches)
+        matches.tap()
+
+        let liveMatch = app.buttons["tournament.match.match-2026-001"]
+        assertExists(liveMatch)
+        liveMatch.tap()
+        assertExists(app.scrollViews["match.detail"])
+    }
+
+    @MainActor
+    private func scrollUntilHittable(
+        _ element: XCUIElement,
+        in scrollView: XCUIElement,
+        attempts: Int = 6
+    ) {
+        for _ in 0..<attempts where !element.isHittable {
+            scrollView.swipeUp()
+        }
+
+        XCTAssertTrue(element.isHittable, "Expected element to become hittable")
     }
 
     @MainActor
