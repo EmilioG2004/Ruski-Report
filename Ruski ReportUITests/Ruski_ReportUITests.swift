@@ -69,6 +69,38 @@ final class Ruski_ReportUITests: XCTestCase {
         openAccount(in: app)
         assertExists(app.descendants(matching: .any)["account.status.authenticated"])
         assertExists(app.buttons["account.signOut"])
+        assertExists(app.buttons["account.delete"])
+    }
+
+    @MainActor
+    func testCancelsAccountDeletion() throws {
+        let app = launchPreviewApp(scenario: "authenticated")
+
+        openAccount(in: app)
+        app.buttons["account.delete"].tap()
+
+        let cancelButton = app.buttons["account.delete.cancel"]
+        assertExists(cancelButton)
+        cancelButton.tap()
+
+        assertExists(app.descendants(matching: .any)["account.status.authenticated"])
+        assertExists(app.buttons["account.delete"])
+    }
+
+    @MainActor
+    func testConfirmsAccountDeletionAndReturnsToGuestState() throws {
+        let app = launchPreviewApp(scenario: "authenticated")
+
+        openAccount(in: app)
+        app.buttons["account.delete"].tap()
+
+        let confirmButton = app.buttons["account.delete.confirm"]
+        assertExists(confirmButton)
+        confirmButton.tap()
+
+        assertExists(app.descendants(matching: .any)["account.status.guest"])
+        assertExists(app.descendants(matching: .any)["account.deletion.success"])
+        assertExists(app.textFields["account.displayName"])
     }
 
     @MainActor

@@ -12,18 +12,27 @@ struct AccountSessionView: View {
     @State private var displayName = ""
     @State private var password = ""
     @State private var errorMessage: String?
+    @State private var noticeMessage: String?
+    @State private var isDeleteConfirmationPresented = false
 
     var body: some View {
         NavigationStack {
             Form {
                 Section("Status") {
                     AccountStatusRow(session: session.current)
+
+                    if let noticeMessage {
+                        AccountNoticeText(message: noticeMessage)
+                    }
                 }
 
                 switch session.current {
                 case .guest:
                     guestControls
-                case .authenticated, .admin:
+                case .authenticated:
+                    signedInControls
+                    accountDeletionControls
+                case .admin:
                     signedInControls
                 }
             }
@@ -35,10 +44,25 @@ struct AccountSessionView: View {
                     Button("Done") {
                         dismiss()
                     }
+                    .disabled(session.activity == .deletingAccount)
                 }
             }
             .onChange(of: mode) { _, _ in
                 errorMessage = nil
+            }
+            .alert(
+                AccountDeletionCopy.confirmationTitle,
+                isPresented: $isDeleteConfirmationPresented
+            ) {
+                Button("Cancel", role: .cancel) {}
+                    .accessibilityIdentifier("account.delete.cancel")
+
+                Button("Delete Account", role: .destructive) {
+                    deleteAccount()
+                }
+                .accessibilityIdentifier("account.delete.confirm")
+            } message: {
+                Text(AccountDeletionCopy.confirmationMessage)
             }
         }
     }
@@ -99,6 +123,30 @@ struct AccountSessionView: View {
         }
     }
 
+    private var accountDeletionControls: some View {
+        Section {
+            Button(role: .destructive) {
+                errorMessage = nil
+                noticeMessage = nil
+                isDeleteConfirmationPresented = true
+            } label: {
+                if session.activity == .deletingAccount {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .accessibilityIdentifier("account.delete.progress")
+                } else {
+                    Label("Delete Account", systemImage: "person.crop.circle.badge.minus")
+                }
+            }
+            .disabled(session.activity != .idle)
+            .accessibilityIdentifier("account.delete")
+        } header: {
+            Text("Danger Zone")
+        } footer: {
+            Text(AccountDeletionCopy.sectionFooter)
+        }
+    }
+
     private var canSubmit: Bool {
         session.activity == .idle &&
             !displayName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
@@ -125,6 +173,7 @@ struct AccountSessionView: View {
                     )
                 }
                 errorMessage = nil
+                noticeMessage = nil
                 password = ""
                 dismiss()
             } catch {
@@ -141,12 +190,31 @@ struct AccountSessionView: View {
             do {
                 try await session.signOut()
                 errorMessage = nil
+                noticeMessage = nil
                 displayName = ""
                 password = ""
             } catch {
                 errorMessage = AppErrorMessageFormatter.message(
                     from: error,
                     fallback: "Unable to sign out."
+                )
+            }
+        }
+    }
+
+    private func deleteAccount() {
+        Task {
+            do {
+                try await session.deleteAccount()
+                errorMessage = nil
+                noticeMessage = AccountDeletionCopy.successMessage
+                displayName = ""
+                password = ""
+            } catch {
+                noticeMessage = nil
+                errorMessage = AppErrorMessageFormatter.message(
+                    from: error,
+                    fallback: "Unable to delete the account."
                 )
             }
         }
@@ -163,6 +231,27 @@ private struct AccountErrorText: View {
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityIdentifier("account.error")
     }
+}
+
+private struct AccountNoticeText: View {
+    let message: String
+
+    var body: some View {
+        Label(message, systemImage: "checkmark.circle")
+            .font(.caption)
+            .foregroundStyle(.green)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("account.deletion.success")
+    }
+}
+
+private enum AccountDeletionCopy {
+    static let confirmationTitle = "Delete Account?"
+    static let confirmationMessage =
+        "This permanently deletes your account and every comment you posted. This action cannot be undone."
+    static let sectionFooter =
+        "Deleting your account permanently removes your account data and comments."
+    static let successMessage = "Your account and comments were deleted."
 }
 
 private enum AccountFormMode: String, CaseIterable, Identifiable {
