@@ -36,18 +36,21 @@ nonisolated enum UserSession: Equatable {
             UserSessionCapabilities(
                 canViewTournamentData: true,
                 canPostComments: false,
+                canReportComments: false,
                 canAccessAdminUploads: false
             )
         case .authenticated:
             UserSessionCapabilities(
                 canViewTournamentData: true,
                 canPostComments: true,
+                canReportComments: true,
                 canAccessAdminUploads: false
             )
         case .admin:
             UserSessionCapabilities(
                 canViewTournamentData: true,
                 canPostComments: true,
+                canReportComments: true,
                 canAccessAdminUploads: true
             )
         }
@@ -59,6 +62,10 @@ nonisolated enum UserSession: Equatable {
 
     var canPostComments: Bool {
         capabilities.canPostComments
+    }
+
+    var canReportComments: Bool {
+        capabilities.canReportComments
     }
 
     var canAccessAdminUploads: Bool {
@@ -91,6 +98,7 @@ nonisolated enum UserSessionKind: String, Equatable {
 nonisolated struct UserSessionCapabilities: Equatable {
     let canViewTournamentData: Bool
     let canPostComments: Bool
+    let canReportComments: Bool
     let canAccessAdminUploads: Bool
 }
 
