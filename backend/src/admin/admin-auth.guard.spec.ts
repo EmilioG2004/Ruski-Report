@@ -3,35 +3,28 @@ import { ExecutionContext } from "@nestjs/common";
 import { AppError } from "../errors";
 import { AdminAuthGuard } from "./admin-auth.guard";
 
-const originalToken = process.env.ADMIN_UPLOAD_TOKEN;
-
 describe("AdminAuthGuard", () => {
-  afterEach(() => {
-    if (originalToken === undefined) {
-      delete process.env.ADMIN_UPLOAD_TOKEN;
-      return;
-    }
-
-    process.env.ADMIN_UPLOAD_TOKEN = originalToken;
-  });
-
   it("allows requests with the configured admin token", () => {
-    process.env.ADMIN_UPLOAD_TOKEN = "secret-token";
-    const guard = new AdminAuthGuard();
+    const guard = createGuard("secret-token");
+    const request = createRequest({ "x-admin-token": "secret-token" });
 
-    expect(
-      guard.canActivate(createContext({ "x-admin-token": "secret-token" }))
-    ).toBe(true);
+    expect(guard.canActivate(createContext(request))).toBe(true);
+    expect(request.adminPrincipal).toEqual({
+      operatorId: "operator-1"
+    });
   });
 
   it("rejects requests with a missing or invalid token", () => {
-    process.env.ADMIN_UPLOAD_TOKEN = "secret-token";
-    const guard = new AdminAuthGuard();
+    const guard = createGuard("secret-token");
 
-    expect(() => guard.canActivate(createContext({}))).toThrow(AppError);
+    expect(() =>
+      guard.canActivate(createContext(createRequest({})))
+    ).toThrow(AppError);
 
     try {
-      guard.canActivate(createContext({ "x-admin-token": "wrong-token" }));
+      guard.canActivate(
+        createContext(createRequest({ "x-admin-token": "wrong-token" }))
+      );
       fail("Expected invalid token to be rejected");
     } catch (error) {
       expect(error).toBeInstanceOf(AppError);
@@ -41,11 +34,12 @@ describe("AdminAuthGuard", () => {
   });
 
   it("rejects requests when the server token is not configured", () => {
-    delete process.env.ADMIN_UPLOAD_TOKEN;
-    const guard = new AdminAuthGuard();
+    const guard = createGuard(undefined);
 
     try {
-      guard.canActivate(createContext({ "x-admin-token": "secret-token" }));
+      guard.canActivate(
+        createContext(createRequest({ "x-admin-token": "secret-token" }))
+      );
       fail("Expected missing server token to be rejected");
     } catch (error) {
       expect(error).toBeInstanceOf(AppError);
@@ -55,14 +49,28 @@ describe("AdminAuthGuard", () => {
   });
 });
 
-function createContext(
+function createGuard(apiToken: string | undefined): AdminAuthGuard {
+  return new AdminAuthGuard({
+    apiToken,
+    operatorId: "operator-1"
+  });
+}
+
+function createRequest(
   headers: Record<string, string | string[] | undefined>
+): {
+  headers: Record<string, string | string[] | undefined>;
+  adminPrincipal?: { operatorId: string };
+} {
+  return { headers };
+}
+
+function createContext(
+  request: ReturnType<typeof createRequest>
 ): ExecutionContext {
   return {
     switchToHttp: () => ({
-      getRequest: () => ({
-        headers
-      })
+      getRequest: () => request
     })
   } as unknown as ExecutionContext;
 }
