@@ -57,6 +57,20 @@ export class PostgresCommentRepository implements CommentRepository {
     }
   }
 
+  async findById(
+    commentId: string,
+    transaction?: TransactionContext
+  ): Promise<RepositoryResult<Comment | null>> {
+    return this.findLiveComment(commentId, transaction, false);
+  }
+
+  async findByIdForUpdate(
+    commentId: string,
+    transaction: TransactionContext
+  ): Promise<RepositoryResult<Comment | null>> {
+    return this.findLiveComment(commentId, transaction, true);
+  }
+
   async create(
     input: CreateCommentInput,
     transaction?: TransactionContext
@@ -183,6 +197,29 @@ export class PostgresCommentRepository implements CommentRepository {
 
   private failure<T>(error: unknown, message: string): RepositoryResult<T> {
     return repositoryFailure(mapPostgresError(error, message));
+  }
+
+  private async findLiveComment(
+    commentId: string,
+    transaction: TransactionContext | undefined,
+    forUpdate: boolean
+  ): Promise<RepositoryResult<Comment | null>> {
+    try {
+      const executor = selectPostgresExecutor(this.database, transaction);
+      const result = await executor.query<CommentRow>(
+        `
+          SELECT *
+          FROM comments
+          WHERE id = $1 AND deleted_at IS NULL
+          ${forUpdate ? "FOR UPDATE" : ""}
+        `,
+        [commentId]
+      );
+      const row = result.rows[0];
+      return repositorySuccess(row === undefined ? null : mapComment(row));
+    } catch (error) {
+      return this.failure(error, "Failed to read comment.");
+    }
   }
 }
 

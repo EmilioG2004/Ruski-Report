@@ -28,6 +28,16 @@ export type CreateCommentResult =
 export interface CommentRepository {
   findByMatchId(matchId: MatchId): Promise<RepositoryResult<Comment[]>>;
 
+  findById(
+    commentId: CommentId,
+    transaction?: TransactionContext
+  ): Promise<RepositoryResult<Comment | null>>;
+
+  findByIdForUpdate(
+    commentId: CommentId,
+    transaction: TransactionContext
+  ): Promise<RepositoryResult<Comment | null>>;
+
   create(
     input: CreateCommentInput,
     transaction?: TransactionContext

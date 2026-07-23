@@ -32,6 +32,24 @@ export class InMemoryCommentRepository implements CommentRepository {
     );
   }
 
+  async findById(
+    commentId: CommentId,
+    _transaction?: TransactionContext
+  ): Promise<RepositoryResult<Comment | null>> {
+    const comment = this.comments.find(
+      (candidate) =>
+        candidate.id === commentId && candidate.deletedAt === undefined
+    );
+    return repositorySuccess(comment === undefined ? null : clone(comment));
+  }
+
+  async findByIdForUpdate(
+    commentId: CommentId,
+    transaction: TransactionContext
+  ): Promise<RepositoryResult<Comment | null>> {
+    return this.findById(commentId, transaction);
+  }
+
   async create(
     input: CreateCommentInput,
     _transaction?: TransactionContext

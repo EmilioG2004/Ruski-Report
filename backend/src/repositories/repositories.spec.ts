@@ -127,6 +127,24 @@ class FakeCommentRepository implements CommentRepository {
     );
   }
 
+  async findById(
+    commentId: string
+  ): Promise<RepositoryResult<Comment | null>> {
+    return repositorySuccess(
+      this.comments.find(
+        (comment) =>
+          comment.id === commentId && comment.deletedAt === undefined
+      ) ?? null
+    );
+  }
+
+  async findByIdForUpdate(
+    commentId: string,
+    _transaction: TransactionContext
+  ): Promise<RepositoryResult<Comment | null>> {
+    return this.findById(commentId);
+  }
+
   async create(input: {
     matchId: string;
     author: Comment["author"];
