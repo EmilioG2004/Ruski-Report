@@ -163,6 +163,59 @@ struct RepositoryTests {
         )
     }
 
+    @Test func commentReportingRepositoryPostsReasonAndOptionalContext() async throws {
+        let apiClient = RecordingAPIClient()
+        apiClient.responses["comments/comment-1/reports"] =
+            CommentReportReceiptDTO(
+                id: "report-1",
+                status: "open",
+                submittedAt: "2026-07-23T12:00:00.000Z",
+                alreadyReported: false
+            )
+        let repository = RemoteCommentReportingRepository(
+            apiClient: apiClient,
+            session: StubSessionRepository(
+                session: .authenticated(
+                    UserProfile(id: "user-1", displayName: "Alex")
+                )
+            )
+        )
+
+        let receipt = try await repository.submitReport(
+            commentId: "comment-1",
+            reason: .harassment,
+            context: "Repeated insults."
+        )
+
+        #expect(apiClient.requestedPaths == ["comments/comment-1/reports"])
+        #expect(receipt.id == "report-1")
+        #expect(
+            apiClient.postedBodies["comments/comment-1/reports"]
+                as? SubmitCommentReportRequestDTO ==
+                SubmitCommentReportRequestDTO(
+                    reason: "harassment",
+                    context: "Repeated insults."
+                )
+        )
+    }
+
+    @Test func commentReportingRepositoryRejectsGuestsBeforeNetworking() async {
+        let apiClient = RecordingAPIClient()
+        let repository = RemoteCommentReportingRepository(
+            apiClient: apiClient,
+            session: StubSessionRepository(session: .guest)
+        )
+
+        await #expect(throws: AppError.self) {
+            try await repository.submitReport(
+                commentId: "comment-1",
+                reason: .spam,
+                context: nil
+            )
+        }
+        #expect(apiClient.requestedPaths.isEmpty)
+    }
+
     @Test func authenticationRepositoryMapsCreatedSession() async throws {
         let apiClient = RecordingAPIClient()
         apiClient.responses["auth/login"] = CreatedSessionDTO(
