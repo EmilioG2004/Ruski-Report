@@ -12,6 +12,7 @@ struct AppServices {
     let tournaments: any TournamentRepository
     let matches: any MatchRepository
     let comments: any CommentRepository
+    let commentReports: any CommentReportingRepository
     let session: AccountSessionStore
     let realtime: any RealtimeUpdateRepository
     let logger: any AppLogger
@@ -27,7 +28,10 @@ struct AppServices {
             provider: .localAccount
         )
         let isAuthenticated =
-            scenario == .authenticated || scenario == .moderationRejected
+            scenario == .authenticated ||
+            scenario == .moderationRejected ||
+            scenario == .reporting ||
+            scenario == .reportUnavailable
         let tournamentDetail = scenario == .empty ?
             PreviewData.emptyTournamentDetail : PreviewData.tournamentDetail
         let tournamentFailure: AppError? = scenario == .unavailable ?
@@ -42,6 +46,9 @@ struct AppServices {
             matches: PreviewMatchRepository(),
             comments: PreviewCommentRepository(
                 postError: previewCommentPostError(for: scenario)
+            ),
+            commentReports: PreviewCommentReportingRepository(
+                result: previewCommentReportResult(for: scenario)
             ),
             session: AccountSessionStore(
                 initialSession: isAuthenticated ? .authenticated(profile) : .guest,
@@ -74,6 +81,35 @@ struct AppServices {
                     path: "body"
                 )
             ]
+        )
+    }
+
+    private static func previewCommentReportResult(
+        for scenario: PreviewScenario
+    ) -> Result<CommentReportReceipt, Error> {
+        if scenario == .reportUnavailable {
+            return .failure(
+                AppError.backend(
+                    code: "NOT_FOUND",
+                    message: "Unsafe server removal details.",
+                    details: [
+                        AppErrorDetail(
+                            code: "COMMENT_NOT_AVAILABLE",
+                            message: "Internal comment lookup failed.",
+                            path: "commentId"
+                        )
+                    ]
+                )
+            )
+        }
+
+        return .success(
+            CommentReportReceipt(
+                id: "report-preview",
+                status: "open",
+                submittedAt: "2026-07-23T12:00:00.000Z",
+                alreadyReported: false
+            )
         )
     }
 
@@ -124,6 +160,10 @@ struct AppServices {
             tournaments: RemoteTournamentRepository(apiClient: apiClient),
             matches: RemoteMatchRepository(apiClient: apiClient),
             comments: RemoteCommentRepository(apiClient: apiClient, session: session),
+            commentReports: RemoteCommentReportingRepository(
+                apiClient: apiClient,
+                session: session
+            ),
             session: session,
             realtime: URLSessionSocketIORealtimeUpdateRepository(
                 apiBaseURL: config.apiBaseURL,

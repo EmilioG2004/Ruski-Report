@@ -85,6 +85,7 @@ struct AppRootView: View {
                 matches: services.matches,
                 games: services.games,
                 comments: services.comments,
+                commentReports: services.commentReports,
                 session: session,
                 realtime: services.realtime,
                 logger: services.logger

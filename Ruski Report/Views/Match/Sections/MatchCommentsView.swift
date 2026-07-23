@@ -9,11 +9,14 @@ struct MatchCommentsView: View {
     @EnvironmentObject private var sheetRouter: AppSheetRouter
     @ObservedObject private var session: AccountSessionStore
     @StateObject private var controller: MatchCommentsController
+    @StateObject private var reportingController: CommentReportingController
     @State private var draftComment = ""
+    @State private var selectedReport: CommentReportPresentation?
 
     init(
         matchId: MatchPreview.ID,
         comments: any CommentRepository,
+        commentReports: any CommentReportingRepository,
         session: AccountSessionStore,
         realtime: any RealtimeUpdateRepository,
         logger: any AppLogger
@@ -25,6 +28,13 @@ struct MatchCommentsView: View {
                 comments: comments,
                 session: session,
                 realtime: realtime,
+                logger: logger
+            )
+        )
+        _reportingController = StateObject(
+            wrappedValue: CommentReportingController(
+                reports: commentReports,
+                session: session,
                 logger: logger
             )
         )
@@ -52,10 +62,27 @@ struct MatchCommentsView: View {
         .task {
             await controller.observeRealtimeUpdates()
         }
+        .sheet(item: $selectedReport) { comment in
+            ReportCommentSheet(
+                comment: comment,
+                controller: reportingController,
+                refreshComments: {
+                    await controller.refreshComments()
+                }
+            )
+        }
     }
 
     private func loadedContent(_ content: MatchCommentsContent) -> some View {
         VStack(alignment: .leading, spacing: 14) {
+            if let successMessage = reportingController.state.successMessage {
+                Label(successMessage, systemImage: "checkmark.circle")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("match.comments.reportSuccess")
+            }
+
             if content.comments.isEmpty {
                 EmptyMatchSectionView(
                     title: "No comments yet",
@@ -71,7 +98,9 @@ struct MatchCommentsView: View {
                             Divider()
                         }
 
-                        MatchCommentRowView(comment: comment)
+                        MatchCommentRowView(comment: comment) {
+                            beginReport(for: comment)
+                        }
                     }
                 }
             }
@@ -114,5 +143,18 @@ struct MatchCommentsView: View {
                 draftComment = ""
             }
         }
+    }
+
+    private func beginReport(for comment: MatchComment) {
+        guard session.current.canReportComments else {
+            sheetRouter.showAccount()
+            return
+        }
+
+        reportingController.reset()
+        selectedReport = CommentReportPresentation(
+            commentId: comment.id,
+            authorDisplayName: comment.authorDisplayName
+        )
     }
 }

@@ -40,6 +40,10 @@ final class MatchCommentsController: ObservableObject {
         await loadComments(showLoading: true, showFailure: true)
     }
 
+    func refreshComments() async {
+        await loadComments(showLoading: false, showFailure: false)
+    }
+
     func observeRealtimeUpdates() async {
         for await update in realtime.updates(
             subscription: .match(tournamentId: nil, matchId: matchId)
