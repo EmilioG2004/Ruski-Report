@@ -7,6 +7,7 @@ import {
   repositorySuccess,
   TransactionManager
 } from "../repositories";
+import { AccountDeletionEventPublisher } from "./account-deletion-event.publisher";
 import { AuthService } from "./auth.service";
 import { AuthCredentialsValidator } from "./auth-credentials.validator";
 import { PasswordHasher } from "./password-hasher";
@@ -152,6 +153,82 @@ describe("AuthService", () => {
       })
     ).rejects.toMatchObject({ code: "CONFLICT", statusCode: 409 });
   });
+
+  it("rejects an expired or otherwise inactive bearer session", async () => {
+    const dependencies = createDependencies();
+    dependencies.sessions.findActivePrincipalByTokenHash.mockResolvedValue(
+      repositorySuccess(null)
+    );
+
+    await expect(
+      dependencies.service.authenticate("expired-token")
+    ).rejects.toMatchObject({
+      code: "UNAUTHORIZED",
+      statusCode: 401
+    });
+    expect(
+      dependencies.sessions.findActivePrincipalByTokenHash
+    ).toHaveBeenCalledWith(expect.stringMatching(/^[a-f0-9]{64}$/));
+    expect(dependencies.accounts.deleteById).not.toHaveBeenCalled();
+  });
+
+  it("deletes an account atomically before publishing affected match updates", async () => {
+    const dependencies = createDependencies();
+    dependencies.accounts.deleteById.mockResolvedValue(
+      repositorySuccess({
+        deleted: true,
+        affectedMatchIds: ["match-1", "match-2"]
+      })
+    );
+
+    await dependencies.service.deleteAccount("user-1");
+
+    expect(dependencies.transactions.runInTransaction).toHaveBeenCalledTimes(1);
+    expect(dependencies.accounts.deleteById).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ id: "transaction-1" })
+    );
+    expect(dependencies.accountDeletionEvents.publish).toHaveBeenCalledWith({
+      affectedMatchIds: ["match-1", "match-2"]
+    });
+    expect(
+      dependencies.accountDeletionEvents.publish.mock.invocationCallOrder[0]
+    ).toBeGreaterThan(
+      dependencies.accounts.deleteById.mock.invocationCallOrder[0]
+    );
+  });
+
+  it("does not publish deletion events when the account is already absent", async () => {
+    const dependencies = createDependencies();
+    dependencies.accounts.deleteById.mockResolvedValue(
+      repositorySuccess({
+        deleted: false,
+        affectedMatchIds: []
+      })
+    );
+
+    await dependencies.service.deleteAccount("user-1");
+
+    expect(dependencies.accountDeletionEvents.publish).not.toHaveBeenCalled();
+  });
+
+  it("does not publish deletion events when persistence fails", async () => {
+    const dependencies = createDependencies();
+    dependencies.accounts.deleteById.mockResolvedValue(
+      repositoryFailure({
+        code: "storage_failed",
+        message: "delete failed"
+      })
+    );
+
+    await expect(
+      dependencies.service.deleteAccount("user-1")
+    ).rejects.toMatchObject({
+      code: "PERSISTENCE_ERROR",
+      message: "Unable to delete account."
+    });
+    expect(dependencies.accountDeletionEvents.publish).not.toHaveBeenCalled();
+  });
 });
 
 function createDependencies(): {
@@ -160,10 +237,12 @@ function createDependencies(): {
   sessions: jest.Mocked<AuthSessionRepository>;
   transactions: jest.Mocked<TransactionManager>;
   passwordHasher: jest.Mocked<PasswordHasher>;
+  accountDeletionEvents: jest.Mocked<AccountDeletionEventPublisher>;
 } {
   const accounts = {
     createLocalAccount: jest.fn(),
-    findLocalAccountByNormalizedDisplayName: jest.fn()
+    findLocalAccountByNormalizedDisplayName: jest.fn(),
+    deleteById: jest.fn()
   } as jest.Mocked<AccountRepository>;
   const sessions = {
     create: jest.fn(),
@@ -182,12 +261,16 @@ function createDependencies(): {
     hash: jest.fn(),
     verify: jest.fn()
   } as jest.Mocked<PasswordHasher>;
+  const accountDeletionEvents = {
+    publish: jest.fn()
+  } as jest.Mocked<AccountDeletionEventPublisher>;
 
   return {
     accounts,
     sessions,
     transactions,
     passwordHasher,
+    accountDeletionEvents,
     service: new AuthService(
       accounts,
       sessions,
@@ -195,7 +278,8 @@ function createDependencies(): {
       passwordHasher,
       new SessionTokenService(config),
       new AuthCredentialsValidator(config),
-      config
+      config,
+      accountDeletionEvents
     )
   };
 }
