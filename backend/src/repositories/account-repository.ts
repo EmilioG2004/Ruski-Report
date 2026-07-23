@@ -1,4 +1,4 @@
-import { LocalAccountRecord, UserAccount } from "../domain";
+import { LocalAccountRecord, MatchId, UserAccount } from "../domain";
 import { RepositoryResult } from "./repository-result";
 import { TransactionContext } from "./transaction";
 
@@ -10,6 +10,11 @@ export interface CreateLocalAccountInput {
   passwordHash: string;
 }
 
+export interface DeleteAccountResult {
+  deleted: boolean;
+  affectedMatchIds: MatchId[];
+}
+
 export interface AccountRepository {
   createLocalAccount(
     input: CreateLocalAccountInput,
@@ -19,4 +24,9 @@ export interface AccountRepository {
   findLocalAccountByNormalizedDisplayName(
     normalizedDisplayName: string
   ): Promise<RepositoryResult<LocalAccountRecord | null>>;
+
+  deleteById(
+    userId: string,
+    transaction?: TransactionContext
+  ): Promise<RepositoryResult<DeleteAccountResult>>;
 }

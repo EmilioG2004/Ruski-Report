@@ -3,7 +3,11 @@ import { randomUUID } from "node:crypto";
 
 import { PostgresDatabase } from "../../database";
 import { AccountProvider, AccountStatus, LocalAccountRecord, UserAccount } from "../../domain";
-import { AccountRepository, CreateLocalAccountInput } from "../account-repository";
+import {
+  AccountRepository,
+  CreateLocalAccountInput,
+  DeleteAccountResult
+} from "../account-repository";
 import { repositoryFailure, RepositoryResult, repositorySuccess } from "../repository-result";
 import { TransactionContext } from "../transaction";
 import { selectPostgresExecutor } from "./postgres-executor";
@@ -19,6 +23,10 @@ interface LocalAccountRow {
   created_at: Date | string;
   updated_at: Date | string;
   password_hash: string;
+}
+
+interface DeletedAccountRow {
+  affected_match_ids: string[] | null;
 }
 
 @Injectable()
@@ -75,6 +83,43 @@ export class PostgresAccountRepository implements AccountRepository {
       );
     } catch (error) {
       return repositoryFailure(mapPostgresError(error, "Failed to read account."));
+    }
+  }
+
+  async deleteById(
+    userId: string,
+    transaction?: TransactionContext
+  ): Promise<RepositoryResult<DeleteAccountResult>> {
+    try {
+      const executor = selectPostgresExecutor(this.database, transaction);
+      const result = await executor.query<DeletedAccountRow>(
+        `
+          WITH affected_matches AS (
+            SELECT array_agg(DISTINCT match_id ORDER BY match_id)
+              AS affected_match_ids
+            FROM comments
+            WHERE author_user_id = $1
+          ), deleted_account AS (
+            DELETE FROM user_accounts
+            WHERE id = $1
+            RETURNING id
+          )
+          SELECT affected_matches.affected_match_ids
+          FROM affected_matches
+          CROSS JOIN deleted_account
+        `,
+        [userId]
+      );
+      const row = result.rows[0];
+
+      return repositorySuccess({
+        deleted: row !== undefined,
+        affectedMatchIds: row?.affected_match_ids ?? []
+      });
+    } catch (error) {
+      return repositoryFailure(
+        mapPostgresError(error, "Failed to delete account.")
+      );
     }
   }
 }

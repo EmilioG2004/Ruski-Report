@@ -18,6 +18,10 @@ import {
   AuthCredentialsRequest,
   AuthCredentialsValidator
 } from "./auth-credentials.validator";
+import {
+  ACCOUNT_DELETION_EVENT_PUBLISHER,
+  AccountDeletionEventPublisher
+} from "./account-deletion-event.publisher";
 import { PASSWORD_HASHER, PasswordHasher } from "./password-hasher";
 import { IssuedSessionToken, SessionTokenService } from "./session-token.service";
 
@@ -34,7 +38,9 @@ export class AuthService {
     private readonly passwordHasher: PasswordHasher,
     private readonly tokens: SessionTokenService,
     private readonly credentialsValidator: AuthCredentialsValidator,
-    @Inject(AUTH_CONFIG) private readonly config: AuthConfig
+    @Inject(AUTH_CONFIG) private readonly config: AuthConfig,
+    @Inject(ACCOUNT_DELETION_EVENT_PUBLISHER)
+    private readonly accountDeletionEvents: AccountDeletionEventPublisher
   ) {}
 
   async register(
@@ -119,6 +125,22 @@ export class AuthService {
       await this.sessions.revokeByTokenHash(tokenHash),
       "Unable to revoke account session."
     );
+  }
+
+  async deleteAccount(userId: string): Promise<void> {
+    const deletion = await this.transactions.runInTransaction(
+      async (transaction) =>
+        requireAuthRepositoryValue(
+          await this.accounts.deleteById(userId, transaction),
+          "Unable to delete account."
+        )
+    );
+
+    if (deletion.deleted) {
+      this.accountDeletionEvents.publish({
+        affectedMatchIds: deletion.affectedMatchIds
+      });
+    }
   }
 
   private async createAccount(

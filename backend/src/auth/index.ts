@@ -1,3 +1,4 @@
+export * from "./account-deletion-event.publisher";
 export * from "./auth-credentials.validator";
 export * from "./auth.module";
 export * from "./auth-response";

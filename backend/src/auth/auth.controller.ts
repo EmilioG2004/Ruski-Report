@@ -48,4 +48,13 @@ export class AuthController {
   async signOut(@CurrentSessionTokenHash() tokenHash: string): Promise<void> {
     await this.auth.signOut(tokenHash);
   }
+
+  @Delete("account")
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(AuthSessionGuard)
+  async deleteAccount(
+    @CurrentPrincipal() principal: AuthenticatedPrincipal
+  ): Promise<void> {
+    await this.auth.deleteAccount(principal.userId);
+  }
 }
