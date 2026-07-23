@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 import { Comment, CommentId, MatchId } from "../domain";
 import {
   CommentRepository,
-  CreateCommentInput
+  CreateCommentInput,
+  CreateCommentResult
 } from "./comment-repository";
 import {
   repositoryFailure,
@@ -16,6 +17,7 @@ import { TransactionContext } from "./transaction";
 @Injectable()
 export class InMemoryCommentRepository implements CommentRepository {
   private comments: Comment[] = [];
+  private readonly normalizedBodyHashes = new Map<CommentId, string>();
 
   async findByMatchId(
     matchId: MatchId
@@ -44,7 +46,38 @@ export class InMemoryCommentRepository implements CommentRepository {
     };
 
     this.comments = [...this.comments, comment];
+    if (input.normalizedBodyHash !== undefined) {
+      this.normalizedBodyHashes.set(comment.id, input.normalizedBodyHash);
+    }
     return repositorySuccess(clone(comment));
+  }
+
+  async createUnlessRecentDuplicate(
+    input: CreateCommentInput,
+    earliestDuplicateCreatedAt: string,
+    _transaction: TransactionContext
+  ): Promise<RepositoryResult<CreateCommentResult>> {
+    const duplicate = this.comments.some(
+      (comment) =>
+        comment.deletedAt === undefined &&
+        comment.matchId === input.matchId &&
+        comment.author.userId === input.author.userId &&
+        input.normalizedBodyHash !== undefined &&
+        this.normalizedBodyHashes.get(comment.id) === input.normalizedBodyHash &&
+        comment.createdAt >= earliestDuplicateCreatedAt
+    );
+
+    if (duplicate) {
+      return repositorySuccess({ status: "duplicate" });
+    }
+
+    const created = await this.create(input);
+    return created.ok
+      ? repositorySuccess({
+          status: "created",
+          comment: created.value
+        })
+      : created;
   }
 
   async delete(

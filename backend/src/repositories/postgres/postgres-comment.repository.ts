@@ -9,7 +9,8 @@ import {
 import { PostgresDatabase } from "../../database";
 import {
   CommentRepository,
-  CreateCommentInput
+  CreateCommentInput,
+  CreateCommentResult
 } from "../comment-repository";
 import {
   repositoryFailure,
@@ -68,8 +69,9 @@ export class PostgresCommentRepository implements CommentRepository {
         `
           INSERT INTO comments (
             id, match_id, author_kind, author_display_name,
-            author_user_id, body, created_at, metadata
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            author_user_id, body, created_at, metadata,
+            normalized_body_hash
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
           RETURNING *
         `,
         [
@@ -80,10 +82,72 @@ export class PostgresCommentRepository implements CommentRepository {
           input.author.userId ?? null,
           input.body,
           createdAt,
-          {}
+          {},
+          input.normalizedBodyHash ?? null
         ]
       );
       return repositorySuccess(mapComment(result.rows[0]));
+    } catch (error) {
+      return this.failure(error, "Failed to create comment.");
+    }
+  }
+
+  async createUnlessRecentDuplicate(
+    input: CreateCommentInput,
+    earliestDuplicateCreatedAt: string,
+    transaction: TransactionContext
+  ): Promise<RepositoryResult<CreateCommentResult>> {
+    const userId = input.author.userId;
+    const normalizedBodyHash = input.normalizedBodyHash;
+    if (userId === undefined || normalizedBodyHash === undefined) {
+      return repositoryFailure({
+        code: "validation_failed",
+        message:
+          "Moderated comment creation requires an account identifier and normalized body hash."
+      });
+    }
+
+    try {
+      const executor = selectPostgresExecutor(this.database, transaction);
+      await executor.query(
+        `
+          SELECT pg_advisory_xact_lock(
+            hashtextextended($1::text || ':' || $2::text, 0)
+          )
+        `,
+        [input.matchId, userId]
+      );
+      const duplicate = await executor.query<{ exists: boolean }>(
+        `
+          SELECT EXISTS (
+            SELECT 1
+            FROM comments
+            WHERE match_id = $1
+              AND author_user_id = $2
+              AND normalized_body_hash = $3
+              AND created_at >= $4::timestamptz
+              AND deleted_at IS NULL
+          )
+        `,
+        [
+          input.matchId,
+          userId,
+          normalizedBodyHash,
+          earliestDuplicateCreatedAt
+        ]
+      );
+
+      if (duplicate.rows[0]?.exists === true) {
+        return repositorySuccess({ status: "duplicate" });
+      }
+
+      const created = await this.create(input, transaction);
+      return created.ok
+        ? repositorySuccess({
+            status: "created",
+            comment: created.value
+          })
+        : created;
     } catch (error) {
       return this.failure(error, "Failed to create comment.");
     }

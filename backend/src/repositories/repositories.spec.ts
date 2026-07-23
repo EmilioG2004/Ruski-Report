@@ -144,6 +144,24 @@ class FakeCommentRepository implements CommentRepository {
     return repositorySuccess(comment);
   }
 
+  async createUnlessRecentDuplicate(
+    input: {
+      matchId: string;
+      author: Comment["author"];
+      body: string;
+    },
+    _earliestDuplicateCreatedAt: string,
+    _transaction: TransactionContext
+  ) {
+    const created = await this.create(input);
+    return created.ok
+      ? repositorySuccess({
+          status: "created" as const,
+          comment: created.value
+        })
+      : created;
+  }
+
   async delete(commentId: string): Promise<RepositoryResult<Comment>> {
     const comment = this.comments.find((candidate) => candidate.id === commentId);
 
