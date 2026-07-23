@@ -167,6 +167,144 @@ postgresDescribe("PostgreSQL persistence", () => {
     expect(missing).toEqual({ ok: true, value: null });
   });
 
+  it("deletes an account, every session, and authored comments atomically", async () => {
+    await publishSnapshot(createSnapshot("account-deletion"));
+    const deletedAccount = await accounts.createLocalAccount({
+      displayName: "Delete Me",
+      normalizedDisplayName: "delete me",
+      passwordHash: "deleted-password-hash"
+    });
+    const retainedAccount = await accounts.createLocalAccount({
+      displayName: "Keep Me",
+      normalizedDisplayName: "keep me",
+      passwordHash: "retained-password-hash"
+    });
+    if (!deletedAccount.ok || !retainedAccount.ok) {
+      throw new Error("Expected test accounts to be created.");
+    }
+
+    const deletedTokenHash = "b".repeat(64);
+    const retainedTokenHash = "c".repeat(64);
+    await authSessions.create({
+      userId: deletedAccount.value.id,
+      tokenHash: deletedTokenHash,
+      expiresAt: "2099-01-01T00:00:00.000Z"
+    });
+    await authSessions.create({
+      userId: retainedAccount.value.id,
+      tokenHash: retainedTokenHash,
+      expiresAt: "2099-01-01T00:00:00.000Z"
+    });
+    await comments.create({
+      matchId: sampleMatchDetail.id,
+      author: {
+        kind: "account",
+        displayName: deletedAccount.value.displayName,
+        userId: deletedAccount.value.id
+      },
+      body: "Remove this comment."
+    });
+    await comments.create({
+      matchId: sampleMatchDetail.id,
+      author: {
+        kind: "account",
+        displayName: retainedAccount.value.displayName,
+        userId: retainedAccount.value.id
+      },
+      body: "Keep this comment."
+    });
+
+    const deletion = await transactions.runInTransaction(
+      async (transaction) => {
+        const result = await accounts.deleteById(
+          deletedAccount.value.id,
+          transaction
+        );
+        if (!result.ok) {
+          throw new Error(result.error.message);
+        }
+        return result.value;
+      }
+    );
+
+    const accountLookup =
+      await accounts.findLocalAccountByNormalizedDisplayName("delete me");
+    const deletedSession =
+      await authSessions.findActivePrincipalByTokenHash(deletedTokenHash);
+    const retainedSession =
+      await authSessions.findActivePrincipalByTokenHash(retainedTokenHash);
+    const storedComments = await comments.findByMatchId(sampleMatchDetail.id);
+    const repeatedDeletion = await accounts.deleteById(deletedAccount.value.id);
+
+    expect(deletion).toEqual({
+      deleted: true,
+      affectedMatchIds: [sampleMatchDetail.id]
+    });
+    expect(accountLookup).toEqual({ ok: true, value: null });
+    expect(deletedSession).toEqual({ ok: true, value: null });
+    expect(retainedSession.ok && retainedSession.value?.userId).toBe(
+      retainedAccount.value.id
+    );
+    expect(storedComments.ok && storedComments.value.map((comment) => comment.body))
+      .toEqual(["Keep this comment."]);
+    expect(repeatedDeletion).toEqual({
+      ok: true,
+      value: {
+        deleted: false,
+        affectedMatchIds: []
+      }
+    });
+  });
+
+  it("restores account data when deletion is rolled back", async () => {
+    await publishSnapshot(createSnapshot("account-deletion-rollback"));
+    const account = await accounts.createLocalAccount({
+      displayName: "Rollback User",
+      normalizedDisplayName: "rollback user",
+      passwordHash: "rollback-password-hash"
+    });
+    if (!account.ok) {
+      throw new Error(account.error.message);
+    }
+    const tokenHash = "d".repeat(64);
+    await authSessions.create({
+      userId: account.value.id,
+      tokenHash,
+      expiresAt: "2099-01-01T00:00:00.000Z"
+    });
+    await comments.create({
+      matchId: sampleMatchDetail.id,
+      author: {
+        kind: "account",
+        displayName: account.value.displayName,
+        userId: account.value.id
+      },
+      body: "This comment should survive rollback."
+    });
+
+    await expect(
+      transactions.runInTransaction(async (transaction) => {
+        const result = await accounts.deleteById(account.value.id, transaction);
+        if (!result.ok) {
+          throw new Error(result.error.message);
+        }
+        throw new Error("Force account deletion rollback.");
+      })
+    ).rejects.toThrow("Force account deletion rollback.");
+
+    const accountLookup =
+      await accounts.findLocalAccountByNormalizedDisplayName("rollback user");
+    const session = await authSessions.findActivePrincipalByTokenHash(tokenHash);
+    const storedComments = await comments.findByMatchId(sampleMatchDetail.id);
+
+    expect(accountLookup.ok && accountLookup.value?.account.id).toBe(
+      account.value.id
+    );
+    expect(session.ok && session.value?.userId).toBe(account.value.id);
+    expect(storedComments.ok && storedComments.value.map((comment) => comment.body))
+      .toContain("This comment should survive rollback.");
+  });
+
   it("stores failed and published upload reports", async () => {
     const failedReport = {
       id: "upload-failed",
