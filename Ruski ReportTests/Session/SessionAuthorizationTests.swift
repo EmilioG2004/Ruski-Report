@@ -185,6 +185,125 @@ struct SessionAuthorizationTests {
         #expect(await store.currentSession() == .guest)
         #expect(await credentials.accessToken() == nil)
     }
+
+    @Test func accountSessionStoreDeletesAccountAndClearsLocalSession() async throws {
+        let credentials = InMemorySessionCredentialStore(token: "opaque-token")
+        let repository = StubAuthenticationRepository()
+        let store = AccountSessionStore(
+            initialSession: authenticatedUserSession(),
+            authentication: repository,
+            credentials: credentials
+        )
+
+        try await store.deleteAccount()
+
+        #expect(repository.deleteAccountCallCount == 1)
+        #expect(await store.currentSession() == .guest)
+        #expect(await credentials.accessToken() == nil)
+        #expect(store.activity == .idle)
+    }
+
+    @Test func accountDeletionUnauthorizedRequiresSignInAgain() async {
+        let credentials = InMemorySessionCredentialStore(token: "expired-token")
+        let repository = StubAuthenticationRepository(
+            deleteAccountError: unauthorizedError()
+        )
+        let store = AccountSessionStore(
+            initialSession: authenticatedUserSession(),
+            authentication: repository,
+            credentials: credentials
+        )
+
+        do {
+            try await store.deleteAccount()
+            Issue.record("Expected account deletion to require reauthentication.")
+        } catch {
+            #expect(
+                error as? AccountDeletionError ==
+                    .reauthenticationRequired
+            )
+        }
+
+        #expect(await store.currentSession() == .guest)
+        #expect(await credentials.accessToken() == nil)
+        #expect(store.activity == .idle)
+    }
+
+    @Test func accountDeletionFailureRetainsConfirmedRemoteSession() async {
+        let credentials = InMemorySessionCredentialStore(token: "opaque-token")
+        let deletionError = AppError.networkUnavailable("Offline")
+        let repository = StubAuthenticationRepository(
+            currentProfile: .success(authenticatedAccountSession().profile),
+            deleteAccountError: deletionError
+        )
+        let store = AccountSessionStore(
+            initialSession: authenticatedUserSession(),
+            authentication: repository,
+            credentials: credentials
+        )
+
+        do {
+            try await store.deleteAccount()
+            Issue.record("Expected account deletion to fail while offline.")
+        } catch {
+            #expect(error as? AppError == deletionError)
+        }
+
+        #expect(repository.currentProfileCallCount == 1)
+        #expect(await store.currentSession() == authenticatedUserSession())
+        #expect(await credentials.accessToken() == "opaque-token")
+    }
+
+    @Test func ambiguousAccountDeletionClearsAnInvalidRemoteSession() async {
+        let credentials = InMemorySessionCredentialStore(token: "opaque-token")
+        let repository = StubAuthenticationRepository(
+            currentProfile: .failure(unauthorizedError()),
+            deleteAccountError: AppError.networkUnavailable("Connection lost")
+        )
+        let store = AccountSessionStore(
+            initialSession: authenticatedUserSession(),
+            authentication: repository,
+            credentials: credentials
+        )
+
+        do {
+            try await store.deleteAccount()
+            Issue.record("Expected an unknown account deletion status.")
+        } catch {
+            #expect(
+                error as? AccountDeletionError ==
+                    .deletionStatusUnknown
+            )
+        }
+
+        #expect(repository.currentProfileCallCount == 1)
+        #expect(await store.currentSession() == .guest)
+        #expect(await credentials.accessToken() == nil)
+    }
+
+    @Test func accountDeletionReportsLocalCredentialCleanupFailure() async {
+        let credentials = FailingClearSessionCredentialStore(
+            token: "opaque-token"
+        )
+        let store = AccountSessionStore(
+            initialSession: authenticatedUserSession(),
+            authentication: StubAuthenticationRepository(),
+            credentials: credentials
+        )
+
+        do {
+            try await store.deleteAccount()
+            Issue.record("Expected local credential cleanup to fail.")
+        } catch {
+            #expect(
+                error as? AccountDeletionError ==
+                    .localCredentialCleanupFailed
+            )
+        }
+
+        #expect(await store.currentSession() == .guest)
+        #expect(await credentials.accessToken() == "opaque-token")
+    }
 }
 
 private func authenticatedAccountSession() -> AuthenticatedAccountSession {
