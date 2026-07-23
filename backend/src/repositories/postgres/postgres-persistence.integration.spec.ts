@@ -13,6 +13,7 @@ import {
   sampleTournament
 } from "../../sample-data";
 import { PostgresCommentRepository } from "./postgres-comment.repository";
+import { PostgresCommentReportRepository } from "./postgres-comment-report.repository";
 import { PostgresAccountRepository } from "./postgres-account.repository";
 import { PostgresAuthSessionRepository } from "./postgres-auth-session.repository";
 import { PostgresTournamentReadRepository } from "./postgres-tournament-read.repository";
@@ -28,6 +29,7 @@ postgresDescribe("PostgreSQL persistence", () => {
   let snapshots: PostgresTournamentSnapshotRepository;
   let reads: PostgresTournamentReadRepository;
   let comments: PostgresCommentRepository;
+  let commentReports: PostgresCommentReportRepository;
   let accounts: PostgresAccountRepository;
   let authSessions: PostgresAuthSessionRepository;
   let uploadReports: PostgresUploadReportRepository;
@@ -43,6 +45,7 @@ postgresDescribe("PostgreSQL persistence", () => {
     snapshots = new PostgresTournamentSnapshotRepository(database);
     reads = new PostgresTournamentReadRepository(database);
     comments = new PostgresCommentRepository(database);
+    commentReports = new PostgresCommentReportRepository(database);
     accounts = new PostgresAccountRepository(database);
     authSessions = new PostgresAuthSessionRepository(database);
     uploadReports = new PostgresUploadReportRepository(database);
@@ -214,6 +217,125 @@ postgresDescribe("PostgreSQL persistence", () => {
     expect(stored.ok && stored.value).toHaveLength(1);
   });
 
+  it("persists, deduplicates, and resolves comment reports independently", async () => {
+    await publishSnapshot(createSnapshot("comment-reporting"));
+    const author = await accounts.createLocalAccount({
+      displayName: "Reported Author",
+      normalizedDisplayName: "reported author",
+      passwordHash: "author-password-hash"
+    });
+    const reporter = await accounts.createLocalAccount({
+      displayName: "Reporter",
+      normalizedDisplayName: "reporter",
+      passwordHash: "reporter-password-hash"
+    });
+    if (!author.ok || !reporter.ok) {
+      throw new Error("Expected reporting accounts to be created.");
+    }
+    const comment = await comments.create({
+      matchId: sampleMatchDetail.id,
+      author: {
+        kind: "account",
+        displayName: author.value.displayName,
+        userId: author.value.id
+      },
+      body: "A reportable comment."
+    });
+    if (!comment.ok) {
+      throw new Error(comment.error.message);
+    }
+
+    const submitted = await transactions.runInTransaction(
+      async (transaction) =>
+        commentReports.submit(
+          {
+            id: "report-integration-1",
+            commentId: comment.value.id,
+            matchId: sampleMatchDetail.id,
+            reporterUserId: reporter.value.id,
+            reason: "harassment",
+            context: "Please review this.",
+            createdAt: "2026-07-23T12:00:00.000Z"
+          },
+          {
+            earliestCreatedAt: "2026-07-23T11:50:00.000Z",
+            now: "2026-07-23T12:00:00.000Z",
+            maximumReports: 5,
+            windowSeconds: 600
+          },
+          transaction
+        )
+    );
+    const duplicate = await transactions.runInTransaction(
+      async (transaction) =>
+        commentReports.submit(
+          {
+            id: "report-integration-duplicate",
+            commentId: comment.value.id,
+            matchId: sampleMatchDetail.id,
+            reporterUserId: reporter.value.id,
+            reason: "spam",
+            createdAt: "2026-07-23T12:01:00.000Z"
+          },
+          {
+            earliestCreatedAt: "2026-07-23T11:51:00.000Z",
+            now: "2026-07-23T12:01:00.000Z",
+            maximumReports: 5,
+            windowSeconds: 600
+          },
+          transaction
+        )
+    );
+    const open = await commentReports.list("open", 10);
+    await publishSnapshot(
+      createSnapshot(
+        "comment-reporting-refresh",
+        sampleTournament.version + 1,
+        "Updated Tournament"
+      )
+    );
+    const afterPublication = await commentReports.list("open", 10);
+
+    await transactions.runInTransaction(async (transaction) => {
+      await commentReports.findByIdForUpdate(
+        "report-integration-1",
+        transaction
+      );
+      await comments.delete(comment.value.id, transaction);
+      await commentReports.resolve(
+        {
+          reportId: "report-integration-1",
+          reportedCommentId: comment.value.id,
+          resolution: "comment_removed",
+          moderatorId: "operator-1",
+          resolvedAt: "2026-07-23T12:05:00.000Z",
+          resolveAllForComment: true
+        },
+        transaction
+      );
+    });
+
+    const visibleComments = await comments.findByMatchId(sampleMatchDetail.id);
+    const resolved = await commentReports.list("resolved", 10);
+    expect(submitted.ok && submitted.value.status).toBe("created");
+    expect(duplicate.ok && duplicate.value).toMatchObject({
+      status: "existing",
+      report: { id: "report-integration-1" }
+    });
+    expect(open.ok && open.value[0]).toMatchObject({
+      report: { id: "report-integration-1" },
+      comment: { body: "A reportable comment." }
+    });
+    expect(afterPublication.ok && afterPublication.value[0].report.id).toBe(
+      "report-integration-1"
+    );
+    expect(visibleComments).toEqual({ ok: true, value: [] });
+    expect(resolved.ok && resolved.value[0].report).toMatchObject({
+      status: "resolved",
+      resolution: "comment_removed"
+    });
+  });
+
   it("deletes an account, every session, and authored comments atomically", async () => {
     await publishSnapshot(createSnapshot("account-deletion"));
     const deletedAccount = await accounts.createLocalAccount({
@@ -242,7 +364,7 @@ postgresDescribe("PostgreSQL persistence", () => {
       tokenHash: retainedTokenHash,
       expiresAt: "2099-01-01T00:00:00.000Z"
     });
-    await comments.create({
+    const retainedComment = await comments.create({
       matchId: sampleMatchDetail.id,
       author: {
         kind: "account",
@@ -259,6 +381,29 @@ postgresDescribe("PostgreSQL persistence", () => {
         userId: retainedAccount.value.id
       },
       body: "Keep this comment."
+    });
+    if (!retainedComment.ok) {
+      throw new Error(retainedComment.error.message);
+    }
+    await transactions.runInTransaction(async (transaction) => {
+      await commentReports.submit(
+        {
+          id: "report-account-deletion",
+          commentId: retainedComment.value.id,
+          matchId: sampleMatchDetail.id,
+          reporterUserId: deletedAccount.value.id,
+          reason: "other",
+          context: "Remove this private context with my account.",
+          createdAt: "2026-07-23T12:00:00.000Z"
+        },
+        {
+          earliestCreatedAt: "2026-07-23T11:50:00.000Z",
+          now: "2026-07-23T12:00:00.000Z",
+          maximumReports: 5,
+          windowSeconds: 600
+        },
+        transaction
+      );
     });
 
     const deletion = await transactions.runInTransaction(
@@ -281,6 +426,7 @@ postgresDescribe("PostgreSQL persistence", () => {
     const retainedSession =
       await authSessions.findActivePrincipalByTokenHash(retainedTokenHash);
     const storedComments = await comments.findByMatchId(sampleMatchDetail.id);
+    const anonymizedReports = await commentReports.list("open", 10);
     const repeatedDeletion = await accounts.deleteById(deletedAccount.value.id);
 
     expect(deletion).toEqual({
@@ -294,6 +440,11 @@ postgresDescribe("PostgreSQL persistence", () => {
     );
     expect(storedComments.ok && storedComments.value.map((comment) => comment.body))
       .toEqual(["Keep this comment."]);
+    expect(anonymizedReports.ok && anonymizedReports.value[0].report).toMatchObject({
+      id: "report-account-deletion",
+      reporterUserId: undefined,
+      context: undefined
+    });
     expect(repeatedDeletion).toEqual({
       ok: true,
       value: {

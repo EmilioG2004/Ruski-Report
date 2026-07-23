@@ -99,6 +99,11 @@ export class PostgresAccountRepository implements AccountRepository {
               AS affected_match_ids
             FROM comments
             WHERE author_user_id = $1
+          ), anonymized_reports AS (
+            UPDATE comment_reports
+            SET reporter_user_id = NULL, context = NULL
+            WHERE reporter_user_id = $1
+            RETURNING id
           ), deleted_account AS (
             DELETE FROM user_accounts
             WHERE id = $1
