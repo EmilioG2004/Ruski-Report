@@ -5,11 +5,12 @@ import { AdminModule } from "./admin";
 import { HealthController } from "./controllers/health.controller";
 import { AppExceptionFilter } from "./errors";
 import { APP_LOGGER, ConsoleAppLogger } from "./logging";
+import { CommentReportingModule } from "./moderation";
 import { PublicApiModule } from "./public-api";
 import { HealthService } from "./services/health.service";
 
 @Module({
-  imports: [AdminModule, PublicApiModule],
+  imports: [AdminModule, CommentReportingModule, PublicApiModule],
   controllers: [HealthController],
   providers: [
     HealthService,
