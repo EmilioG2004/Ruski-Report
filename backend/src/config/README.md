@@ -22,6 +22,18 @@ URL.
   salt lengths in bytes. Defaults to `64` and `16`.
 - `AUTH_SESSION_TOKEN_LENGTH`: Random opaque-token length in bytes. Defaults to
   `32`.
+- `COMMENT_MAX_BODY_LENGTH`: Maximum normalized comment length. Defaults to
+  `500`.
+- `COMMENT_DUPLICATE_WINDOW_SECONDS`: Time during which the same account cannot
+  post an identical normalized comment to the same match. Defaults to `300`.
+- `COMMENT_MAX_LINKS`: Maximum links accepted in one comment. Defaults to `2`.
+- `COMMENT_MAX_REPEATED_CHARACTER_RUN`: Maximum consecutive identical
+  non-whitespace characters. Defaults to `8`.
+- `COMMENT_MAX_REPEATED_TOKEN_COUNT`: Maximum consecutive identical normalized
+  words. Defaults to `4`.
+- `COMMENT_MODERATION_RULES_PATH`: JSON file containing `blockedPhrases`.
+  Defaults to `config/comment-moderation-rules.json`. Production deployment
+  may mount a separately maintained rules file without rebuilding the backend.
 - `DATABASE_URL`: PostgreSQL connection string. Defaults to the local
   `postgres:postgres` development database when omitted.
 - `DATABASE_SSL`: Set to `true` when the PostgreSQL endpoint requires TLS.
@@ -36,8 +48,6 @@ URL.
 - `TEST_DATABASE_URL`: Disposable PostgreSQL database used only by the explicit
   integration-test command.
 
-## Application Defaults
-
-- `comments.config.ts`: Match comment limits, including `maxBodyLength`.
-- `auth.config.ts`: Public account validation, password hashing, and session
-  lifetime settings.
+The backend fails startup if its moderation rules file is missing, invalid, or
+empty. This prevents a packaging or deployment mistake from silently disabling
+the objectionable-content filter.
