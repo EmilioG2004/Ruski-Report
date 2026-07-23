@@ -8,17 +8,26 @@ import {
   TournamentSummary
 } from "../domain";
 import {
+  CommentBodyNormalizer,
+  ConfiguredCommentModerationPolicy,
+  DefaultCommentSubmissionPolicy
+} from "../comments";
+import { CommentsConfig } from "../config/comments.config";
+import {
   GameDefinitionRepository,
   InMemoryGameDefinitionRepository
 } from "../games";
 import {
+  CommentRepository,
   InMemoryCommentRepository,
+  InMemoryTransactionManager,
   InMemoryTournamentReadRepository,
   repositorySuccess,
   RepositoryResult,
   TournamentReadRepository
 } from "../repositories";
 import { AppError } from "../errors";
+import { AppLogger } from "../logging";
 import { RealtimeUpdatePublisher } from "../realtime";
 import { CommentsService } from "./comments.service";
 import { GamesService } from "./games.service";
@@ -146,7 +155,7 @@ describe("public API services", () => {
 
   it("returns comments scoped to a match", async () => {
     const realtimeUpdates = createRealtimeUpdates();
-    const service = new CommentsService(
+    const service = createCommentsService(
       new InMemoryCommentRepository(),
       new InMemoryTournamentReadRepository(),
       realtimeUpdates
@@ -179,7 +188,7 @@ describe("public API services", () => {
   });
 
   it("derives the comment author from the authenticated principal", async () => {
-    const service = new CommentsService(
+    const service = createCommentsService(
       new InMemoryCommentRepository(),
       new InMemoryTournamentReadRepository(),
       createRealtimeUpdates()
@@ -203,7 +212,7 @@ describe("public API services", () => {
   });
 
   it("rejects invalid comment bodies", async () => {
-    const service = new CommentsService(
+    const service = createCommentsService(
       new InMemoryCommentRepository(),
       new InMemoryTournamentReadRepository(),
       createRealtimeUpdates()
@@ -215,7 +224,30 @@ describe("public API services", () => {
       }, authenticatedPrincipal)
     ).rejects.toMatchObject({
       code: "BAD_REQUEST",
-      statusCode: 400
+      statusCode: 400,
+      details: [
+        expect.objectContaining({
+          code: "COMMENT_BODY_REQUIRED",
+          path: "body"
+        })
+      ]
+    } satisfies Partial<AppError>);
+
+    await expect(
+      service.createMatchComment(
+        "match-2026-001",
+        { body: "a".repeat(501) },
+        authenticatedPrincipal
+      )
+    ).rejects.toMatchObject({
+      code: "BAD_REQUEST",
+      statusCode: 400,
+      details: [
+        expect.objectContaining({
+          code: "COMMENT_BODY_TOO_LONG",
+          metadata: { maximumBodyLength: 500 }
+        })
+      ]
     } satisfies Partial<AppError>);
   });
 
@@ -238,7 +270,7 @@ describe("public API services", () => {
   });
 
   it("raises not found when reading comments for a missing match", async () => {
-    const service = new CommentsService(
+    const service = createCommentsService(
       new InMemoryCommentRepository(),
       new EmptyTournamentReadRepository(),
       createRealtimeUpdates()
@@ -257,4 +289,49 @@ function createRealtimeUpdates(): jest.Mocked<RealtimeUpdatePublisher> {
     publishMatchUpdated: jest.fn(),
     publishCommentsUpdated: jest.fn()
   } as unknown as jest.Mocked<RealtimeUpdatePublisher>;
+}
+
+const commentsConfig: CommentsConfig = {
+  maximumBodyLength: 500,
+  duplicateWindowSeconds: 300,
+  maximumLinks: 2,
+  maximumRepeatedCharacterRun: 8,
+  maximumRepeatedTokenCount: 4,
+  moderationRulesPath: "unused-in-unit-tests.json"
+};
+
+function createCommentsService(
+  comments: CommentRepository,
+  tournaments: TournamentReadRepository,
+  realtimeUpdates: RealtimeUpdatePublisher,
+  logger: AppLogger = createLogger()
+): CommentsService {
+  const normalizer = new CommentBodyNormalizer();
+  const moderation = new ConfiguredCommentModerationPolicy(
+    { blockedPhrases: ["blocked phrase"] },
+    normalizer
+  );
+
+  return new CommentsService(
+    comments,
+    tournaments,
+    new InMemoryTransactionManager(),
+    realtimeUpdates,
+    new DefaultCommentSubmissionPolicy(
+      commentsConfig,
+      normalizer,
+      moderation
+    ),
+    commentsConfig,
+    logger
+  );
+}
+
+function createLogger(): jest.Mocked<AppLogger> {
+  return {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warning: jest.fn(),
+    error: jest.fn()
+  };
 }
