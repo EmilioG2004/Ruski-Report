@@ -20,6 +20,6 @@ import { RealtimeUpdatePublisher } from "./realtime-update.publisher";
       useExisting: RealtimeGateway
     }
   ],
-  exports: [RealtimeUpdatePublisher]
+  exports: [APP_LOGGER, RealtimeUpdatePublisher]
 })
 export class RealtimeModule {}

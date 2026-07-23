@@ -1,6 +1,11 @@
 import { HttpStatus, Inject, Injectable } from "@nestjs/common";
 
-import { commentsConfig, CommentsConfig } from "../config/comments.config";
+import {
+  COMMENT_SUBMISSION_POLICY,
+  CommentSubmissionPolicy,
+  CommentSubmissionRejectionReason
+} from "../comments";
+import { COMMENTS_CONFIG, CommentsConfig } from "../config/comments.config";
 import { AppError } from "../errors";
 import {
   AuthenticatedPrincipal,
@@ -11,6 +16,8 @@ import {
   COMMENT_REPOSITORY,
   CommentRepository,
   TOURNAMENT_READ_REPOSITORY,
+  TRANSACTION_MANAGER,
+  TransactionManager,
   TournamentReadRepository
 } from "../repositories";
 import {
@@ -18,6 +25,7 @@ import {
   unwrapRepositoryResult
 } from "./repository-result.mapper";
 import { RealtimeUpdatePublisher } from "../realtime";
+import { APP_LOGGER, AppLogger } from "../logging";
 
 export interface CreateCommentRequest {
   body?: string;
@@ -25,14 +33,20 @@ export interface CreateCommentRequest {
 
 @Injectable()
 export class CommentsService {
-  private readonly config: CommentsConfig = commentsConfig;
-
   constructor(
     @Inject(COMMENT_REPOSITORY)
     private readonly commentRepository: CommentRepository,
     @Inject(TOURNAMENT_READ_REPOSITORY)
     private readonly tournamentReadRepository: TournamentReadRepository,
-    private readonly realtimeUpdates: RealtimeUpdatePublisher
+    @Inject(TRANSACTION_MANAGER)
+    private readonly transactions: TransactionManager,
+    private readonly realtimeUpdates: RealtimeUpdatePublisher,
+    @Inject(COMMENT_SUBMISSION_POLICY)
+    private readonly submissionPolicy: CommentSubmissionPolicy,
+    @Inject(COMMENTS_CONFIG)
+    private readonly config: CommentsConfig,
+    @Inject(APP_LOGGER)
+    private readonly logger: AppLogger
   ) {}
 
   async getMatchComments(matchId: string): Promise<Comment[]> {
@@ -50,21 +64,59 @@ export class CommentsService {
     principal: AuthenticatedPrincipal
   ): Promise<Comment> {
     const match = await this.requireMatch(matchId);
+    const submission = this.submissionPolicy.evaluate(request?.body);
 
-    const body = this.normalizeBody(request?.body);
-    const comment = unwrapRepositoryResult(
-      await this.commentRepository.create({
+    if (submission.status === "rejected") {
+      this.logModerationDecision(
         matchId,
-        author: {
-          kind: "account",
-          displayName: principal.displayName,
-          userId: principal.userId
-        },
-        body
-      }),
-      "Unable to create match comment."
+        submission.reason,
+        submission.bodyCharacterCount,
+        submission.ruleId
+      );
+      throw commentSubmissionError(submission.reason, this.config);
+    }
+
+    this.logger.info("Comment moderation allowed submission.", {
+      component: CommentsService.name,
+      operation: "createMatchComment",
+      matchId,
+      metadata: {
+        decision: "allowed",
+        bodyCharacterCount: submission.body.characterCount
+      }
+    });
+
+    const creation = await this.transactions.runInTransaction(
+      async (transaction) =>
+        unwrapRepositoryResult(
+          await this.commentRepository.createUnlessRecentDuplicate(
+            {
+              matchId,
+              author: {
+                kind: "account",
+                displayName: principal.displayName,
+                userId: principal.userId
+              },
+              body: submission.body.value,
+              normalizedBodyHash: submission.body.fingerprint
+            },
+            this.earliestDuplicateCreatedAt(),
+            transaction
+          ),
+          "Unable to create match comment."
+        )
     );
 
+    if (creation.status === "duplicate") {
+      this.logModerationDecision(
+        matchId,
+        "recently_repeated",
+        submission.body.characterCount
+      );
+      throw repeatedCommentError();
+    }
+
+    const comment = creation.comment;
     this.realtimeUpdates.publishCommentsUpdated({
       tournamentId: match.tournamentId,
       matchId,
@@ -89,11 +141,39 @@ export class CommentsService {
     return match;
   }
 
-  private normalizeBody(body: string | undefined): string {
-    const normalized = body?.trim() ?? "";
+  private earliestDuplicateCreatedAt(): string {
+    return new Date(
+      Date.now() - this.config.duplicateWindowSeconds * 1000
+    ).toISOString();
+  }
 
-    if (normalized.length === 0) {
-      throw new AppError({
+  private logModerationDecision(
+    matchId: string,
+    reason: CommentSubmissionRejectionReason | "recently_repeated",
+    bodyCharacterCount: number,
+    ruleId?: string
+  ): void {
+    this.logger.warning("Comment submission rejected.", {
+      component: CommentsService.name,
+      operation: "createMatchComment",
+      matchId,
+      metadata: {
+        decision: "rejected",
+        reason,
+        bodyCharacterCount,
+        ruleId
+      }
+    });
+  }
+}
+
+function commentSubmissionError(
+  reason: CommentSubmissionRejectionReason,
+  config: CommentsConfig
+): AppError {
+  switch (reason) {
+    case "body_required":
+      return new AppError({
         code: "BAD_REQUEST",
         message: "Comment body is required.",
         statusCode: HttpStatus.BAD_REQUEST,
@@ -105,27 +185,67 @@ export class CommentsService {
           }
         ]
       });
-    }
-
-    if (normalized.length > this.config.maxBodyLength) {
-      throw new AppError({
+    case "body_too_long": {
+      const message =
+        `Comments must be ${config.maximumBodyLength} characters or fewer.`;
+      return new AppError({
         code: "BAD_REQUEST",
-        message: `Comments must be ${this.config.maxBodyLength} characters or fewer.`,
+        message,
         statusCode: HttpStatus.BAD_REQUEST,
         details: [
           {
             code: "COMMENT_BODY_TOO_LONG",
-            message: `Comments must be ${this.config.maxBodyLength} characters or fewer.`,
+            message,
             path: "body",
             metadata: {
-              maxBodyLength: this.config.maxBodyLength
+              maximumBodyLength: config.maximumBodyLength
             }
           }
         ]
       });
     }
-
-    return normalized;
+    case "content_not_allowed":
+      return new AppError({
+        code: "VALIDATION_FAILED",
+        message:
+          "This comment cannot be posted because it violates the community standards.",
+        statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        details: [
+          {
+            code: "COMMENT_CONTENT_NOT_ALLOWED",
+            message:
+              "Edit the comment so it follows the community standards.",
+            path: "body"
+          }
+        ]
+      });
+    case "spam_detected":
+      return new AppError({
+        code: "VALIDATION_FAILED",
+        message: "This comment looks like spam.",
+        statusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+        details: [
+          {
+            code: "COMMENT_SPAM_DETECTED",
+            message: "Edit the comment and try again.",
+            path: "body"
+          }
+        ]
+      });
   }
+}
 
+function repeatedCommentError(): AppError {
+  return new AppError({
+    code: "CONFLICT",
+    message: "You recently posted this comment.",
+    statusCode: HttpStatus.CONFLICT,
+    details: [
+      {
+        code: "COMMENT_RECENTLY_REPEATED",
+        message: "Wait before posting the same comment again.",
+        path: "body"
+      }
+    ]
+  });
 }
