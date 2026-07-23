@@ -251,6 +251,110 @@ describe("public API services", () => {
     } satisfies Partial<AppError>);
   });
 
+  it("normalizes comment bodies before persistence", async () => {
+    const service = createCommentsService(
+      new InMemoryCommentRepository(),
+      new InMemoryTournamentReadRepository(),
+      createRealtimeUpdates()
+    );
+
+    const comment = await service.createMatchComment(
+      "match-2026-001",
+      { body: "  Ｇｒｅａｔ\tmatch.\r\nNice!  " },
+      authenticatedPrincipal
+    );
+
+    expect(comment.body).toBe("Great match.\nNice!");
+  });
+
+  it("rejects prohibited content without persisting, publishing, or logging it", async () => {
+    const comments = new InMemoryCommentRepository();
+    const realtimeUpdates = createRealtimeUpdates();
+    const logger = createLogger();
+    const service = createCommentsService(
+      comments,
+      new InMemoryTournamentReadRepository(),
+      realtimeUpdates,
+      logger
+    );
+    const unsafeBody = "BLOCKED...PHRASE";
+
+    await expect(
+      service.createMatchComment(
+        "match-2026-001",
+        { body: unsafeBody },
+        authenticatedPrincipal
+      )
+    ).rejects.toMatchObject({
+      code: "VALIDATION_FAILED",
+      statusCode: 422,
+      details: [
+        expect.objectContaining({
+          code: "COMMENT_CONTENT_NOT_ALLOWED",
+          path: "body"
+        })
+      ]
+    });
+
+    const stored = await comments.findByMatchId("match-2026-001");
+    expect(stored).toEqual(repositorySuccess([]));
+    expect(realtimeUpdates.publishCommentsUpdated).not.toHaveBeenCalled();
+    expect(logger.warning).toHaveBeenCalledWith(
+      "Comment submission rejected.",
+      expect.objectContaining({
+        matchId: "match-2026-001",
+        metadata: expect.objectContaining({
+          decision: "rejected",
+          reason: "content_not_allowed",
+          ruleId: "blocked-phrase-1"
+        })
+      })
+    );
+    expect(JSON.stringify(logger.warning.mock.calls)).not.toContain(unsafeBody);
+  });
+
+  it("rejects spam-like and recently repeated comments with stable errors", async () => {
+    const realtimeUpdates = createRealtimeUpdates();
+    const service = createCommentsService(
+      new InMemoryCommentRepository(),
+      new InMemoryTournamentReadRepository(),
+      realtimeUpdates
+    );
+
+    await expect(
+      service.createMatchComment(
+        "match-2026-001",
+        { body: "Nooooooooo" },
+        authenticatedPrincipal
+      )
+    ).rejects.toMatchObject({
+      code: "VALIDATION_FAILED",
+      details: [
+        expect.objectContaining({ code: "COMMENT_SPAM_DETECTED" })
+      ]
+    });
+
+    await service.createMatchComment(
+      "match-2026-001",
+      { body: "Great   match." },
+      authenticatedPrincipal
+    );
+    await expect(
+      service.createMatchComment(
+        "match-2026-001",
+        { body: "  GREAT...MATCH  " },
+        authenticatedPrincipal
+      )
+    ).rejects.toMatchObject({
+      code: "CONFLICT",
+      statusCode: 409,
+      details: [
+        expect.objectContaining({ code: "COMMENT_RECENTLY_REPEATED" })
+      ]
+    });
+    expect(realtimeUpdates.publishCommentsUpdated).toHaveBeenCalledTimes(1);
+  });
+
   it("raises not found when a tournament does not exist", async () => {
     const service = new TournamentsService(new EmptyTournamentReadRepository());
 

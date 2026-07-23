@@ -167,6 +167,53 @@ postgresDescribe("PostgreSQL persistence", () => {
     expect(missing).toEqual({ ok: true, value: null });
   });
 
+  it("atomically rejects concurrent repeated comments", async () => {
+    await publishSnapshot(createSnapshot("comment-duplicate"));
+    const account = await accounts.createLocalAccount({
+      displayName: "Fast Poster",
+      normalizedDisplayName: "fast poster",
+      passwordHash: "test-password-hash"
+    });
+    if (!account.ok) {
+      throw new Error(account.error.message);
+    }
+    const input = {
+      matchId: sampleMatchDetail.id,
+      author: {
+        kind: "account" as const,
+        displayName: account.value.displayName,
+        userId: account.value.id
+      },
+      body: "Same normalized comment.",
+      normalizedBodyHash: "e".repeat(64)
+    };
+
+    const results = await Promise.all([
+      transactions.runInTransaction((transaction) =>
+        comments.createUnlessRecentDuplicate(
+          input,
+          "2000-01-01T00:00:00.000Z",
+          transaction
+        )
+      ),
+      transactions.runInTransaction((transaction) =>
+        comments.createUnlessRecentDuplicate(
+          input,
+          "2000-01-01T00:00:00.000Z",
+          transaction
+        )
+      )
+    ]);
+    const stored = await comments.findByMatchId(sampleMatchDetail.id);
+
+    expect(
+      results
+        .map((result) => result.ok && result.value.status)
+        .sort()
+    ).toEqual(["created", "duplicate"]);
+    expect(stored.ok && stored.value).toHaveLength(1);
+  });
+
   it("deletes an account, every session, and authored comments atomically", async () => {
     await publishSnapshot(createSnapshot("account-deletion"));
     const deletedAccount = await accounts.createLocalAccount({
