@@ -30,14 +30,31 @@ The operator-maintained rule file can be updated without changing the iOS app.
 Filter decisions are logged without the rejected comment body or account
 credentials.
 
+## Reporting and Review
+
+Signed-in users can choose **Report Comment** from a comment's action menu,
+select a reason, and optionally add context. Selecting **Other** requires
+context. Repeated submission of the same report does not create duplicate
+work, and rate limits prevent one account from overwhelming the operator
+queue.
+
+Reports are reviewed by the tournament operator. The operator may dismiss a
+report, mark it reviewed, or remove the comment from public match feeds.
+Removing a comment refreshes connected clients without requiring an app or
+backend redeployment.
+
+The real production support contact and a response-time commitment must be
+published before issue 41 is closed. They are intentionally not represented by
+placeholder contact information in this repository.
+
 ## Current Scope
 
-Issue 40 provides pre-publication filtering. User reporting, moderator review,
-and user blocking are separate safeguards tracked by issues 41 and 42. Those
-capabilities must be implemented before this document claims that users can
-report content or block accounts.
+Issues 40 and 41 provide pre-publication filtering, user reporting, and
+operator review. User blocking remains a separate safeguard tracked by issue
+42 and must be implemented before this document claims that users can block
+accounts.
 
-The public, mobile-readable version of these standards and operator contact
-information will be published as part of issue 43. Until that work is complete,
-this repository document is the implementation source of truth rather than the
-App Store support URL.
+The final public, mobile-readable version of these standards and operator
+contact information will be published as part of issue 43. Until then, this
+repository document is the implementation source of truth rather than the App
+Store support URL.

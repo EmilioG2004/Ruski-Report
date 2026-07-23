@@ -127,6 +127,13 @@ Public backend endpoints:
   - Returns comments for a match.
 - `POST /matches/:id/comments`
   - Adds a comment for authenticated users.
+- `POST /comments/:id/reports`
+  - Submits an authenticated, rate-limited report without trusting a
+    client-supplied reporter identity.
+- `GET /admin/comment-reports?status=open`
+  - Lists the authenticated operator moderation queue.
+- `PATCH /admin/comment-reports/:id`
+  - Records review, dismissal, or comment removal atomically.
 - `GET /events`
   - Opens Server-Sent Events or WebSocket stream for tournament/match updates.
 
@@ -150,6 +157,9 @@ Controllers depend on protocols, not concrete clients:
   - Justification: comments are optional match-scoped data.
 - `CommentRepository.postComment(matchID:text:) async throws -> Comment`
   - Justification: authenticated users need one controlled write path.
+- `CommentReportingRepository.submitReport(commentID:reason:context:) async throws -> CommentReportReceipt`
+  - Justification: reporting authorization and transport stay independent from
+    comment reading and posting.
 - `RealtimeTournamentClient.subscribe(to:) -> AsyncStream<TournamentEvent>`
   - Justification: app needs live pushed updates without coupling views to transport details.
 - `AuthSessionProviding.currentSession() async -> AuthSession`

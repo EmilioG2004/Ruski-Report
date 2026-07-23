@@ -38,9 +38,11 @@ Deletion removes the `user_accounts` row in a PostgreSQL transaction. Foreign
 keys cascade that deletion to local credentials, external identity mappings,
 every active or expired session, and every comment authored by the account. The
 backend does not retain an account tombstone, password hash, session hash,
-display name, or authored comment for legal or security purposes. Tournament
-player data comes from uploaded scorebooks and is independent of public app
-accounts, so it is outside this account-deletion cascade.
+display name, or authored comment. Existing moderation reports are anonymized:
+the reporter identifier and optional context are erased while minimal workflow
+state may remain for operational audit. Tournament player data comes from
+uploaded scorebooks and is independent of public app accounts, so it is outside
+this account-deletion cascade.
 
 After the transaction commits, the backend publishes a comment update for each
 affected match. Realtime publication is intentionally outside the transaction:
@@ -81,15 +83,27 @@ the iOS composer maps moderation failures to controlled local messages. Raw
 rejected text and private rule contents are not written to moderation logs.
 Recently repeated comments are rejected atomically per account and match.
 
+`POST /comments/:commentId/reports` also requires the public bearer session.
+The server derives the reporter identity from that session and never accepts a
+reporter ID from the request body. Duplicate reports from one account are
+idempotent, and the persisted per-account rate window is enforced
+transactionally.
+
+The operator report queue remains separate from public accounts. Requests to
+`GET /admin/comment-reports` and `PATCH /admin/comment-reports/:reportId` use
+the configured `x-admin-token`; the configured non-secret operator identifier
+is written to reviewed and resolved audit records.
+
 See [community-standards.md](community-standards.md) for prohibited content and
 the current enforcement scope.
 
 ## Admin Uploads
 
 `AdminScorebookController` remains protected by `AdminAuthGuard` and the
-`x-admin-token` header configured by `ADMIN_UPLOAD_TOKEN`. Public bearer tokens
-cannot authorize admin uploads, and the iOS account flow never stores or sends
-the admin token.
+`x-admin-token` header configured by `ADMIN_API_TOKEN`, with
+`ADMIN_UPLOAD_TOKEN` retained as a legacy fallback. Public bearer tokens cannot
+authorize admin uploads or moderation, and the iOS account flow never stores
+or sends the admin token.
 
 ## Game Center And TauID
 

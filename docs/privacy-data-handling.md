@@ -31,6 +31,25 @@ Allowed comments store a SHA-256 fingerprint of their normalized comparison
 form so recent duplicates can be detected without storing a second readable
 copy of the body.
 
+## Comment Reports
+
+Comment reports store the reported comment identifier, match identifier,
+reporter account identifier, selected reason, optional reporter context,
+workflow state, timestamps, resolution, and configured moderator audit
+identifier. Report context and reported comment text are never written to
+application logs.
+
+Reports remain separate from imported tournament snapshots and therefore are
+not removed by scorebook publication. Public comment reads never expose report
+records or reporter identities.
+
+When a reporting account is deleted, its report identity is anonymized and its
+optional context is erased in the same account-deletion transaction. The
+minimal reason, state, timestamps, and resolution may remain as an operational
+audit record. If a reported author's account is deleted, the associated
+comment is deleted and the report retains only its stable comment reference,
+not a copied comment body.
+
 Tournament rosters, scores, and player statistics are imported from scorebooks.
 They are tournament records rather than public-account profile data and are not
 created or controlled by the local account system.
@@ -46,9 +65,11 @@ PostgreSQL permanently deletes the account and cascades the same transaction to:
 - All active, expired, and revoked sessions.
 - Every comment authored by the account.
 
-The current application does not create a deletion audit record or retain any
-of those account-linked values for legal or security purposes. A second request
-using the former token is unauthorized because its server session was deleted.
+The current application does not create an account-deletion tombstone or retain
+those account-linked authentication and comment values. Existing moderation
+reports may retain their reason, state, timestamps, and resolution after the
+reporter identity and optional context are erased. A second request using the
+former token is unauthorized because its server session was deleted.
 
 No production backup or log-retention exception is implemented in this
 pre-deployment repository. If deployment adds backups or identity-bearing
