@@ -193,4 +193,13 @@ struct RepositoryTests {
         #expect(session.profile.provider == .localAccount)
         #expect(session.token == "opaque-token")
     }
+
+    @Test func authenticationRepositoryDeletesTheCurrentAccount() async throws {
+        let apiClient = RecordingAPIClient()
+        let repository = RemoteAuthenticationRepository(apiClient: apiClient)
+
+        try await repository.deleteAccount()
+
+        #expect(apiClient.requestedPaths == ["auth/account"])
+    }
 }

@@ -211,4 +211,6 @@ private final class StubAuthenticationRepository: AuthenticationRepository {
             throw signOutError
         }
     }
+
+    func deleteAccount() async throws {}
 }

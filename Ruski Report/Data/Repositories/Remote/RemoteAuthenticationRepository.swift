@@ -42,4 +42,8 @@ nonisolated final class RemoteAuthenticationRepository: AuthenticationRepository
     func signOut() async throws {
         try await apiClient.delete("auth/session")
     }
+
+    func deleteAccount() async throws {
+        try await apiClient.delete("auth/account")
+    }
 }

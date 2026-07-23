@@ -37,6 +37,7 @@ nonisolated final class PreviewAuthenticationRepository: AuthenticationRepositor
     }
 
     func signOut() async throws {}
+    func deleteAccount() async throws {}
 
     private func makeSession(displayName: String) -> AuthenticatedAccountSession {
         AuthenticatedAccountSession(

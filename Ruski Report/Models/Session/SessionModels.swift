@@ -112,4 +112,5 @@ nonisolated enum AccountSessionActivity: Equatable {
     case idle
     case restoring
     case authenticating
+    case deletingAccount
 }

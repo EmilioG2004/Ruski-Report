@@ -100,6 +100,33 @@ final class AccountSessionStore: ObservableObject, SessionRepository {
         logger.log(.info, "Account session signed out", metadata: [:])
     }
 
+    func deleteAccount() async throws {
+        activity = .deletingAccount
+        defer { activity = .idle }
+
+        do {
+            try await authentication.deleteAccount()
+        } catch {
+            try await handleDeletionFailure(error)
+            return
+        }
+
+        current = .guest
+
+        do {
+            try await credentials.clearAccessToken()
+        } catch {
+            logger.log(
+                .error,
+                "Account deleted but local credentials could not be cleared",
+                metadata: ["error": String(describing: error)]
+            )
+            throw AccountDeletionError.localCredentialCleanupFailed
+        }
+
+        logger.log(.info, "Account deleted", metadata: [:])
+    }
+
     private func authenticate(
         operation: () async throws -> AuthenticatedAccountSession
     ) async throws {
@@ -114,6 +141,37 @@ final class AccountSessionStore: ObservableObject, SessionRepository {
             "Account session authenticated",
             metadata: ["provider": session.profile.provider.logValue]
         )
+    }
+
+    private func handleDeletionFailure(_ deletionError: Error) async throws {
+        if isUnauthorized(deletionError) {
+            try await clearInvalidLocalSession()
+            throw AccountDeletionError.reauthenticationRequired
+        }
+
+        do {
+            _ = try await authentication.currentProfile()
+        } catch {
+            try await clearInvalidLocalSession()
+            throw AccountDeletionError.deletionStatusUnknown
+        }
+
+        throw deletionError
+    }
+
+    private func clearInvalidLocalSession() async throws {
+        current = .guest
+
+        do {
+            try await credentials.clearAccessToken()
+        } catch {
+            logger.log(
+                .error,
+                "Unable to clear invalid local account credentials",
+                metadata: ["error": String(describing: error)]
+            )
+            throw AccountDeletionError.localCredentialCleanupFailed
+        }
     }
 
     private func isUnauthorized(_ error: Error) -> Bool {

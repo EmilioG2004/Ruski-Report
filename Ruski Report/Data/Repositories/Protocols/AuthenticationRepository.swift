@@ -18,4 +18,5 @@ nonisolated protocol AuthenticationRepository {
 
     func currentProfile() async throws -> UserProfile
     func signOut() async throws
+    func deleteAccount() async throws
 }
