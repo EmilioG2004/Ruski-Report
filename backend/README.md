@@ -62,7 +62,7 @@ opaque token; clients send it as `Authorization: Bearer <token>`.
 The database stores scrypt password hashes and SHA-256 token hashes, never raw
 passwords or session tokens. Authenticated comment writes use the verified
 session identity. The separate `x-admin-token` header remains exclusive to
-scorebook administration.
+scorebook and moderation operator workflows.
 
 Account deletion runs in a transaction and cascades to credentials, identity
 mappings, every session, and authored comments. It publishes affected-match
@@ -83,6 +83,20 @@ Moderation thresholds use the `COMMENT_*` environment variables documented in
 `src/config/README.md`. Prohibited phrases come from
 `config/comment-moderation-rules.json` by default; production can set
 `COMMENT_MODERATION_RULES_PATH` to a mounted operator-maintained file.
+
+Signed-in users submit reports with `POST /comments/:commentId/reports`.
+Reports are stored independently of scorebook snapshots, deduplicated per
+account and comment, and protected by a persisted rate window.
+
+Operator endpoints use the separate `x-admin-token` credential:
+
+- `GET /admin/comment-reports?status=open`
+- `PATCH /admin/comment-reports/:reportId`
+
+Supported actions are `mark_reviewed`, `dismiss`, and `remove_comment`.
+Removing a comment updates its report records atomically and publishes a
+`comments.updated` event after commit. See the
+[comment moderation runbook](../docs/comment-moderation-runbook.md).
 
 ## Structure
 
