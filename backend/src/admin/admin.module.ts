@@ -8,15 +8,14 @@ import {
   PersistenceModule
 } from "../repositories";
 import { RealtimeModule } from "../realtime";
-import { AdminAuthGuard } from "./admin-auth.guard";
+import { AdminAuthModule } from "./admin-auth.module";
 import { AdminScorebookController } from "./admin-scorebook.controller";
 import { AdminScorebookService } from "./admin-scorebook.service";
 
 @Module({
-  imports: [PersistenceModule, RealtimeModule],
+  imports: [AdminAuthModule, PersistenceModule, RealtimeModule],
   controllers: [AdminScorebookController],
   providers: [
-    AdminAuthGuard,
     AdminScorebookService,
     {
       provide: GamePluginRegistry,
