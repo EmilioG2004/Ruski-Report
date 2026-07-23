@@ -8,6 +8,7 @@ import SwiftUI
 
 struct MatchCommentRowView: View {
     let comment: MatchComment
+    let report: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -31,8 +32,24 @@ struct MatchCommentRowView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 2)
             }
+            .accessibilityElement(children: .combine)
+
+            Spacer(minLength: 4)
+
+            Menu {
+                Button {
+                    report()
+                } label: {
+                    Label("Report Comment", systemImage: "exclamationmark.bubble")
+                }
+                .accessibilityIdentifier("match.comments.report.\(comment.id)")
+            } label: {
+                Image(systemName: "ellipsis")
+                    .frame(minWidth: 32, minHeight: 32)
+            }
+            .accessibilityLabel("Actions for comment by \(comment.authorDisplayName)")
+            .accessibilityIdentifier("match.comments.actions.\(comment.id)")
         }
-        .accessibilityElement(children: .combine)
     }
 }
 
