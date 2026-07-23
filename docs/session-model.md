@@ -20,12 +20,50 @@ and password. The backend exposes these routes under `/api`:
 - `POST /auth/login` verifies local credentials and creates a new session.
 - `GET /auth/session` verifies the current bearer session.
 - `DELETE /auth/session` revokes the current bearer session.
+- `DELETE /auth/account` permanently deletes the authenticated account.
 
 Passwords are stored as versioned scrypt hashes with random salts. Login and
 registration return a cryptographically random opaque token; PostgreSQL stores
 only its SHA-256 hash. Sessions have a configured expiration and can be revoked.
 The iOS app stores the raw token as a generic-password Keychain item and restores
 the session by asking the backend to verify it on launch.
+
+## Account Deletion
+
+`DELETE /auth/account` is protected by the same bearer-session guard as the
+other authenticated routes. The endpoint always derives the account identifier
+from the verified principal; clients cannot select a different account.
+
+Deletion removes the `user_accounts` row in a PostgreSQL transaction. Foreign
+keys cascade that deletion to local credentials, external identity mappings,
+every active or expired session, and every comment authored by the account. The
+backend does not retain an account tombstone, password hash, session hash,
+display name, or authored comment for legal or security purposes. Tournament
+player data comes from uploaded scorebooks and is independent of public app
+accounts, so it is outside this account-deletion cascade.
+
+After the transaction commits, the backend publishes a comment update for each
+affected match. Realtime publication is intentionally outside the transaction:
+a disconnected Socket.IO client cannot roll back or partially restore deleted
+account data.
+
+The iOS account screen explains that deletion is permanent and requires a
+second destructive confirmation. After a confirmed server response, the app
+clears the Keychain token and switches to guest mode. If the response is
+ambiguous, the app verifies the session:
+
+- A verified profile means deletion failed and the authenticated session can be
+  retained.
+- An unauthorized or unreachable verification endpoint means the client cannot
+  safely prove the account still exists, so it clears local credentials and
+  returns to guest mode.
+- A Keychain cleanup failure is shown explicitly while the in-memory session
+  remains in guest mode.
+
+The implementation-aligned privacy notes in
+[privacy-data-handling.md](privacy-data-handling.md) record the current
+retention behavior. Publishing the complete public privacy and support surfaces
+remains tracked separately by GitHub issue 43.
 
 ## Comment Posting
 
