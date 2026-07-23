@@ -140,6 +140,34 @@ struct SessionAuthorizationTests {
         #expect(await credentials.accessToken() == nil)
     }
 
+    @Test func unconfirmedAccountDeletionDoesNotLeaveTheClientSignedIn() async {
+        let credentials = InMemorySessionCredentialStore(token: "opaque-token")
+        let repository = StubAuthenticationRepository(
+            currentProfile: .failure(
+                AppError.networkUnavailable("Still offline")
+            ),
+            deleteAccountError: AppError.networkUnavailable("Connection lost")
+        )
+        let store = AccountSessionStore(
+            initialSession: authenticatedUserSession(),
+            authentication: repository,
+            credentials: credentials
+        )
+
+        do {
+            try await store.deleteAccount()
+            Issue.record("Expected an unknown account deletion status.")
+        } catch {
+            #expect(
+                error as? AccountDeletionError ==
+                    .deletionStatusUnknown
+            )
+        }
+
+        #expect(await store.currentSession() == .guest)
+        #expect(await credentials.accessToken() == nil)
+    }
+
     @Test func accountSessionStoreClearsLocalSessionWhenRemoteSignOutFails() async throws {
         let credentials = InMemorySessionCredentialStore(token: "opaque-token")
         let repository = StubAuthenticationRepository(
@@ -171,21 +199,38 @@ private func authenticatedAccountSession() -> AuthenticatedAccountSession {
     )
 }
 
+private func authenticatedUserSession() -> UserSession {
+    .authenticated(authenticatedAccountSession().profile)
+}
+
+private func unauthorizedError() -> AppError {
+    .backend(
+        code: "UNAUTHORIZED",
+        message: "Sign in to continue.",
+        details: []
+    )
+}
+
 private final class StubAuthenticationRepository: AuthenticationRepository {
     private let createdSession: AuthenticatedAccountSession
     private let currentProfileResult: Result<UserProfile, Error>
     private let signOutError: Error?
+    private let deleteAccountError: Error?
+    private(set) var currentProfileCallCount = 0
+    private(set) var deleteAccountCallCount = 0
 
     init(
         createdSession: AuthenticatedAccountSession = authenticatedAccountSession(),
         currentProfile: Result<UserProfile, Error> = .success(
             authenticatedAccountSession().profile
         ),
-        signOutError: Error? = nil
+        signOutError: Error? = nil,
+        deleteAccountError: Error? = nil
     ) {
         self.createdSession = createdSession
         currentProfileResult = currentProfile
         self.signOutError = signOutError
+        self.deleteAccountError = deleteAccountError
     }
 
     func register(
@@ -203,7 +248,8 @@ private final class StubAuthenticationRepository: AuthenticationRepository {
     }
 
     func currentProfile() async throws -> UserProfile {
-        try currentProfileResult.get()
+        currentProfileCallCount += 1
+        return try currentProfileResult.get()
     }
 
     func signOut() async throws {
@@ -212,5 +258,31 @@ private final class StubAuthenticationRepository: AuthenticationRepository {
         }
     }
 
-    func deleteAccount() async throws {}
+    func deleteAccount() async throws {
+        deleteAccountCallCount += 1
+
+        if let deleteAccountError {
+            throw deleteAccountError
+        }
+    }
+}
+
+private actor FailingClearSessionCredentialStore: SessionCredentialStore {
+    private var token: String?
+
+    init(token: String?) {
+        self.token = token
+    }
+
+    func accessToken() -> String? {
+        token
+    }
+
+    func saveAccessToken(_ token: String) {
+        self.token = token
+    }
+
+    func clearAccessToken() throws {
+        throw AppError.secureStorage("Unable to clear the saved session.")
+    }
 }
