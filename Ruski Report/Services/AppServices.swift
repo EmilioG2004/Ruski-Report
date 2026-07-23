@@ -26,7 +26,8 @@ struct AppServices {
             displayName: "Emilio Garcia",
             provider: .localAccount
         )
-        let isAuthenticated = scenario == .authenticated
+        let isAuthenticated =
+            scenario == .authenticated || scenario == .moderationRejected
         let tournamentDetail = scenario == .empty ?
             PreviewData.emptyTournamentDetail : PreviewData.tournamentDetail
         let tournamentFailure: AppError? = scenario == .unavailable ?
@@ -39,7 +40,9 @@ struct AppServices {
                 failure: tournamentFailure
             ),
             matches: PreviewMatchRepository(),
-            comments: PreviewCommentRepository(),
+            comments: PreviewCommentRepository(
+                postError: previewCommentPostError(for: scenario)
+            ),
             session: AccountSessionStore(
                 initialSession: isAuthenticated ? .authenticated(profile) : .guest,
                 authentication: PreviewAuthenticationRepository(profile: profile),
@@ -51,6 +54,26 @@ struct AppServices {
             realtime: NoopRealtimeUpdateRepository(),
             logger: logger,
             initialTournament: PreviewData.tournamentPreview
+        )
+    }
+
+    private static func previewCommentPostError(
+        for scenario: PreviewScenario
+    ) -> Error {
+        guard scenario == .moderationRejected else {
+            return AppError.unsupported("Preview comments are read-only.")
+        }
+
+        return AppError.backend(
+            code: "VALIDATION_FAILED",
+            message: "Unsafe backend moderation details.",
+            details: [
+                AppErrorDetail(
+                    code: "COMMENT_CONTENT_NOT_ALLOWED",
+                    message: "Matched a private moderation rule.",
+                    path: "body"
+                )
+            ]
         )
     }
 

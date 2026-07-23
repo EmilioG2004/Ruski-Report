@@ -139,9 +139,8 @@ final class MatchCommentsController: ObservableObject {
             )
             state = .loaded(
                 content.updated(
-                    postErrorMessage: AppErrorMessageFormatter.message(
-                        from: error,
-                        fallback: "Unable to post comment."
+                    postErrorMessage: CommentPostErrorFormatter.message(
+                        from: error
                     )
                 )
             )
