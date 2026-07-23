@@ -128,6 +128,34 @@ final class Ruski_ReportUITests: XCTestCase {
     }
 
     @MainActor
+    func testReportsACommentAndShowsConfirmation() throws {
+        let app = launchPreviewApp(scenario: "reporting")
+
+        openLiveMatch(in: app)
+        let scrollView = app.scrollViews["match.detail"]
+        let actions = app.buttons["match.comments.actions.comment-preview-1"]
+        scrollUntilHittable(actions, in: scrollView)
+        actions.tap()
+
+        let report = app.buttons["Report Comment"]
+        assertExists(report)
+        report.tap()
+
+        assertExists(app.navigationBars["Report Comment"])
+        let submit = app.buttons["comment.report.submit"]
+        assertExists(submit)
+        submit.tap()
+
+        let confirmation =
+            app.descendants(matching: .any)["match.comments.reportSuccess"]
+        assertExists(confirmation)
+        XCTAssertEqual(
+            confirmation.label,
+            "Report received. The tournament operator will review it."
+        )
+    }
+
+    @MainActor
     private func launchPreviewApp(scenario: String = "standard") -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
