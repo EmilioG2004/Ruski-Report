@@ -171,6 +171,52 @@ struct APIClientTests {
         #expect(MockURLProtocol.lastRequest?.httpMethod == "DELETE")
     }
 
+    @Test func putDecodesAResponseWithoutSendingABody() async throws {
+        let client = makeClient { request in
+            MockURLProtocol.lastRequest = request
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"name":"blocked"}"#.utf8)
+            )
+        }
+
+        let response: TestResponseDTO = try await client.put(
+            "account/blocks/user-2"
+        )
+
+        #expect(response.name == "blocked")
+        #expect(MockURLProtocol.lastRequest?.httpMethod == "PUT")
+        #expect(MockURLProtocol.lastRequest?.httpBody == nil)
+    }
+
+    @Test func deleteCanDecodeAnIdempotencyReceipt() async throws {
+        let client = makeClient { request in
+            MockURLProtocol.lastRequest = request
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"name":"unblocked"}"#.utf8)
+            )
+        }
+
+        let response: TestResponseDTO = try await client.delete(
+            "account/blocks/user-2",
+            response: TestResponseDTO.self
+        )
+
+        #expect(response.name == "unblocked")
+        #expect(MockURLProtocol.lastRequest?.httpMethod == "DELETE")
+    }
+
     private func makeClient(
         authorizer: any RequestAuthorizer = NoopRequestAuthorizer(),
         handler: @escaping MockURLProtocol.RequestHandler

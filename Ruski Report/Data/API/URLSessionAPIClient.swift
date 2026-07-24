@@ -51,6 +51,17 @@ nonisolated final class URLSessionAPIClient: APIClient {
         _ = try await request(path: path, method: "DELETE", body: nil)
     }
 
+    func put<Response: Decodable>(_ path: String) async throws -> Response {
+        try decode(try await request(path: path, method: "PUT", body: nil))
+    }
+
+    func delete<Response: Decodable>(
+        _ path: String,
+        response: Response.Type
+    ) async throws -> Response {
+        try decode(try await request(path: path, method: "DELETE", body: nil))
+    }
+
     private func request(
         path: String,
         method: String,
