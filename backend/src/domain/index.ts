@@ -14,3 +14,4 @@ export * from "./standing";
 export * from "./team";
 export * from "./tournament";
 export * from "./tournament-statistics";
+export * from "./user-block";
