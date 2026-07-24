@@ -100,7 +100,7 @@ describe("public API controllers", () => {
     };
     const service = {
       getMatchComments: jest
-        .fn<Promise<Comment[]>, [string]>()
+        .fn<Promise<Comment[]>, [string, AuthenticatedPrincipal | undefined]>()
         .mockResolvedValue([comment]),
       createMatchComment: jest
         .fn<Promise<Comment>, [string, CreateCommentRequest | null | undefined]>()
@@ -109,12 +109,15 @@ describe("public API controllers", () => {
     const controller = new CommentsController(service);
 
     await expect(
-      controller.getMatchComments("match-2026-001")
+      controller.getMatchComments("match-2026-001", principal)
     ).resolves.toEqual([comment]);
     await expect(
       controller.createMatchComment("match-2026-001", request, principal)
     ).resolves.toBe(comment);
-    expect(service.getMatchComments).toHaveBeenCalledWith("match-2026-001");
+    expect(service.getMatchComments).toHaveBeenCalledWith(
+      "match-2026-001",
+      principal
+    );
     expect(service.createMatchComment).toHaveBeenCalledWith(
       "match-2026-001",
       request,

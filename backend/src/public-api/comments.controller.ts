@@ -1,6 +1,11 @@
 import { Body, Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 
-import { AuthSessionGuard, CurrentPrincipal } from "../auth";
+import {
+  AuthSessionGuard,
+  CurrentOptionalPrincipal,
+  CurrentPrincipal,
+  OptionalAuthSessionGuard
+} from "../auth";
 import { AuthenticatedPrincipal, Comment } from "../domain";
 import {
   CommentsService,
@@ -12,8 +17,12 @@ export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}
 
   @Get()
-  getMatchComments(@Param("matchId") matchId: string): Promise<Comment[]> {
-    return this.commentsService.getMatchComments(matchId);
+  @UseGuards(OptionalAuthSessionGuard)
+  getMatchComments(
+    @Param("matchId") matchId: string,
+    @CurrentOptionalPrincipal() principal?: AuthenticatedPrincipal
+  ): Promise<Comment[]> {
+    return this.commentsService.getMatchComments(matchId, principal);
   }
 
   @Post()

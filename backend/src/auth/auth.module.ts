@@ -8,6 +8,7 @@ import { AuthController } from "./auth.controller";
 import { AuthCredentialsValidator } from "./auth-credentials.validator";
 import { AuthService } from "./auth.service";
 import { AuthSessionGuard } from "./auth-session.guard";
+import { OptionalAuthSessionGuard } from "./optional-auth-session.guard";
 import { PASSWORD_HASHER, ScryptPasswordHasher } from "./password-hasher";
 import { RealtimeAccountDeletionEventPublisher } from "./realtime-account-deletion-event.publisher";
 import { SessionTokenService } from "./session-token.service";
@@ -23,12 +24,18 @@ import { SessionTokenService } from "./session-token.service";
     AuthCredentialsValidator,
     AuthService,
     AuthSessionGuard,
+    OptionalAuthSessionGuard,
     RealtimeAccountDeletionEventPublisher,
     {
       provide: ACCOUNT_DELETION_EVENT_PUBLISHER,
       useExisting: RealtimeAccountDeletionEventPublisher
     }
   ],
-  exports: [AuthService, AuthSessionGuard, SessionTokenService]
+  exports: [
+    AuthService,
+    AuthSessionGuard,
+    OptionalAuthSessionGuard,
+    SessionTokenService
+  ]
 })
 export class AuthModule {}

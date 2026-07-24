@@ -18,6 +18,16 @@ export const CurrentPrincipal = createParamDecorator(
   }
 );
 
+export const CurrentOptionalPrincipal = createParamDecorator(
+  (
+    _data: unknown,
+    context: ExecutionContext
+  ): AuthenticatedPrincipal | undefined => {
+    const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
+    return request.principal;
+  }
+);
+
 export const CurrentSessionTokenHash = createParamDecorator(
   (_data: unknown, context: ExecutionContext): string => {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
