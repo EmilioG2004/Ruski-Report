@@ -15,6 +15,7 @@ nonisolated enum PreviewScenario: String, Equatable {
     case moderationRejected
     case reporting
     case reportUnavailable
+    case blocking
 
     static func resolve(from arguments: [String]) -> PreviewScenario {
         guard let flagIndex = arguments.firstIndex(of: argumentName),

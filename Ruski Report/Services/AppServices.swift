@@ -13,6 +13,7 @@ struct AppServices {
     let matches: any MatchRepository
     let comments: any CommentRepository
     let commentReports: any CommentReportingRepository
+    let userBlocking: any UserBlockingRepository
     let session: AccountSessionStore
     let realtime: any RealtimeUpdateRepository
     let logger: any AppLogger
@@ -31,11 +32,14 @@ struct AppServices {
             scenario == .authenticated ||
             scenario == .moderationRejected ||
             scenario == .reporting ||
-            scenario == .reportUnavailable
+            scenario == .reportUnavailable ||
+            scenario == .blocking
         let tournamentDetail = scenario == .empty ?
             PreviewData.emptyTournamentDetail : PreviewData.tournamentDetail
         let tournamentFailure: AppError? = scenario == .unavailable ?
             .networkUnavailable("The tournament service is temporarily unavailable.") : nil
+
+        let blockingState = PreviewUserBlockingState()
 
         return AppServices(
             games: PreviewGameRepository(),
@@ -45,11 +49,13 @@ struct AppServices {
             ),
             matches: PreviewMatchRepository(),
             comments: PreviewCommentRepository(
+                blockingState: blockingState,
                 postError: previewCommentPostError(for: scenario)
             ),
             commentReports: PreviewCommentReportingRepository(
                 result: previewCommentReportResult(for: scenario)
             ),
+            userBlocking: PreviewUserBlockingRepository(state: blockingState),
             session: AccountSessionStore(
                 initialSession: isAuthenticated ? .authenticated(profile) : .guest,
                 authentication: PreviewAuthenticationRepository(profile: profile),
@@ -161,6 +167,10 @@ struct AppServices {
             matches: RemoteMatchRepository(apiClient: apiClient),
             comments: RemoteCommentRepository(apiClient: apiClient, session: session),
             commentReports: RemoteCommentReportingRepository(
+                apiClient: apiClient,
+                session: session
+            ),
+            userBlocking: RemoteUserBlockingRepository(
                 apiClient: apiClient,
                 session: session
             ),
