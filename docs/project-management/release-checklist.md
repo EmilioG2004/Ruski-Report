@@ -34,7 +34,7 @@ available through `RUSKI_PRIVACY_POLICY_URL`, `RUSKI_SUPPORT_URL`, and
 - [x] Account-deletion claims match the PostgreSQL cascade and report
       anonymization behavior.
 - [x] `node scripts/validate-policy-site.mjs` passes.
-- [ ] Enable GitHub Pages with GitHub Actions as its publishing source.
+- [x] Enable GitHub Pages with GitHub Actions as its publishing source.
 - [ ] Run the `Publish policy site` workflow from the production source.
 - [ ] Verify every production URL returns successfully on a phone-sized screen.
 - [ ] Confirm App Store Connect privacy answers match the published policy.
