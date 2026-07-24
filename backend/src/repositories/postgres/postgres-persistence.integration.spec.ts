@@ -19,6 +19,7 @@ import { PostgresAuthSessionRepository } from "./postgres-auth-session.repositor
 import { PostgresTournamentReadRepository } from "./postgres-tournament-read.repository";
 import { PostgresTournamentSnapshotRepository } from "./postgres-tournament-snapshot.repository";
 import { PostgresUploadReportRepository } from "./postgres-upload-report.repository";
+import { PostgresUserBlockRepository } from "./postgres-user-block.repository";
 
 const testDatabaseUrl = process.env.TEST_DATABASE_URL;
 const postgresDescribe = testDatabaseUrl === undefined ? describe.skip : describe;
@@ -33,6 +34,7 @@ postgresDescribe("PostgreSQL persistence", () => {
   let accounts: PostgresAccountRepository;
   let authSessions: PostgresAuthSessionRepository;
   let uploadReports: PostgresUploadReportRepository;
+  let userBlocks: PostgresUserBlockRepository;
 
   beforeAll(async () => {
     const config = loadDatabaseConfig({
@@ -49,6 +51,7 @@ postgresDescribe("PostgreSQL persistence", () => {
     accounts = new PostgresAccountRepository(database);
     authSessions = new PostgresAuthSessionRepository(database);
     uploadReports = new PostgresUploadReportRepository(database);
+    userBlocks = new PostgresUserBlockRepository(database);
   });
 
   beforeEach(async () => {
@@ -139,6 +142,105 @@ postgresDescribe("PostgreSQL persistence", () => {
         body: "Great match."
       }
     ]);
+  });
+
+  it("filters blocked comments for one session and preserves guest visibility", async () => {
+    await publishSnapshot(createSnapshot("user-blocking"));
+    const viewer = await accounts.createLocalAccount({
+      displayName: "Viewer",
+      normalizedDisplayName: "viewer",
+      passwordHash: "viewer-password-hash"
+    });
+    const blocked = await accounts.createLocalAccount({
+      displayName: "Blocked Player",
+      normalizedDisplayName: "blocked player",
+      passwordHash: "blocked-password-hash"
+    });
+    const visible = await accounts.createLocalAccount({
+      displayName: "Visible Player",
+      normalizedDisplayName: "visible player",
+      passwordHash: "visible-password-hash"
+    });
+    if (!viewer.ok || !blocked.ok || !visible.ok) {
+      throw new Error("Expected blocking test accounts to be created.");
+    }
+
+    await comments.create({
+      matchId: sampleMatchDetail.id,
+      author: {
+        kind: "account",
+        displayName: blocked.value.displayName,
+        userId: blocked.value.id
+      },
+      body: "Hidden for the viewer."
+    });
+    await comments.create({
+      matchId: sampleMatchDetail.id,
+      author: {
+        kind: "account",
+        displayName: visible.value.displayName,
+        userId: visible.value.id
+      },
+      body: "Visible for everyone."
+    });
+
+    const created = await transactions.runInTransaction((transaction) =>
+      userBlocks.block(
+        {
+          blockerUserId: viewer.value.id,
+          blockedUser: {
+            userId: blocked.value.id,
+            displayName: blocked.value.displayName
+          },
+          createdAt: "2026-07-23T12:00:00.000Z"
+        },
+        transaction
+      )
+    );
+    const retried = await transactions.runInTransaction((transaction) =>
+      userBlocks.block(
+        {
+          blockerUserId: viewer.value.id,
+          blockedUser: {
+            userId: blocked.value.id,
+            displayName: blocked.value.displayName
+          },
+          createdAt: "2026-07-23T12:01:00.000Z"
+        },
+        transaction
+      )
+    );
+    const guestComments = await comments.findByMatchId(sampleMatchDetail.id);
+    const viewerComments = await comments.findByMatchId(
+      sampleMatchDetail.id,
+      viewer.value.id
+    );
+
+    expect(created.ok && created.value.status).toBe("created");
+    expect(retried.ok && retried.value.status).toBe("existing");
+    expect(guestComments.ok && guestComments.value).toHaveLength(2);
+    expect(
+      viewerComments.ok &&
+        viewerComments.value.map((comment) => comment.body)
+    ).toEqual(["Visible for everyone."]);
+
+    await expect(
+      userBlocks.unblock(viewer.value.id, blocked.value.id)
+    ).resolves.toEqual({
+      ok: true,
+      value: { wasBlocked: true }
+    });
+    await expect(
+      userBlocks.unblock(viewer.value.id, blocked.value.id)
+    ).resolves.toEqual({
+      ok: true,
+      value: { wasBlocked: false }
+    });
+    const restoredComments = await comments.findByMatchId(
+      sampleMatchDetail.id,
+      viewer.value.id
+    );
+    expect(restoredComments.ok && restoredComments.value).toHaveLength(2);
   });
 
   it("stores, verifies, and revokes hashed account sessions", async () => {
@@ -386,6 +488,30 @@ postgresDescribe("PostgreSQL persistence", () => {
       throw new Error(retainedComment.error.message);
     }
     await transactions.runInTransaction(async (transaction) => {
+      await userBlocks.block(
+        {
+          blockerUserId: deletedAccount.value.id,
+          blockedUser: {
+            userId: retainedAccount.value.id,
+            displayName: retainedAccount.value.displayName
+          },
+          createdAt: "2026-07-23T11:58:00.000Z"
+        },
+        transaction
+      );
+      await userBlocks.block(
+        {
+          blockerUserId: retainedAccount.value.id,
+          blockedUser: {
+            userId: deletedAccount.value.id,
+            displayName: deletedAccount.value.displayName
+          },
+          createdAt: "2026-07-23T11:59:00.000Z"
+        },
+        transaction
+      );
+    });
+    await transactions.runInTransaction(async (transaction) => {
       await commentReports.submit(
         {
           id: "report-account-deletion",
@@ -427,6 +553,9 @@ postgresDescribe("PostgreSQL persistence", () => {
       await authSessions.findActivePrincipalByTokenHash(retainedTokenHash);
     const storedComments = await comments.findByMatchId(sampleMatchDetail.id);
     const anonymizedReports = await commentReports.list("open", 10);
+    const remainingBlocks = await database.query<{ block_count: string }>(
+      "SELECT count(*) AS block_count FROM user_blocks"
+    );
     const repeatedDeletion = await accounts.deleteById(deletedAccount.value.id);
 
     expect(deletion).toEqual({
@@ -445,6 +574,7 @@ postgresDescribe("PostgreSQL persistence", () => {
       reporterUserId: undefined,
       context: undefined
     });
+    expect(remainingBlocks.rows[0]?.block_count).toBe("0");
     expect(repeatedDeletion).toEqual({
       ok: true,
       value: {
