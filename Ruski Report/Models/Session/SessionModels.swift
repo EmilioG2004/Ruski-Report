@@ -37,6 +37,7 @@ nonisolated enum UserSession: Equatable {
                 canViewTournamentData: true,
                 canPostComments: false,
                 canReportComments: false,
+                canBlockUsers: false,
                 canAccessAdminUploads: false
             )
         case .authenticated:
@@ -44,6 +45,7 @@ nonisolated enum UserSession: Equatable {
                 canViewTournamentData: true,
                 canPostComments: true,
                 canReportComments: true,
+                canBlockUsers: true,
                 canAccessAdminUploads: false
             )
         case .admin:
@@ -51,6 +53,7 @@ nonisolated enum UserSession: Equatable {
                 canViewTournamentData: true,
                 canPostComments: true,
                 canReportComments: true,
+                canBlockUsers: true,
                 canAccessAdminUploads: true
             )
         }
@@ -68,8 +71,21 @@ nonisolated enum UserSession: Equatable {
         capabilities.canReportComments
     }
 
+    var canBlockUsers: Bool {
+        capabilities.canBlockUsers
+    }
+
     var canAccessAdminUploads: Bool {
         capabilities.canAccessAdminUploads
+    }
+
+    var profile: UserProfile? {
+        switch self {
+        case .guest:
+            nil
+        case .authenticated(let profile), .admin(let profile):
+            profile
+        }
     }
 }
 
@@ -99,6 +115,7 @@ nonisolated struct UserSessionCapabilities: Equatable {
     let canViewTournamentData: Bool
     let canPostComments: Bool
     let canReportComments: Bool
+    let canBlockUsers: Bool
     let canAccessAdminUploads: Bool
 }
 
