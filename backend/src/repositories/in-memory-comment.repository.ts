@@ -19,16 +19,38 @@ export class InMemoryCommentRepository implements CommentRepository {
   private comments: Comment[] = [];
   private readonly normalizedBodyHashes = new Map<CommentId, string>();
 
+  constructor(
+    private readonly isAuthorBlocked: (
+      viewerUserId: string,
+      authorUserId: string
+    ) => boolean = () => false
+  ) {}
+
   async findByMatchId(
-    matchId: MatchId
+    matchId: MatchId,
+    viewerUserId?: string
   ): Promise<RepositoryResult<Comment[]>> {
     return repositorySuccess(
       clone(
         this.comments.filter(
           (comment) =>
-            comment.matchId === matchId && comment.deletedAt === undefined
+            comment.matchId === matchId &&
+            comment.deletedAt === undefined &&
+            !this.isBlockedComment(comment, viewerUserId)
         )
       )
+    );
+  }
+
+  private isBlockedComment(
+    comment: Comment,
+    viewerUserId: string | undefined
+  ): boolean {
+    const authorUserId = comment.author.userId;
+    return (
+      viewerUserId !== undefined &&
+      authorUserId !== undefined &&
+      this.isAuthorBlocked(viewerUserId, authorUserId)
     );
   }
 

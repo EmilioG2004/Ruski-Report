@@ -22,6 +22,7 @@ import {
   InMemoryCommentRepository,
   InMemoryTransactionManager,
   InMemoryTournamentReadRepository,
+  InMemoryUserBlockRepository,
   repositorySuccess,
   RepositoryResult,
   TournamentReadRepository
@@ -185,6 +186,70 @@ describe("public API services", () => {
         commentId: created.id
       }
     });
+  });
+
+  it("filters blocked authors only for the authenticated viewer", async () => {
+    const blocks = new InMemoryUserBlockRepository();
+    const comments = new InMemoryCommentRepository((viewer, author) =>
+      blocks.isBlocked(viewer, author)
+    );
+    const service = createCommentsService(
+      comments,
+      new InMemoryTournamentReadRepository(),
+      createRealtimeUpdates()
+    );
+    const first = await comments.create({
+      matchId: "match-2026-001",
+      author: {
+        kind: "account",
+        displayName: "Blocked Player",
+        userId: "user-blocked"
+      },
+      body: "Hidden for one viewer."
+    });
+    const second = await comments.create({
+      matchId: "match-2026-001",
+      author: {
+        kind: "account",
+        displayName: "Visible Player",
+        userId: "user-visible"
+      },
+      body: "Visible for everyone."
+    });
+    if (!first.ok || !second.ok) {
+      throw new Error("Unable to seed comments.");
+    }
+
+    await blocks.block(
+      {
+        blockerUserId: authenticatedPrincipal.userId,
+        blockedUser: {
+          userId: "user-blocked",
+          displayName: "Blocked Player"
+        },
+        createdAt: "2026-07-23T12:00:00.000Z"
+      },
+      {
+        id: "transaction-1",
+        startedAt: "2026-07-23T12:00:00.000Z"
+      }
+    );
+
+    await expect(
+      service.getMatchComments("match-2026-001")
+    ).resolves.toHaveLength(2);
+    await expect(
+      service.getMatchComments("match-2026-001", authenticatedPrincipal)
+    ).resolves.toEqual([second.value]);
+
+    await blocks.unblock(
+      authenticatedPrincipal.userId,
+      "user-blocked"
+    );
+
+    await expect(
+      service.getMatchComments("match-2026-001", authenticatedPrincipal)
+    ).resolves.toEqual([first.value, second.value]);
   });
 
   it("derives the comment author from the authenticated principal", async () => {

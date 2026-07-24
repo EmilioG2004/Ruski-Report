@@ -49,11 +49,14 @@ export class CommentsService {
     private readonly logger: AppLogger
   ) {}
 
-  async getMatchComments(matchId: string): Promise<Comment[]> {
+  async getMatchComments(
+    matchId: string,
+    principal?: AuthenticatedPrincipal
+  ): Promise<Comment[]> {
     await this.requireMatch(matchId);
 
     return unwrapRepositoryResult(
-      await this.commentRepository.findByMatchId(matchId),
+      await this.commentRepository.findByMatchId(matchId, principal?.userId),
       "Unable to load match comments."
     );
   }

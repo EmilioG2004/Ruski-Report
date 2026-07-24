@@ -26,7 +26,10 @@ export type CreateCommentResult =
     };
 
 export interface CommentRepository {
-  findByMatchId(matchId: MatchId): Promise<RepositoryResult<Comment[]>>;
+  findByMatchId(
+    matchId: MatchId,
+    viewerUserId?: string
+  ): Promise<RepositoryResult<Comment[]>>;
 
   findById(
     commentId: CommentId,
