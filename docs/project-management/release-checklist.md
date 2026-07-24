@@ -35,8 +35,10 @@ available through `RUSKI_PRIVACY_POLICY_URL`, `RUSKI_SUPPORT_URL`, and
       anonymization behavior.
 - [x] `node scripts/validate-policy-site.mjs` passes.
 - [x] Enable GitHub Pages with GitHub Actions as its publishing source.
-- [ ] Run the `Publish policy site` workflow from the production source.
-- [ ] Verify every production URL returns successfully on a phone-sized screen.
+- [x] Run the `Publish policy site` workflow from the production source.
+- [x] Verify every production URL returns HTTP 200 and matches its committed
+      source.
+- [ ] Inspect every production page visually at a phone-sized width.
 - [ ] Confirm App Store Connect privacy answers match the published policy.
 - [ ] Enter the privacy and support URLs in App Store Connect.
 
