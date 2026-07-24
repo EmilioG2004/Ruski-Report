@@ -7,6 +7,7 @@ import SwiftUI
 
 struct AccountSessionView: View {
     @ObservedObject var session: AccountSessionStore
+    @ObservedObject var userBlocking: UserBlockingStore
     @Environment(\.dismiss) private var dismiss
     @State private var mode = AccountFormMode.signIn
     @State private var displayName = ""
@@ -31,9 +32,11 @@ struct AccountSessionView: View {
                     guestControls
                 case .authenticated:
                     signedInControls
+                    blockedUsersControls
                     accountDeletionControls
                 case .admin:
                     signedInControls
+                    blockedUsersControls
                 }
             }
             .scrollContentBackground(.hidden)
@@ -144,6 +147,21 @@ struct AccountSessionView: View {
             Text("Danger Zone")
         } footer: {
             Text(AccountDeletionCopy.sectionFooter)
+        }
+    }
+
+    private var blockedUsersControls: some View {
+        Section("Safety") {
+            NavigationLink {
+                BlockedUsersView(blocking: userBlocking)
+            } label: {
+                Label(
+                    "Blocked Users",
+                    systemImage: "person.crop.circle.badge.xmark"
+                )
+            }
+            .disabled(session.activity != .idle)
+            .accessibilityIdentifier("account.blocks")
         }
     }
 
