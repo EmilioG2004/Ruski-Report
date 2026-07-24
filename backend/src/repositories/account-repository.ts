@@ -25,6 +25,11 @@ export interface AccountRepository {
     normalizedDisplayName: string
   ): Promise<RepositoryResult<LocalAccountRecord | null>>;
 
+  findActiveByIdForShare(
+    userId: string,
+    transaction: TransactionContext
+  ): Promise<RepositoryResult<UserAccount | null>>;
+
   deleteById(
     userId: string,
     transaction?: TransactionContext

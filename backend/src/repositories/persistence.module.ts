@@ -13,7 +13,8 @@ import {
   PostgresCommentRepository,
   PostgresTournamentReadRepository,
   PostgresTournamentSnapshotRepository,
-  PostgresUploadReportRepository
+  PostgresUploadReportRepository,
+  PostgresUserBlockRepository
 } from "./postgres";
 import { ACCOUNT_REPOSITORY } from "./account-repository";
 import { AUTH_SESSION_REPOSITORY } from "./auth-session-repository";
@@ -23,6 +24,7 @@ import { TOURNAMENT_READ_REPOSITORY } from "./tournament-read-repository";
 import { TOURNAMENT_SNAPSHOT_REPOSITORY } from "./tournament-snapshot-repository";
 import { TRANSACTION_MANAGER } from "./transaction";
 import { UPLOAD_REPORT_REPOSITORY } from "./upload-report-repository";
+import { USER_BLOCK_REPOSITORY } from "./user-block-repository";
 
 const repositoryProviders = [
   {
@@ -56,6 +58,10 @@ const repositoryProviders = [
   {
     provide: UPLOAD_REPORT_REPOSITORY,
     useExisting: PostgresUploadReportRepository
+  },
+  {
+    provide: USER_BLOCK_REPOSITORY,
+    useExisting: PostgresUserBlockRepository
   }
 ];
 
@@ -74,6 +80,7 @@ const repositoryProviders = [
     PostgresTournamentReadRepository,
     PostgresTournamentSnapshotRepository,
     PostgresUploadReportRepository,
+    PostgresUserBlockRepository,
     ...repositoryProviders
   ],
   exports: [PostgresDatabase, ...repositoryProviders]

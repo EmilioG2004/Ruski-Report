@@ -242,6 +242,7 @@ function createDependencies(): {
   const accounts = {
     createLocalAccount: jest.fn(),
     findLocalAccountByNormalizedDisplayName: jest.fn(),
+    findActiveByIdForShare: jest.fn(),
     deleteById: jest.fn()
   } as jest.Mocked<AccountRepository>;
   const sessions = {

@@ -14,7 +14,7 @@ import { selectPostgresExecutor } from "./postgres-executor";
 import { mapPostgresError } from "./postgres-repository-error";
 import { readISOString } from "./postgres-values";
 
-interface LocalAccountRow {
+interface AccountRow {
   id: string;
   display_name: string;
   normalized_display_name: string;
@@ -22,6 +22,9 @@ interface LocalAccountRow {
   status: AccountStatus;
   created_at: Date | string;
   updated_at: Date | string;
+}
+
+interface LocalAccountRow extends AccountRow {
   password_hash: string;
 }
 
@@ -86,6 +89,30 @@ export class PostgresAccountRepository implements AccountRepository {
     }
   }
 
+  async findActiveByIdForShare(
+    userId: string,
+    transaction: TransactionContext
+  ): Promise<RepositoryResult<UserAccount | null>> {
+    try {
+      const executor = selectPostgresExecutor(this.database, transaction);
+      const result = await executor.query<AccountRow>(
+        `
+          SELECT *
+          FROM user_accounts
+          WHERE id = $1 AND status = 'active'
+          FOR SHARE
+        `,
+        [userId]
+      );
+      const row = result.rows[0];
+      return repositorySuccess(row === undefined ? null : mapAccount(row));
+    } catch (error) {
+      return repositoryFailure(
+        mapPostgresError(error, "Failed to read account.")
+      );
+    }
+  }
+
   async deleteById(
     userId: string,
     transaction?: TransactionContext
@@ -129,7 +156,7 @@ export class PostgresAccountRepository implements AccountRepository {
   }
 }
 
-function mapAccount(row: LocalAccountRow): UserAccount {
+function mapAccount(row: AccountRow): UserAccount {
   return {
     id: row.id,
     displayName: row.display_name,
