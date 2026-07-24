@@ -17,6 +17,27 @@ const transaction = {
 };
 
 describe("PostgresCommentRepository moderation writes", () => {
+  it("filters blocked authors for authenticated reads and preserves guest reads", async () => {
+    const database = {
+      query: jest.fn().mockResolvedValue(queryResult([]))
+    } as unknown as PostgresDatabase;
+    const repository = new PostgresCommentRepository(database);
+
+    await repository.findByMatchId("match-1", "viewer-1");
+    await repository.findByMatchId("match-1");
+
+    expect(database.query).toHaveBeenNthCalledWith(
+      1,
+      expect.stringContaining("FROM user_blocks block"),
+      ["match-1", "viewer-1"]
+    );
+    expect(database.query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining("$2::text IS NULL"),
+      ["match-1", null]
+    );
+  });
+
   it("takes a transaction lock before checking for a recent duplicate", async () => {
     const client = createClient();
     client.query

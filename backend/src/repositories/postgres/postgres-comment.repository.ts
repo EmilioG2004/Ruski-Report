@@ -40,16 +40,27 @@ export class PostgresCommentRepository implements CommentRepository {
   constructor(private readonly database: PostgresDatabase) {}
 
   async findByMatchId(
-    matchId: string
+    matchId: string,
+    viewerUserId?: string
   ): Promise<RepositoryResult<Comment[]>> {
     try {
       const result = await this.database.query<CommentRow>(
         `
           SELECT * FROM comments
           WHERE match_id = $1 AND deleted_at IS NULL
+            AND (
+              $2::text IS NULL
+              OR author_user_id IS NULL
+              OR NOT EXISTS (
+                SELECT 1
+                FROM user_blocks block
+                WHERE block.blocker_user_id = $2
+                  AND block.blocked_user_id = comments.author_user_id
+              )
+            )
           ORDER BY created_at, id
         `,
-        [matchId]
+        [matchId, viewerUserId ?? null]
       );
       return repositorySuccess(result.rows.map(mapComment));
     } catch (error) {
