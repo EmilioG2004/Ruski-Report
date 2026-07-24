@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 
-import { APP_LOGGER, ConsoleAppLogger } from "../logging";
+import { LoggingModule } from "../logging";
 import {
   REALTIME_EVENT_BROADCASTER
 } from "./realtime-event-broadcaster";
@@ -8,11 +8,8 @@ import { RealtimeGateway } from "./realtime.gateway";
 import { RealtimeUpdatePublisher } from "./realtime-update.publisher";
 
 @Module({
+  imports: [LoggingModule],
   providers: [
-    {
-      provide: APP_LOGGER,
-      useClass: ConsoleAppLogger
-    },
     RealtimeGateway,
     RealtimeUpdatePublisher,
     {
@@ -20,6 +17,6 @@ import { RealtimeUpdatePublisher } from "./realtime-update.publisher";
       useExisting: RealtimeGateway
     }
   ],
-  exports: [APP_LOGGER, RealtimeUpdatePublisher]
+  exports: [LoggingModule, RealtimeUpdatePublisher]
 })
 export class RealtimeModule {}
