@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta
+      name="description"
+      content="Privacy policy for the Ruski Report iOS app and service."
+    >
+    <title>Privacy Policy — Ruski Report</title>
+    <link rel="stylesheet" href="../assets/base.css">
+    <link rel="stylesheet" href="../assets/site.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#content">Skip to content</a>
+    <header class="site-header">
+      <div class="header-content">
+        <a class="brand" href="../">Ruski Report</a>
+        <nav class="site-nav" aria-label="Policy navigation">
+          <ul>
+            <li><a href="./" aria-current="page">Privacy</a></li>
+            <li><a href="../support/">Support</a></li>
+            <li><a href="../community-standards/">Community standards</a></li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main id="content" class="reading-width">
+      <p class="eyebrow">Privacy policy</p>
+      <h1>How Ruski Report handles data</h1>
+      <p class="lede">
+        This policy explains the information used to provide tournament
+        viewing, public match comments, account security, moderation, and
+        support.
+      </p>
+      <p class="meta">
+        Effective and last updated: July 24, 2026 · Policy owner: Emilio Garcia
+      </p>
+
+      <aside class="notice">
+        Ruski Report is an independent project operated by Emilio Garcia. It is
+        not affiliated with, sponsored by, or endorsed by a school or
+        educational institution.
+      </aside>
+
+      <section class="policy-section">
+        <h2>Who may use the service</h2>
+        <p>
+          Ruski Report is not directed to children under 13. People under 13
+          may not create an account or post comments. If the operator learns
+          that personal information was submitted by someone under 13, the
+          associated account and information will be deleted. A parent or
+          guardian can contact
+          <a href="mailto:ruskisupport@gmail.com">ruskisupport@gmail.com</a>
+          with a deletion request.
+        </p>
+      </section>
+
+      <section class="policy-section">
+        <h2>Information collected</h2>
+        <dl class="data-list">
+          <dt>Account information</dt>
+          <dd>
+            Display name, an internal account identifier, account provider,
+            account status, and timestamps. Local passwords are stored only as
+            versioned, salted scrypt hashes; raw passwords are not stored.
+          </dd>
+
+          <dt>Session information</dt>
+          <dd>
+            A SHA-256 hash of each opaque session token, the account it belongs
+            to, and creation, expiration, revocation, and last-use timestamps.
+            The raw token is kept in the iOS Keychain and is not stored by the
+            backend.
+          </dd>
+
+          <dt>Public comments</dt>
+          <dd>
+            Comment text, the associated match, author display name and account
+            identifier, creation time, moderation status, and a one-way
+            normalized fingerprint used to detect recent duplicate comments.
+          </dd>
+
+          <dt>Reports and blocks</dt>
+          <dd>
+            Comment reports include the reported comment, selected reason,
+            optional context, reporter account identifier, workflow status,
+            and moderator decision. Private block records contain the two
+            account identifiers and a timestamp.
+          </dd>
+
+          <dt>Tournament and upload information</dt>
+          <dd>
+            Official tournament records include roster names, teams, matches,
+            scores, events, standings, brackets, and statistics. Authorized
+            scorebook uploads retain source metadata such as file name, size,
+            checksum, validation results, and publication status. The original
+            workbook bytes are processed for import and are not stored as a
+            database file.
+          </dd>
+
+          <dt>Operational information</dt>
+          <dd>
+            The service may process request timestamps, routes, outcomes,
+            request identifiers, and limited error details for security and
+            reliability. Hosting or encrypted-traffic providers may process IP
+            addresses and connection metadata when delivering a request.
+            Application logs are designed not to contain passwords, session
+            tokens, comment text, report context, or reporter identities.
+          </dd>
+
+          <dt>Support correspondence</dt>
+          <dd>
+            Information a person chooses to include in an email to Ruski
+            Report support, along with the email address needed to respond.
+          </dd>
+        </dl>
+      </section>
+
+      <section class="policy-section">
+        <h2>How information is used</h2>
+        <ul>
+          <li>Provide official tournament views and live updates.</li>
+          <li>Create accounts, authenticate sessions, and secure access.</li>
+          <li>Publish comments under the author’s chosen display name.</li>
+          <li>Filter spam and prohibited content.</li>
+          <li>Process reports, blocking choices, and moderation decisions.</li>
+          <li>Diagnose failures, protect the service, and answer support requests.</li>
+        </ul>
+        <p>
+          Ruski Report does not use third-party analytics, advertising SDKs, or
+          cross-app tracking. Personal data is not sold and is not used to
+          build advertising profiles.
+        </p>
+      </section>
+
+      <section class="policy-section">
+        <h2>When information is public or shared</h2>
+        <p>
+          Official tournament records are public. A posted comment, its
+          timestamp, and the author’s chosen display name are public within the
+          associated match. Report details, reporter identities, account
+          credentials, sessions, and block relationships are not public.
+        </p>
+        <p>
+          Limited information is processed by service providers only as needed
+          to operate Ruski Report. GitHub Pages hosts these policy pages, Google
+          processes support email sent to the Gmail address, Apple distributes
+          the iOS app, and production hosting or network providers may deliver
+          encrypted app traffic. Providers are expected to protect information
+          consistently with this policy. This policy will be updated before a
+          new provider receives app data.
+        </p>
+        <p>
+          Information may also be disclosed when reasonably necessary to
+          comply with law, protect a person’s safety, investigate abuse, or
+          defend the security and rights of the service and its users.
+        </p>
+      </section>
+
+      <section class="policy-section">
+        <h2>Retention and deletion</h2>
+        <dl class="data-list">
+          <dt>Tournament records</dt>
+          <dd>
+            Normalized tournament history—including teams, roster names,
+            brackets, matches, scores, events, standings, and statistics—is
+            retained permanently as the official Ruski archive. Upload source
+            metadata and publication results may remain with that record.
+          </dd>
+
+          <dt>Comments</dt>
+          <dd>
+            Comments are retained indefinitely as part of match discussion.
+            A moderator may remove a comment from public feeds when it violates
+            the community standards. Deleting the author’s account permanently
+            deletes every comment authored by that account, including its body
+            and identifying relationship.
+          </dd>
+
+          <dt>Accounts, sessions, and blocks</dt>
+          <dd>
+            Account credentials, identity mappings, session records, and block
+            relationships are retained while the account exists. Account
+            deletion removes them in one database transaction. Signing out
+            revokes the current session and clears its raw token from the
+            device; account deletion removes all server session records.
+          </dd>
+
+          <dt>Moderation reports</dt>
+          <dd>
+            Report records are retained as needed to investigate abuse and
+            document moderation outcomes. If a reporter deletes their account,
+            the reporter identity and optional report context are erased. A
+            minimal reason, state, timestamp, and resolution may remain as an
+            operational audit record.
+          </dd>
+
+          <dt>Operational copies and support</dt>
+          <dd>
+            Production logs and rotating backups, if enabled, are configured
+            for a maximum 30-day retention unless a longer period is required
+            for security investigation or law. Support correspondence is
+            normally deleted within one year after the request is resolved.
+          </dd>
+        </dl>
+      </section>
+
+      <section id="your-choices" class="policy-section">
+        <h2>Your choices</h2>
+        <ul>
+          <li>
+            View tournaments as a guest without creating a public account.
+          </li>
+          <li>
+            Sign out to revoke the current session and remove its token from
+            the device.
+          </li>
+          <li>
+            Block another account to hide that account’s comments from your
+            signed-in view.
+          </li>
+          <li>
+            Choose <strong>Account → Delete Account</strong> in the app to
+            permanently delete the account and its associated comments,
+            credentials, sessions, and blocks.
+          </li>
+          <li>
+            Email support to ask a privacy question or request help with access
+            or deletion.
+          </li>
+        </ul>
+        <p>
+          Account deletion cannot be undone. Official tournament records are
+          not public-account profile data and are not removed by deleting an
+          app account.
+        </p>
+      </section>
+
+      <section class="policy-section">
+        <h2>Security</h2>
+        <p>
+          Ruski Report uses password hashing, opaque session tokens, iOS
+          Keychain storage, authenticated operator routes, database
+          transactions, and content-minimized logging. No system can guarantee
+          absolute security. Please report a suspected security or privacy
+          problem to support and do not include a password or session token.
+        </p>
+      </section>
+
+      <section class="policy-section">
+        <h2>Policy changes</h2>
+        <p>
+          This page will be updated when data practices materially change. The
+          effective date above identifies the current version. Material changes
+          will not be applied retroactively where consent is required.
+        </p>
+      </section>
+
+      <section class="policy-section">
+        <h2>Contact</h2>
+        <p>
+          Emilio Garcia is the policy owner and independent operator. Email
+          requests are normally answered within three business days.
+        </p>
+        <p>
+          <a class="contact-link" href="mailto:ruskisupport@gmail.com">
+            Email ruskisupport@gmail.com
+          </a>
+        </p>
+      </section>
+    </main>
+
+    <div class="site-footer-wrap">
+      <footer class="site-footer">
+        <p>© 2026 Emilio Garcia</p>
+        <p><a href="../support/">Support and contact information</a></p>
+      </footer>
+    </div>
+  </body>
+</html>
