@@ -1,5 +1,11 @@
 # Ruski Report Community Standards
 
+The canonical public source is
+[`docs/public/community-standards/index.html`](public/community-standards/index.html)
+and is prepared for publication at:
+
+https://emiliog2004.github.io/Ruski-Report/community-standards/
+
 Ruski Report match comments are for constructive discussion of tournament play.
 These standards describe the content that the automated submission filter
 rejects and the broader rules that moderation features must enforce.
@@ -43,9 +49,10 @@ report, mark it reviewed, or remove the comment from public match feeds.
 Removing a comment refreshes connected clients without requiring an app or
 backend redeployment.
 
-The real production support contact and a response-time commitment must be
-published before issue 41 is closed. They are intentionally not represented by
-placeholder contact information in this repository.
+Emilio Garcia is the operator and normally responds to reports, moderation
+questions, and appeals within three business days. Users can contact
+`ruskisupport@gmail.com`. Reports and support email are not monitored
+continuously.
 
 ## Blocking
 
@@ -68,7 +75,8 @@ operator review, and private user blocking. The backend is the enforcement
 boundary for submission moderation, operator authorization, block ownership,
 and authenticated comment filtering.
 
-The final public, mobile-readable version of these standards and operator
-contact information will be published as part of issue 43. Until then, this
-repository document is the implementation source of truth rather than the App
-Store support URL.
+The mobile-readable public standards, privacy policy, and support page live
+under `docs/public/` and deploy independently of the Raspberry Pi backend.
+Ruski Report is independently operated and has no school or
+educational-institution affiliation. People under 13 may not create accounts or
+post comments.

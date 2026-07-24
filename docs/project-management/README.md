@@ -9,6 +9,7 @@ Use this folder for planning, scope control, delivery tracking, and project deci
 - [Roadmap](roadmap.md)
 - [Milestones](milestones.md)
 - [Backlog](backlog.md)
+- [App Store release checklist](release-checklist.md)
 - [Risks and assumptions](risks-and-assumptions.md)
 - [Meeting notes](meeting-notes/)
 

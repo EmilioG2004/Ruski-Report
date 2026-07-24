@@ -12,9 +12,9 @@ Set these values in the backend runtime environment:
 - `MODERATION_OPERATOR_ID`: non-secret identifier recorded in audit fields.
 - `COMMENT_REPORT_QUEUE_PAGE_SIZE`: maximum queue results per request.
 
-Before issue 41 is closed, publish a real support contact and a response-time
-commitment the operator can consistently honor. Issue 43 will place those
-values on the permanent public support and policy pages.
+The public support contact is `ruskisupport@gmail.com`. Emilio Garcia owns the
+queue and normally responds within three business days. The canonical support
+page source is [`docs/public/support/index.html`](public/support/index.html).
 
 Never place the admin token in the iOS app, source control, screenshots, or
 support documentation.
@@ -79,9 +79,10 @@ safe and does not rewrite the original resolution.
 ## Response Expectations
 
 Check the open queue during active tournament hours and follow the response
-commitment on the published support page. Treat credible threats or self-harm
-reports as urgent and follow applicable emergency escalation procedures rather
-than relying only on comment removal.
+commitment on the published support page. Reports and support email are not
+continuously monitored. Treat credible threats or self-harm reports as urgent
+and follow applicable emergency escalation procedures rather than relying only
+on comment removal.
 
 If persistence or realtime publication fails, preserve the report as open,
 record the operational error through the normal logging path, and retry after

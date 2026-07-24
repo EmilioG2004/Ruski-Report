@@ -1,8 +1,15 @@
 # Privacy Data Handling
 
 This document is the implementation source of truth for Ruski Report's current
-account and comment data handling. Publishing the complete user-facing privacy
-policy, support contact, and community standards is tracked by GitHub issue 43.
+account and comment data handling. The canonical user-facing policy source is
+[`docs/public/privacy/index.html`](public/privacy/index.html) and is prepared
+for publication at:
+
+https://emiliog2004.github.io/Ruski-Report/privacy/
+
+Emilio Garcia is the policy owner. Ruski Report is an independent project with
+no school or educational-institution affiliation. Support requests go to
+`ruskisupport@gmail.com` and are normally answered within three business days.
 
 ## Account And Session Data
 
@@ -22,6 +29,13 @@ not sold or used for advertising.
 Comments store their body, creation time, match identifier, author display name,
 and author account identifier. They are public within the associated match and
 exist so authenticated users can participate in match discussion.
+
+Comments are intentionally retained indefinitely as part of the associated
+match discussion. Moderator removal sets the comment's deletion timestamp so it
+no longer appears in public feeds; its soft-deleted database record supports the
+associated moderation audit. Account deletion is the exception: the account
+foreign key cascades and physically deletes every comment authored by that
+account.
 
 Before storage, submissions pass through automated content and spam checks.
 Rejected comment text is not stored. Moderation logs contain the decision code,
@@ -71,6 +85,13 @@ Tournament rosters, scores, and player statistics are imported from scorebooks.
 They are tournament records rather than public-account profile data and are not
 created or controlled by the local account system.
 
+Normalized tournament records are retained permanently as the official Ruski
+archive. This persistence decision does not add historical-tournament browsing
+to the current app; archive discovery and past-season UI remain future work.
+The uploaded workbook is processed from its request buffer. PostgreSQL retains
+source metadata, checksum, validation results, and publication history rather
+than the original workbook bytes as a database file.
+
 ## Account Deletion And Retention
 
 An authenticated user can choose **Delete Account** in the iOS account screen.
@@ -84,16 +105,33 @@ PostgreSQL permanently deletes the account and cascades the same transaction to:
 - Every block relation where the account is either participant.
 
 The current application does not create an account-deletion tombstone or retain
-those account-linked authentication, comment, or block values. Existing
-moderation reports may retain their reason, state, timestamps, and resolution
-after the reporter identity and optional context are erased. A second request
-using the former token is unauthorized because its server session was deleted.
+those account-linked authentication, comment, or block values. This deletion
+exception takes precedence over the normal indefinite comment retention.
+Existing moderation reports may retain their reason, state, timestamps, and
+resolution after the reporter identity and optional context are erased. A
+second request using the former token is unauthorized because its server
+session was deleted.
 
-No production backup or log-retention exception is implemented in this
-pre-deployment repository. If deployment adds backups or identity-bearing
-operational logs, the public policy must define their retention period and the
-deletion process before App Store submission. Issue 43 owns that publication
-check.
+No production backup or persistent access-log facility is implemented in this
+pre-deployment repository. The public policy limits production logs and rotating
+backups, if enabled, to 30 days unless a security investigation or law requires
+longer retention. Raspberry Pi deployment must configure and verify that limit
+before App Store submission. The release checklist records this as an explicit
+deployment gate rather than claiming that an undeployed service already
+enforces it.
+
+## Age, Analytics, And Service Providers
+
+People under 13 may not create an account or post comments. The service does not
+include third-party analytics, advertising SDKs, or cross-app tracking, and
+does not sell personal information.
+
+GitHub Pages processes normal web requests for the public policy site, Google
+processes email sent to the Gmail support address, and Apple distributes the
+iOS app. A production tunnel, reverse proxy, or other network provider has not
+yet been selected. If one is added during Raspberry Pi deployment, its data
+handling must be reviewed against the public policy before it receives
+production traffic.
 
 ## Failure Handling
 
