@@ -17,6 +17,7 @@ struct SessionAuthorizationTests {
         #expect(session.canViewTournamentData)
         #expect(!session.canPostComments)
         #expect(!session.canReportComments)
+        #expect(!session.canBlockUsers)
         #expect(!session.canAccessAdminUploads)
         #expect(
             policy.postingAuthorization(for: session) ==
@@ -40,6 +41,7 @@ struct SessionAuthorizationTests {
         #expect(session.canViewTournamentData)
         #expect(session.canPostComments)
         #expect(session.canReportComments)
+        #expect(session.canBlockUsers)
         #expect(!session.canAccessAdminUploads)
         #expect(policy.postingAuthorization(for: session) == .allowed)
         #expect(policy.postingAuthorization(for: session).allowsPosting)
@@ -58,6 +60,7 @@ struct SessionAuthorizationTests {
         #expect(session.canViewTournamentData)
         #expect(session.canPostComments)
         #expect(session.canReportComments)
+        #expect(session.canBlockUsers)
         #expect(session.canAccessAdminUploads)
     }
 

@@ -156,6 +156,52 @@ final class Ruski_ReportUITests: XCTestCase {
     }
 
     @MainActor
+    func testBlocksACommentAuthorAndRefreshesTheVisibleFeed() throws {
+        let app = launchPreviewApp(scenario: "blocking")
+
+        openLiveMatch(in: app)
+        let scrollView = app.scrollViews["match.detail"]
+        let commentBody =
+            app.staticTexts["Alpha Table is one cup away from closing this out."]
+        let actions = app.buttons["match.comments.actions.comment-preview-1"]
+        scrollUntilHittable(actions, in: scrollView)
+        assertExists(commentBody)
+        actions.tap()
+
+        let block = app.buttons["Block User"]
+        assertExists(block)
+        block.tap()
+
+        let confirm = app.buttons["match.comments.block.confirm"]
+        assertExists(confirm)
+        confirm.tap()
+
+        assertExists(
+            app.descendants(matching: .any)["match.comments.blockSuccess"]
+        )
+        assertDisappears(commentBody)
+    }
+
+    @MainActor
+    func testUnblocksAnAccountFromAccountSafetySettings() throws {
+        let app = launchPreviewApp(scenario: "blocking")
+
+        openAccount(in: app)
+        let blockedUsers = app.buttons["account.blocks"]
+        assertExists(blockedUsers)
+        blockedUsers.tap()
+
+        assertExists(app.navigationBars["Blocked Users"])
+        assertExists(app.staticTexts["Blocked Player"])
+        let unblock =
+            app.buttons["account.blocks.unblock.preview-blocked-user"]
+        assertExists(unblock)
+        unblock.tap()
+
+        assertExists(app.descendants(matching: .any)["account.blocks.empty"])
+    }
+
+    @MainActor
     private func launchPreviewApp(scenario: String = "standard") -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments = [
@@ -214,6 +260,31 @@ final class Ruski_ReportUITests: XCTestCase {
         XCTAssertTrue(
             element.waitForExistence(timeout: timeout),
             "Expected \(element) to exist",
+            file: file,
+            line: line
+        )
+    }
+
+    @MainActor
+    private func assertDisappears(
+        _ element: XCUIElement,
+        timeout: TimeInterval = 5,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        let predicate = NSPredicate(format: "exists == false")
+        let expectation = XCTNSPredicateExpectation(
+            predicate: predicate,
+            object: element
+        )
+        let result = XCTWaiter.wait(
+            for: [expectation],
+            timeout: timeout
+        )
+        XCTAssertEqual(
+            result,
+            .completed,
+            "Expected \(element) to disappear",
             file: file,
             line: line
         )

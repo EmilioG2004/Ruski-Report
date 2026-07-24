@@ -132,6 +132,7 @@ struct RepositoryTests {
         #expect(apiClient.requestedPaths == ["matches/match-1/comments"])
         #expect(comments.map(\.id) == ["comment-1"])
         #expect(comments.first?.matchId == "match-1")
+        #expect(comments.first?.authorUserId == "commenter-1")
     }
 
     @Test func commentRepositoryPostsOnlyTheCommentBody() async throws {
@@ -212,6 +213,67 @@ struct RepositoryTests {
                 reason: .spam,
                 context: nil
             )
+        }
+        #expect(apiClient.requestedPaths.isEmpty)
+    }
+
+    @Test func userBlockingRepositoryUsesAuthenticatedAccountRoutes() async throws {
+        let apiClient = RecordingAPIClient()
+        let blockedUserDTO = BlockedUserDTO(
+            userId: "user-2",
+            displayName: "Blocked Player",
+            blockedAt: "2026-07-23T12:00:00.000Z"
+        )
+        apiClient.responses["account/blocks"] = [blockedUserDTO]
+        apiClient.responses["account/blocks/user-2"] = BlockUserReceiptDTO(
+            blockedUser: blockedUserDTO,
+            alreadyBlocked: false
+        )
+        let session = StubSessionRepository(
+            session: .authenticated(
+                UserProfile(id: "user-1", displayName: "Viewer")
+            )
+        )
+        let repository = RemoteUserBlockingRepository(
+            apiClient: apiClient,
+            session: session
+        )
+
+        let users = try await repository.blockedUsers()
+        let block = try await repository.block(userId: "user-2")
+        #expect(apiClient.requestedMethods["account/blocks/user-2"] == "PUT")
+        apiClient.responses["account/blocks/user-2"] =
+            UnblockUserReceiptDTO(
+                blockedUserId: "user-2",
+                wasBlocked: true
+            )
+        let unblock = try await repository.unblock(userId: "user-2")
+
+        #expect(users.map(\.id) == ["user-2"])
+        #expect(block.blockedUser == users.first)
+        #expect(!block.alreadyBlocked)
+        #expect(unblock == UnblockUserReceipt(
+            blockedUserId: "user-2",
+            wasBlocked: true
+        ))
+        #expect(apiClient.requestedPaths == [
+            "account/blocks",
+            "account/blocks/user-2",
+            "account/blocks/user-2"
+        ])
+        #expect(apiClient.requestedMethods["account/blocks"] == "GET")
+        #expect(apiClient.requestedMethods["account/blocks/user-2"] == "DELETE")
+    }
+
+    @Test func userBlockingRepositoryRejectsGuestsBeforeNetworking() async {
+        let apiClient = RecordingAPIClient()
+        let repository = RemoteUserBlockingRepository(
+            apiClient: apiClient,
+            session: StubSessionRepository(session: .guest)
+        )
+
+        await #expect(throws: AppError.self) {
+            try await repository.block(userId: "user-2")
         }
         #expect(apiClient.requestedPaths.isEmpty)
     }
