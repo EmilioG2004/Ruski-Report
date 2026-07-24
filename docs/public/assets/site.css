@@ -1,0 +1,150 @@
+h1 {
+  max-width: 18ch;
+  margin: 0;
+  font-size: clamp(2.1rem, 8vw, 4.4rem);
+  letter-spacing: -0.035em;
+}
+
+h2 {
+  margin-top: 2.3rem;
+  font-size: clamp(1.35rem, 4vw, 1.8rem);
+}
+
+h3 {
+  margin-top: 1.5rem;
+  font-size: 1.08rem;
+}
+
+p,
+li {
+  max-width: 72ch;
+}
+
+.lede {
+  max-width: 60ch;
+  margin: 1rem 0 0;
+  color: var(--muted);
+  font-size: clamp(1.05rem, 3vw, 1.25rem);
+}
+
+.meta {
+  margin-top: 1.1rem;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 1rem;
+  margin-top: 2.5rem;
+}
+
+.card,
+.notice {
+  padding: clamp(1.1rem, 4vw, 1.5rem);
+  background: var(--surface);
+  border: 0.08rem solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.card h2 {
+  margin: 0;
+}
+
+.card p {
+  color: var(--muted);
+}
+
+.card-link {
+  font-weight: 750;
+}
+
+.notice {
+  margin-block: 1.8rem;
+  background: var(--surface-muted);
+  box-shadow: none;
+}
+
+.notice > :first-child,
+.policy-section > :first-child {
+  margin-top: 0;
+}
+
+.policy-section {
+  padding-top: 0.25rem;
+  border-top: 0.08rem solid var(--border);
+}
+
+.policy-section:first-of-type {
+  border-top: 0;
+}
+
+.data-list dt {
+  margin-top: 1.1rem;
+  font-weight: 750;
+}
+
+.data-list dd {
+  max-width: 72ch;
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+}
+
+.contact-link {
+  display: inline-block;
+  padding: 0.75rem 1rem;
+  color: #ffffff;
+  font-weight: 750;
+  text-decoration: none;
+  background: var(--accent-strong);
+  border-radius: 0.55rem;
+}
+
+.contact-link:hover {
+  color: #ffffff;
+  filter: brightness(1.08);
+}
+
+.site-footer-wrap {
+  border-top: 0.08rem solid var(--border);
+}
+
+.site-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  justify-content: space-between;
+  padding-block: 1.5rem 2.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+@media (max-width: 44rem) {
+  .header-content {
+    display: block;
+    padding-block: 0.85rem;
+  }
+
+  .site-nav {
+    margin-top: 0.55rem;
+  }
+
+  .site-nav ul {
+    gap: 0.25rem 0.8rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
