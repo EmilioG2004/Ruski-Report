@@ -1,0 +1,158 @@
+:root {
+  color-scheme: light dark;
+  --background: #f4f6f8;
+  --surface: #ffffff;
+  --surface-muted: #eef2f5;
+  --text: #17212b;
+  --muted: #52606d;
+  --border: #d4dce3;
+  --accent: #9f2f2f;
+  --accent-strong: #7d2222;
+  --focus: #1769aa;
+  --content-width: 72rem;
+  --reading-width: 48rem;
+  --radius: 0.9rem;
+  --shadow: 0 0.8rem 2.2rem rgb(23 33 43 / 8%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #101417;
+    --surface: #181e23;
+    --surface-muted: #222a30;
+    --text: #f4f7f9;
+    --muted: #b9c3cb;
+    --border: #38434c;
+    --accent: #ef8585;
+    --accent-strong: #ffadad;
+    --focus: #7cc5ff;
+    --shadow: 0 0.8rem 2.2rem rgb(0 0 0 / 24%);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family:
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  line-height: 1.6;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-width: 18rem;
+  margin: 0;
+  color: var(--text);
+  background: var(--background);
+}
+
+a {
+  color: var(--accent);
+  text-decoration-thickness: 0.1em;
+  text-underline-offset: 0.18em;
+}
+
+a:hover {
+  color: var(--accent-strong);
+}
+
+a:focus-visible {
+  border-radius: 0.2rem;
+  outline: 0.2rem solid var(--focus);
+  outline-offset: 0.2rem;
+}
+
+.skip-link {
+  position: absolute;
+  z-index: 10;
+  top: 0.5rem;
+  left: 0.5rem;
+  padding: 0.55rem 0.8rem;
+  color: var(--surface);
+  background: var(--text);
+  border-radius: 0.4rem;
+  transform: translateY(-150%);
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.site-header {
+  color: #ffffff;
+  background:
+    linear-gradient(135deg, rgb(91 21 21 / 96%), rgb(159 47 47 / 92%)),
+    #7d2222;
+}
+
+.header-content,
+.site-footer,
+main {
+  width: min(calc(100% - 2rem), var(--content-width));
+  margin-inline: auto;
+}
+
+.header-content {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 4.5rem;
+}
+
+.brand {
+  color: inherit;
+  font-size: 1.15rem;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+}
+
+.brand:hover {
+  color: inherit;
+}
+
+.site-nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-nav a {
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+main {
+  padding-block: clamp(2rem, 6vw, 4.5rem);
+}
+
+.reading-width {
+  max-width: var(--reading-width);
+}
+
+.eyebrow {
+  margin: 0 0 0.4rem;
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.2;
+}
