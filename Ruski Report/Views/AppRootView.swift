@@ -68,7 +68,8 @@ struct AppRootView: View {
             case .account:
                 AccountSessionView(
                     session: session,
-                    userBlocking: userBlocking
+                    userBlocking: userBlocking,
+                    policyLinks: services.policyLinks
                 )
             }
         }

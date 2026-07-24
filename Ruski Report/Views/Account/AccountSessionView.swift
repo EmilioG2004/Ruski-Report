@@ -8,6 +8,7 @@ import SwiftUI
 struct AccountSessionView: View {
     @ObservedObject var session: AccountSessionStore
     @ObservedObject var userBlocking: UserBlockingStore
+    let policyLinks: AppPolicyLinks
     @Environment(\.dismiss) private var dismiss
     @State private var mode = AccountFormMode.signIn
     @State private var displayName = ""
@@ -38,6 +39,8 @@ struct AccountSessionView: View {
                     signedInControls
                     blockedUsersControls
                 }
+
+                AccountPolicyLinksSection(links: policyLinks)
             }
             .scrollContentBackground(.hidden)
             .background(Color.appGroupedBackground)

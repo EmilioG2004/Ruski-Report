@@ -60,6 +60,7 @@ final class Ruski_ReportUITests: XCTestCase {
         openAccount(in: app)
         assertExists(app.descendants(matching: .any)["account.status.guest"])
         assertExists(app.textFields["account.displayName"])
+        assertPolicyLinksExist(in: app)
     }
 
     @MainActor
@@ -70,6 +71,7 @@ final class Ruski_ReportUITests: XCTestCase {
         assertExists(app.descendants(matching: .any)["account.status.authenticated"])
         assertExists(app.buttons["account.signOut"])
         assertExists(app.buttons["account.delete"])
+        assertPolicyLinksExist(in: app)
     }
 
     @MainActor
@@ -235,6 +237,19 @@ final class Ruski_ReportUITests: XCTestCase {
         assertExists(liveMatch)
         liveMatch.tap()
         assertExists(app.scrollViews["match.detail"])
+    }
+
+    @MainActor
+    private func assertPolicyLinksExist(in app: XCUIApplication) {
+        assertExists(
+            app.descendants(matching: .any)["account.policy.privacy"]
+        )
+        assertExists(
+            app.descendants(matching: .any)["account.policy.support"]
+        )
+        assertExists(
+            app.descendants(matching: .any)["account.policy.community"]
+        )
     }
 
     @MainActor

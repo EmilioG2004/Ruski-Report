@@ -18,6 +18,7 @@ struct AppServices {
     let realtime: any RealtimeUpdateRepository
     let logger: any AppLogger
     let initialTournament: TournamentPreview
+    let policyLinks: AppPolicyLinks
 
     static let preview = preview(scenario: .standard)
 
@@ -66,7 +67,8 @@ struct AppServices {
             ),
             realtime: NoopRealtimeUpdateRepository(),
             logger: logger,
-            initialTournament: PreviewData.tournamentPreview
+            initialTournament: PreviewData.tournamentPreview,
+            policyLinks: .productionFallback
         )
     }
 
@@ -137,7 +139,7 @@ struct AppServices {
         } catch {
             logger.log(
                 .warning,
-                "Unable to load app config; using fallback API base URL",
+                "Unable to load app config; using fallback configuration",
                 metadata: ["error": String(describing: error)]
             )
             config = .fallback
@@ -180,7 +182,8 @@ struct AppServices {
                 logger: logger
             ),
             logger: logger,
-            initialTournament: PreviewData.tournamentPreview
+            initialTournament: PreviewData.tournamentPreview,
+            policyLinks: config.policyLinks
         )
     }
 }
