@@ -11,6 +11,7 @@ struct MatchDetailView: View {
     private let routeContext: MatchRouteContext
     private let comments: any CommentRepository
     private let commentReports: any CommentReportingRepository
+    private let userBlocking: UserBlockingStore
     private let session: AccountSessionStore
     private let realtime: any RealtimeUpdateRepository
     private let logger: any AppLogger
@@ -21,6 +22,7 @@ struct MatchDetailView: View {
         games: any GameRepository,
         comments: any CommentRepository,
         commentReports: any CommentReportingRepository,
+        userBlocking: UserBlockingStore,
         session: AccountSessionStore,
         realtime: any RealtimeUpdateRepository,
         logger: any AppLogger
@@ -28,6 +30,7 @@ struct MatchDetailView: View {
         self.routeContext = routeContext
         self.comments = comments
         self.commentReports = commentReports
+        self.userBlocking = userBlocking
         self.session = session
         self.realtime = realtime
         self.logger = logger
@@ -90,6 +93,7 @@ struct MatchDetailView: View {
                     matchId: screen.match.id,
                     comments: comments,
                     commentReports: commentReports,
+                    userBlocking: userBlocking,
                     session: session,
                     realtime: realtime,
                     logger: logger

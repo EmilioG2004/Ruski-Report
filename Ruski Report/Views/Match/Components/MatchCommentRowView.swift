@@ -9,6 +9,7 @@ import SwiftUI
 struct MatchCommentRowView: View {
     let comment: MatchComment
     let report: () -> Void
+    let block: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -43,6 +44,18 @@ struct MatchCommentRowView: View {
                     Label("Report Comment", systemImage: "exclamationmark.bubble")
                 }
                 .accessibilityIdentifier("match.comments.report.\(comment.id)")
+
+                if let block {
+                    Button(role: .destructive) {
+                        block()
+                    } label: {
+                        Label(
+                            "Block User",
+                            systemImage: "person.crop.circle.badge.xmark"
+                        )
+                    }
+                    .accessibilityIdentifier("match.comments.block.\(comment.id)")
+                }
             } label: {
                 Image(systemName: "ellipsis")
                     .frame(minWidth: 32, minHeight: 32)

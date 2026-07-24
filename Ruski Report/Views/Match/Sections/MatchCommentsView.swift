@@ -8,20 +8,24 @@ import SwiftUI
 struct MatchCommentsView: View {
     @EnvironmentObject private var sheetRouter: AppSheetRouter
     @ObservedObject private var session: AccountSessionStore
+    @ObservedObject private var userBlocking: UserBlockingStore
     @StateObject private var controller: MatchCommentsController
     @StateObject private var reportingController: CommentReportingController
     @State private var draftComment = ""
     @State private var selectedReport: CommentReportPresentation?
+    @State private var selectedBlock: BlockUserPresentation?
 
     init(
         matchId: MatchPreview.ID,
         comments: any CommentRepository,
         commentReports: any CommentReportingRepository,
+        userBlocking: UserBlockingStore,
         session: AccountSessionStore,
         realtime: any RealtimeUpdateRepository,
         logger: any AppLogger
     ) {
         self.session = session
+        self.userBlocking = userBlocking
         _controller = StateObject(
             wrappedValue: MatchCommentsController(
                 matchId: matchId,
@@ -62,6 +66,12 @@ struct MatchCommentsView: View {
         .task {
             await controller.observeRealtimeUpdates()
         }
+        .task(id: userBlocking.revision) {
+            guard userBlocking.revision > 0 else {
+                return
+            }
+            await controller.refreshComments()
+        }
         .sheet(item: $selectedReport) { comment in
             ReportCommentSheet(
                 comment: comment,
@@ -69,6 +79,24 @@ struct MatchCommentsView: View {
                 refreshComments: {
                     await controller.refreshComments()
                 }
+            )
+        }
+        .confirmationDialog(
+            blockDialogTitle,
+            isPresented: blockDialogIsPresented,
+            titleVisibility: .visible,
+            presenting: selectedBlock
+        ) { user in
+            Button("Block User", role: .destructive) {
+                confirmBlock(user)
+            }
+            .accessibilityIdentifier("match.comments.block.confirm")
+
+            Button("Cancel", role: .cancel) {}
+                .accessibilityIdentifier("match.comments.block.cancel")
+        } message: { user in
+            Text(
+                "Comments from \(user.displayName) will be hidden for you. This does not report or remove their comments for anyone else."
             )
         }
     }
@@ -81,6 +109,22 @@ struct MatchCommentsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityIdentifier("match.comments.reportSuccess")
+            }
+
+            if let noticeMessage = userBlocking.noticeMessage {
+                Label(noticeMessage, systemImage: "checkmark.circle")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("match.comments.blockSuccess")
+            }
+
+            if let errorMessage = userBlocking.actionErrorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("match.comments.blockError")
             }
 
             if content.comments.isEmpty {
@@ -98,9 +142,13 @@ struct MatchCommentsView: View {
                             Divider()
                         }
 
-                        MatchCommentRowView(comment: comment) {
-                            beginReport(for: comment)
-                        }
+                        MatchCommentRowView(
+                            comment: comment,
+                            report: {
+                                beginReport(for: comment)
+                            },
+                            block: blockAction(for: comment)
+                        )
                     }
                 }
             }
@@ -155,6 +203,62 @@ struct MatchCommentsView: View {
         selectedReport = CommentReportPresentation(
             commentId: comment.id,
             authorDisplayName: comment.authorDisplayName
+        )
+    }
+
+    private func blockAction(for comment: MatchComment) -> (() -> Void)? {
+        guard let authorUserId = comment.authorUserId,
+              authorUserId != session.current.profile?.id else {
+            return nil
+        }
+
+        return {
+            beginBlock(
+                BlockUserPresentation(
+                    id: authorUserId,
+                    displayName: comment.authorDisplayName
+                )
+            )
+        }
+    }
+
+    private func beginBlock(_ user: BlockUserPresentation) {
+        guard session.current.canBlockUsers else {
+            sheetRouter.showAccount()
+            return
+        }
+
+        userBlocking.clearMessages()
+        selectedBlock = user
+    }
+
+    private func confirmBlock(_ user: BlockUserPresentation) {
+        selectedBlock = nil
+        Task {
+            let outcome = await userBlocking.block(user)
+            if outcome == .accountUnavailable {
+                await controller.refreshComments()
+            } else if outcome == .requiresSignIn {
+                sheetRouter.showAccount()
+            }
+        }
+    }
+
+    private var blockDialogTitle: String {
+        guard let selectedBlock else {
+            return "Block User?"
+        }
+        return "Block \(selectedBlock.displayName)?"
+    }
+
+    private var blockDialogIsPresented: Binding<Bool> {
+        Binding(
+            get: { selectedBlock != nil },
+            set: { isPresented in
+                if !isPresented {
+                    selectedBlock = nil
+                }
+            }
         )
     }
 }

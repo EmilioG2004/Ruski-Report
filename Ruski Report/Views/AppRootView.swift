@@ -10,12 +10,20 @@ struct AppRootView: View {
     @StateObject private var sheetRouter = AppSheetRouter()
     @StateObject private var homeController: HomeController
     @StateObject private var session: AccountSessionStore
+    @StateObject private var userBlocking: UserBlockingStore
 
     private let services: AppServices
 
     init(services: AppServices = .preview) {
         self.services = services
         _session = StateObject(wrappedValue: services.session)
+        _userBlocking = StateObject(
+            wrappedValue: UserBlockingStore(
+                blocking: services.userBlocking,
+                session: services.session,
+                logger: services.logger
+            )
+        )
         _homeController = StateObject(
             wrappedValue: HomeController(
                 tournaments: services.tournaments,
@@ -58,11 +66,17 @@ struct AppRootView: View {
         .sheet(item: $sheetRouter.presentedSheet) { destination in
             switch destination {
             case .account:
-                AccountSessionView(session: session)
+                AccountSessionView(
+                    session: session,
+                    userBlocking: userBlocking
+                )
             }
         }
         .task {
             await session.restoreSession()
+        }
+        .task(id: session.current) {
+            await userBlocking.synchronizeWithCurrentSession()
         }
         .environmentObject(navigation)
         .environmentObject(sheetRouter)
@@ -86,6 +100,7 @@ struct AppRootView: View {
                 games: services.games,
                 comments: services.comments,
                 commentReports: services.commentReports,
+                userBlocking: userBlocking,
                 session: session,
                 realtime: services.realtime,
                 logger: services.logger
