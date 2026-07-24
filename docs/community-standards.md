@@ -47,12 +47,26 @@ The real production support contact and a response-time commitment must be
 published before issue 41 is closed. They are intentionally not represented by
 placeholder contact information in this repository.
 
+## Blocking
+
+Signed-in users can choose **Block User** from another account's comment and
+confirm the action. Comments from that account are then hidden for the blocking
+user. The blocked list can be reviewed and changed under
+**Account > Blocked Users**; unblocking restores the account's comments on the
+next refresh.
+
+Blocking is private and affects only the blocking user's view. It does not
+report the comment, remove it for anyone else, notify the blocked account, or
+give the blocking user moderation privileges. Guests continue to see the
+public, unfiltered comment feed because they do not have an account-specific
+block list.
+
 ## Current Scope
 
-Issues 40 and 41 provide pre-publication filtering, user reporting, and
-operator review. User blocking remains a separate safeguard tracked by issue
-42 and must be implemented before this document claims that users can block
-accounts.
+Issues 40, 41, and 42 provide pre-publication filtering, user reporting,
+operator review, and private user blocking. The backend is the enforcement
+boundary for submission moderation, operator authorization, block ownership,
+and authenticated comment filtering.
 
 The final public, mobile-readable version of these standards and operator
 contact information will be published as part of issue 43. Until then, this

@@ -124,12 +124,20 @@ Public backend endpoints:
 - `GET /matches/:id`
   - Returns match detail, box score, scorecard definition, scorecard rows, phase, and comments summary.
 - `GET /matches/:id/comments`
-  - Returns comments for a match.
+  - Returns the public guest feed without credentials; a valid optional public
+    session filters authors blocked by that viewer.
 - `POST /matches/:id/comments`
   - Adds a comment for authenticated users.
 - `POST /comments/:id/reports`
   - Submits an authenticated, rate-limited report without trusting a
     client-supplied reporter identity.
+- `GET /account/blocks`
+  - Returns the authenticated account's private, deterministically ordered
+    block list.
+- `PUT /account/blocks/:userId`
+  - Idempotently blocks another active public account.
+- `DELETE /account/blocks/:userId`
+  - Idempotently removes a private block relation.
 - `GET /admin/comment-reports?status=open`
   - Lists the authenticated operator moderation queue.
 - `PATCH /admin/comment-reports/:id`
@@ -160,6 +168,9 @@ Controllers depend on protocols, not concrete clients:
 - `CommentReportingRepository.submitReport(commentID:reason:context:) async throws -> CommentReportReceipt`
   - Justification: reporting authorization and transport stay independent from
     comment reading and posting.
+- `UserBlockingRepository.blockedUsers()/block(userID:)/unblock(userID:)`
+  - Justification: private visibility preferences remain independent from
+    comment moderation and are shared across match feeds and account settings.
 - `RealtimeTournamentClient.subscribe(to:) -> AsyncStream<TournamentEvent>`
   - Justification: app needs live pushed updates without coupling views to transport details.
 - `AuthSessionProviding.currentSession() async -> AuthSession`
@@ -179,6 +190,7 @@ Initial screens:
 - Bracket View: generic bracket display.
 - Match Detail: game-aware score header, box score, scorecard, shot/event log, comments.
 - Account/Guest State: lightweight guest/account distinction.
+- Blocked Users: authenticated safety settings with explicit unblock actions.
 
 Scorecard UI must be metadata-driven:
 
@@ -263,6 +275,9 @@ Backend tests:
 - stores tournament snapshot atomically.
 - publishes realtime event after successful ingestion.
 - rejects invalid admin upload.
+- makes block and unblock idempotent and rejects self-blocking.
+- filters comments for authenticated viewers without changing guest reads.
+- removes block relationships when either account is deleted.
 
 iOS tests:
 
@@ -273,6 +288,8 @@ iOS tests:
 - realtime event updates visible match state.
 - API failure shows readable error state.
 - guest users can view; unauthenticated users cannot post comments.
+- authenticated users can confirm a block from another account's comment.
+- block-list changes refresh visible comments without reinstalling the app.
 
 ## Assumptions
 

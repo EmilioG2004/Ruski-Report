@@ -65,11 +65,30 @@ session identity. The separate `x-admin-token` header remains exclusive to
 scorebook and moderation operator workflows.
 
 Account deletion runs in a transaction and cascades to credentials, identity
-mappings, every session, and authored comments. It publishes affected-match
-comment refresh events only after commit. See
+mappings, every session, authored comments, and block relationships in either
+direction. It publishes affected-match comment refresh events only after commit.
+See
 [`docs/session-model.md`](../docs/session-model.md#account-deletion) and
 [`docs/privacy-data-handling.md`](../docs/privacy-data-handling.md) for the
 client recovery and retention contract.
+
+## User Blocking
+
+Signed-in public accounts can manage a private block list:
+
+- `GET /api/account/blocks`
+- `PUT /api/account/blocks/:userId`
+- `DELETE /api/account/blocks/:userId`
+
+Block and unblock are idempotent, self-blocking is rejected, and the list is
+ordered by newest block followed by account identifier. Blocking does not
+report, moderate, or delete the other account's comments.
+
+`GET /api/matches/:matchId/comments` remains public. With no `Authorization`
+header it returns the guest feed. With a valid public bearer session it omits
+comments authored by accounts that viewer blocked. A malformed, expired, or
+revoked credential supplied by the client returns `401`; it is never silently
+downgraded to a guest read.
 
 ## Comment Moderation
 
@@ -102,6 +121,7 @@ Removing a comment updates its report records atomically and publishes a
 
 - `src/controllers`: HTTP controller boundaries.
 - `src/auth`: Public account workflows, password hashing, and bearer-session guard.
+- `src/user-blocking`: Private block-list workflows and authenticated API routes.
 - `src/services`: Application and business workflow services.
 - `src/repositories`: Persistence interfaces and implementations.
 - `src/database`: PostgreSQL pool, transactions, and migration runner.

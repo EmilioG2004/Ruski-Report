@@ -50,6 +50,23 @@ audit record. If a reported author's account is deleted, the associated
 comment is deleted and the report retains only its stable comment reference,
 not a copied comment body.
 
+## User Blocks
+
+A block stores only the blocking account identifier, blocked account
+identifier, and creation timestamp. The relationship is private to the blocking
+account. Public APIs do not disclose who blocked an account, and blocking does
+not notify the blocked account.
+
+Authenticated comment reads use the relationship to omit comments authored by
+blocked accounts for that viewer. Guest reads have no viewer identity and
+therefore return the unfiltered public comment feed. A block is not a report,
+does not copy comment text, does not delete content, and does not enter the
+operator moderation queue.
+
+Block and unblock logs contain only decision flags such as whether a relation
+already existed. They do not contain either account identifier, a display name,
+comment text, password, or session token.
+
 Tournament rosters, scores, and player statistics are imported from scorebooks.
 They are tournament records rather than public-account profile data and are not
 created or controlled by the local account system.
@@ -64,12 +81,13 @@ PostgreSQL permanently deletes the account and cascades the same transaction to:
 - External identity mappings.
 - All active, expired, and revoked sessions.
 - Every comment authored by the account.
+- Every block relation where the account is either participant.
 
 The current application does not create an account-deletion tombstone or retain
-those account-linked authentication and comment values. Existing moderation
-reports may retain their reason, state, timestamps, and resolution after the
-reporter identity and optional context are erased. A second request using the
-former token is unauthorized because its server session was deleted.
+those account-linked authentication, comment, or block values. Existing
+moderation reports may retain their reason, state, timestamps, and resolution
+after the reporter identity and optional context are erased. A second request
+using the former token is unauthorized because its server session was deleted.
 
 No production backup or log-retention exception is implemented in this
 pre-deployment repository. If deployment adds backups or identity-bearing
