@@ -11,7 +11,7 @@ actor KeychainSessionCredentialStore: SessionCredentialStore {
     private let account: String
 
     init(
-        service: String = "Durham-Ruski-Club.Ruski-Report.account-session",
+        service: String = AppBundleIdentity.sessionCredentialService,
         account: String = "access-token"
     ) {
         self.service = service

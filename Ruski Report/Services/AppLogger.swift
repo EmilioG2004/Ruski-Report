@@ -22,10 +22,14 @@ nonisolated protocol AppLogger {
 }
 
 nonisolated final class OSLogAppLogger: AppLogger {
-    private let logger = Logger(
-        subsystem: "Durham-Ruski-Club.Ruski-Report",
-        category: "App"
-    )
+    private let logger: Logger
+
+    init(
+        subsystem: String = AppBundleIdentity.logSubsystem,
+        category: String = "App"
+    ) {
+        logger = Logger(subsystem: subsystem, category: category)
+    }
 
     func log(
         _ level: AppLogLevel,
