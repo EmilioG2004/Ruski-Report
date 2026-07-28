@@ -19,6 +19,8 @@ Do not post:
 - Threats, encouragement of self-harm, or encouragement of violence.
 - Sexually explicit, exploitative, or pornographic material.
 - Content promoting illegal activity or dangerous conduct.
+- Content encouraging underage drinking or dangerous or excessive alcohol
+  consumption.
 - Repeated messages, excessive links, or other disruptive spam.
 - Attempts to disguise prohibited language with case, width, whitespace, or
   punctuation changes.

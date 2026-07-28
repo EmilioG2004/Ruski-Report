@@ -20,6 +20,39 @@ The iOS `AppConfig.json` records the first three URLs. Deploy-time overrides are
 available through `RUSKI_PRIVACY_POLICY_URL`, `RUSKI_SUPPORT_URL`, and
 `RUSKI_COMMUNITY_STANDARDS_URL`.
 
+## iOS Release Identity
+
+- [x] Set the production bundle identifier to
+      `com.emiliogarcia.ruskireport`.
+- [x] Set the display name and initial version to `Ruski Report` 1.0 (1).
+- [x] Limit v1 to portrait iPhone on iOS 17 or later.
+- [x] Remove native iPad, macOS, Mac Catalyst, and visionOS targets.
+- [x] Provide opaque default, dark, and grayscale tinted 1024-by-1024 icons.
+- [x] Derive the OSLog subsystem and Keychain service from the bundle identity.
+- [x] Validate a generic-device Release build and unsigned archive without
+      missing-icon, entitlement, or platform warnings.
+- [ ] Register `com.emiliogarcia.ruskireport` with the Apple Developer account
+      and create or download its provisioning profile.
+- [ ] Produce and validate a signed distribution archive.
+
+The detailed contract and local commands are in
+[`docs/ios-release-configuration.md`](../ios-release-configuration.md).
+
+## App Store Age Rating
+
+- [x] Record 18+ as the intended v1 storefront rating.
+- [x] Keep icon artwork free of visible alcohol, consumption, branding, and
+      youth-oriented imagery.
+- [x] Prohibit comments that encourage underage, dangerous, or excessive
+      alcohol consumption.
+- [ ] Complete the App Store Connect questionnaire from the shipped binary and
+      metadata.
+- [ ] Use Apple's higher-rating override if the calculated rating is below 18+.
+
+The App Store rating does not replace account eligibility or age verification.
+The current service policy remains that people under 13 may not create accounts
+or post comments.
+
 ## Policy Publication
 
 - [x] Public sources contain Emilio Garcia's operator identity.
