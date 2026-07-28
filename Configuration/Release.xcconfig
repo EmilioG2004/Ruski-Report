@@ -1,0 +1,4 @@
+#include "Shared.xcconfig"
+
+RUSKI_BUILD_CONFIGURATION = Release
+VALIDATE_PRODUCT = YES
