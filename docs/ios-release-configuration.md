@@ -98,3 +98,23 @@ launch metadata, supported platforms, and archive structure. Producing the
 signed distribution archive additionally requires registering the bundle
 identifier and allowing Xcode to create or download the matching provisioning
 profile through the configured Apple Developer account.
+
+## Provisioning Status
+
+Provisioning was attempted on July 28, 2026 with automatic signing and
+`-allowProvisioningUpdates`. The project configuration reached Apple's
+developer services, but the configured team could not complete either signing
+path:
+
+- A development archive could not create a profile because the team has no
+  registered iPhone.
+- An App Store export reported that the current user has no associated App
+  Store Connect provider and that team `F4784JNT6Y` cannot create an iOS App
+  Store provisioning profile.
+
+These are Apple account and device prerequisites, not build or asset-catalog
+failures. Before retrying App Store signing, enroll the current account in the
+Apple Developer Program or select an enrolled team with App Store Connect
+access, complete any required agreements, and let Xcode create or download the
+distribution profile. Registering a physical iPhone is additionally required
+for development-device profiles, but not for App Store distribution.

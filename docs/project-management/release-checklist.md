@@ -31,8 +31,15 @@ available through `RUSKI_PRIVACY_POLICY_URL`, `RUSKI_SUPPORT_URL`, and
 - [x] Derive the OSLog subsystem and Keychain service from the bundle identity.
 - [x] Validate a generic-device Release build and unsigned archive without
       missing-icon, entitlement, or platform warnings.
+- [x] Attempt automatic development and App Store provisioning and record the
+      Apple account prerequisites reported on July 28, 2026.
+- [ ] Enroll the current Apple account in the Apple Developer Program or select
+      an enrolled team with App Store Connect access.
+- [ ] Complete any required Apple Developer and App Store Connect agreements.
 - [ ] Register `com.emiliogarcia.ruskireport` with the Apple Developer account
       and create or download its provisioning profile.
+- [ ] Register an iPhone with the development team before validating a signed
+      development-device build.
 - [ ] Produce and validate a signed distribution archive.
 
 The detailed contract and local commands are in
