@@ -1,5 +1,6 @@
 import { MatchDetail, TournamentId } from "../../domain";
 import { PostgresExecutor } from "./postgres-executor";
+import { writeJson, writeOptionalJson } from "./postgres-values";
 
 export async function writeMatchSnapshot(
   executor: PostgresExecutor,
@@ -28,19 +29,19 @@ export async function writeMatchSnapshot(
         matchIndex + 1,
         match.gameType,
         match.status,
-        match.participants,
-        match.score,
+        writeJson(match.participants),
+        writeJson(match.score),
         match.podId ?? null,
         match.bracketMatchId ?? null,
-        match.currentPhase ?? null,
+        writeOptionalJson(match.currentPhase),
         match.scheduledAt ?? null,
         match.startedAt ?? null,
         match.endedAt ?? null,
-        match.metadata ?? {},
-        match.boxScore,
-        match.scorecard,
-        match.events,
-        match.commentsSummary ?? null,
+        writeJson(match.metadata ?? {}),
+        writeJson(match.boxScore),
+        writeJson(match.scorecard),
+        writeJson(match.events),
+        writeOptionalJson(match.commentsSummary),
         match.version,
         match.updatedAt
       ]

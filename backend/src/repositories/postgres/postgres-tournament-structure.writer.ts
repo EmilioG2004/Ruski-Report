@@ -1,5 +1,6 @@
 import { Pod, Standing, TournamentId } from "../../domain";
 import { PostgresExecutor } from "./postgres-executor";
+import { writeJson, writeOptionalJson } from "./postgres-values";
 
 export async function writeTournamentStructure(
   executor: PostgresExecutor,
@@ -21,7 +22,7 @@ export async function writeTournamentStructure(
         pod.id,
         pod.name,
         pod.sequence,
-        pod.metadata ?? {}
+        writeJson(pod.metadata ?? {})
       ]
     );
 
@@ -44,11 +45,11 @@ export async function writeTournamentStructure(
         standing.teamId,
         standing.podId ?? null,
         standing.rank,
-        standing.record,
+        writeJson(standing.record),
         standing.gamesPlayed,
         standing.points ?? null,
-        standing.metricValues ?? null,
-        standing.metadata ?? {}
+        writeOptionalJson(standing.metricValues),
+        writeJson(standing.metadata ?? {})
       ]
     );
   }

@@ -1,5 +1,6 @@
 import { ScorebookSource } from "../../games";
 import { PostgresExecutor } from "./postgres-executor";
+import { writeJson } from "./postgres-values";
 
 export async function writeScorebookSource(
   executor: PostgresExecutor,
@@ -25,7 +26,7 @@ export async function writeScorebookSource(
       source.mimeType ?? null,
       source.sizeBytes ?? null,
       source.checksum ?? null,
-      source.metadata ?? {}
+      writeJson(source.metadata ?? {})
     ]
   );
 }

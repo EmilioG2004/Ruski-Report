@@ -18,6 +18,7 @@ import { mapPostgresError } from "./postgres-repository-error";
 import { writeScorebookSource } from "./postgres-scorebook-source.writer";
 import { writeTeamSnapshot } from "./postgres-team-snapshot.writer";
 import { writeTournamentStructure } from "./postgres-tournament-structure.writer";
+import { writeJson, writeOptionalJson } from "./postgres-values";
 
 @Injectable()
 export class PostgresTournamentSnapshotRepository
@@ -153,14 +154,14 @@ async function writeSnapshotVersion(
       tournament.id,
       snapshotVersion,
       tournament.status,
-      tournament.format,
+      writeJson(tournament.format),
       tournament.activeMatchIds,
       tournament.featuredMatchIds,
-      tournament.bracket ?? null,
-      tournament.statistics ?? null,
-      tournament.metadata ?? {},
-      snapshot.gameDefinition,
-      snapshot.validation,
+      writeOptionalJson(tournament.bracket),
+      writeOptionalJson(tournament.statistics),
+      writeJson(tournament.metadata ?? {}),
+      writeJson(snapshot.gameDefinition),
+      writeJson(snapshot.validation),
       sourceId,
       snapshot.generatedAt,
       publishedAt,

@@ -7,6 +7,9 @@ URL.
 ## Environment Variables
 
 - `PORT`: HTTP port for the NestJS server. Defaults to `3000`.
+- `HOST`: Address used by the NestJS listener. Defaults to `0.0.0.0`, which is
+  required inside the production container. Restrict host exposure through the
+  Compose port binding rather than changing the container listener.
 - `ADMIN_API_TOKEN`: Preferred token for scorebook and comment-moderation
   operator routes. Clients send it in the `x-admin-token` header.
 - `ADMIN_UPLOAD_TOKEN`: Legacy fallback when `ADMIN_API_TOKEN` is absent.

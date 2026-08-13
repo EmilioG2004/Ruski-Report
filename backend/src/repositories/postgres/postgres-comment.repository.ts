@@ -20,7 +20,7 @@ import {
 import { TransactionContext } from "../transaction";
 import { selectPostgresExecutor } from "./postgres-executor";
 import { mapPostgresError } from "./postgres-repository-error";
-import { readISOString, readOptionalJson } from "./postgres-values";
+import { readISOString, readOptionalJson, writeJson } from "./postgres-values";
 
 interface CommentRow {
   id: string;
@@ -107,7 +107,7 @@ export class PostgresCommentRepository implements CommentRepository {
           input.author.userId ?? null,
           input.body,
           createdAt,
-          {},
+          writeJson({}),
           input.normalizedBodyHash ?? null
         ]
       );

@@ -258,7 +258,8 @@ Required components:
 
 - Node/TypeScript backend process managed by Docker Compose.
 - PostgreSQL as the primary persistence layer for tournament snapshots, comments, users, and upload reports.
-- Uploaded workbook storage on disk with backups.
+- In-memory workbook processing; retain source metadata and normalized records
+  in PostgreSQL while the operator backs up the canonical workbook separately.
 - Caddy/Nginx/Cloudflare Tunnel/Tailscale Funnel for public HTTPS access.
 - Health endpoint and structured log files.
 

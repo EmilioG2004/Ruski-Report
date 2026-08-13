@@ -50,6 +50,13 @@ Health check:
 curl http://localhost:3000/api/health
 ```
 
+## Raspberry Pi Deployment
+
+The production ARM64 image, Compose stack, and operator instructions live in
+[`../deploy/raspberry-pi/`](../deploy/raspberry-pi/). The local
+`compose.postgres.yml` file is development-only: it publishes PostgreSQL and
+uses a non-production password, so it must not be deployed to the Pi.
+
 ## Account Authentication
 
 Public accounts use a display name and password. Register with

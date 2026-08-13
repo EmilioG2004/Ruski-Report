@@ -19,7 +19,8 @@ import { mapPostgresError } from "./postgres-repository-error";
 import {
   readISOString,
   readJson,
-  readOptionalJson
+  readOptionalJson,
+  writeJson
 } from "./postgres-values";
 
 interface UploadReportRow {
@@ -177,17 +178,17 @@ function reportParameters(report: UploadReport): unknown[] {
     report.source.mimeType ?? null,
     report.source.sizeBytes ?? null,
     report.source.checksum ?? null,
-    report.source.metadata ?? {},
+    writeJson(report.source.metadata ?? {}),
     report.gameType,
     report.status,
-    report.validation,
+    writeJson(report.validation),
     report.tournamentId ?? null,
     report.snapshotVersion?.version ?? null,
     report.snapshotVersion?.publishedAt ?? null,
     report.snapshotVersion?.previousVersion ?? null,
     report.receivedAt,
     report.completedAt ?? null,
-    report.metadata ?? {}
+    writeJson(report.metadata ?? {})
   ];
 }
 

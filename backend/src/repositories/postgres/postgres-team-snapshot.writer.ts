@@ -1,5 +1,6 @@
 import { Team, TournamentId } from "../../domain";
 import { PostgresExecutor } from "./postgres-executor";
+import { writeJson, writeOptionalJson } from "./postgres-values";
 
 export async function writeTeamSnapshot(
   executor: PostgresExecutor,
@@ -20,8 +21,8 @@ export async function writeTeamSnapshot(
         team.id,
         team.name,
         teamIndex + 1,
-        team.seed ?? null,
-        team.metadata ?? {}
+        writeOptionalJson(team.seed),
+        writeJson(team.metadata ?? {})
       ]
     );
 
@@ -47,7 +48,7 @@ export async function writeTeamSnapshot(
           player.firstName ?? null,
           player.lastName ?? null,
           player.preferredName ?? null,
-          player.metadata ?? {}
+          writeJson(player.metadata ?? {})
         ]
       );
       await executor.query(
