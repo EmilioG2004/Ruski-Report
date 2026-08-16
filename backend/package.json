@@ -12,6 +12,7 @@
     "lint": "tsc --noEmit -p tsconfig.json",
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
+    "smoke:realtime": "node scripts/smoke-realtime.mjs",
     "db:migrate": "ts-node src/database/migrate.ts",
     "db:migrate:prod": "node dist/database/migrate.js",
     "test": "jest --runInBand",
