@@ -1,0 +1,52 @@
+name: Publish policy site
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - ".github/workflows/publish-policy-site.yml"
+      - "docs/public/**"
+      - "scripts/validate-policy-site.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Validate public policy content
+        run: node scripts/validate-policy-site.mjs
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload policy site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: docs/public
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

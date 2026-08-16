@@ -7,8 +7,8 @@ Accepted
 ## Context
 
 Ruski Report needs a deployment target for the NestJS backend, PostgreSQL
-database, WebSocket gateway, admin scorebook upload flow, stored workbook files,
-logs, and backups.
+database, WebSocket gateway, admin scorebook upload flow, normalized tournament
+records, logs, and backups.
 
 The product plan already assumes a Raspberry Pi homelab deployment exposed
 through a public tunnel or reverse proxy. The deployment approach should be
@@ -30,8 +30,10 @@ The Compose deployment will run at least these services:
 - Public HTTPS/WSS access through a reverse proxy or tunnel.
 
 Persistent Docker volumes or mounted host directories will store PostgreSQL
-data, uploaded scorebooks, and any generated ingestion artifacts that must
-survive container restarts.
+data and any generated ingestion artifacts that must survive container
+restarts. Uploaded workbook bytes are processed from the request buffer and are
+not retained by the service; source metadata, checksums, validation results, and
+publication history are retained in PostgreSQL.
 
 The deployment should include a health check, structured logs, restart policy,
 backup process, and documented restore process.
@@ -49,7 +51,7 @@ model small:
 - One machine.
 - One Compose stack.
 - Clear service boundaries.
-- Persistent volumes for database and uploads.
+- Persistent storage for PostgreSQL data.
 - Restart behavior configured in one place.
 
 Docker Compose also leaves a migration path. If the app later moves from a
@@ -86,7 +88,7 @@ Services such as Render, Railway, Fly.io, or Heroku-style platforms can make
 deployment fast and provide managed logs, restarts, and databases.
 
 This was not selected because the project already has a custom backend,
-PostgreSQL, WebSockets, workbook upload storage, and a desire to demonstrate
+PostgreSQL, WebSockets, workbook ingestion, and a desire to demonstrate
 infrastructure ownership. A PaaS may still be useful later if operating the Pi
 becomes a distraction.
 
@@ -117,11 +119,11 @@ The backend service must be container-friendly. Configuration should come from
 environment variables, logs should go to standard output, and health checks
 should be exposed through an HTTP endpoint.
 
-The deployment plan must define persistent storage for PostgreSQL and uploaded
-scorebooks. It must also document backup and restore steps before the app is
-used for a live tournament.
+The deployment plan must define persistent storage for PostgreSQL and preserve
+the canonical source workbook through the operator's separate backup process.
+It must also document database backup and restore steps before the app is used
+for a live tournament.
 
 Public access must support both HTTPS for normal API calls and WSS for
 WebSocket live updates. The selected reverse proxy or tunnel must be configured
 and tested for WebSocket traffic.
-

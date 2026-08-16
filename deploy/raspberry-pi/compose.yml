@@ -1,0 +1,103 @@
+name: ruski-report
+
+x-api-environment: &api-environment
+  NODE_ENV: production
+  HOST: 0.0.0.0
+  PORT: "3000"
+  DATABASE_URL: postgresql://${POSTGRES_USER:-ruski}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/${POSTGRES_DB:-ruski_report}
+  DATABASE_SSL: "false"
+  DATABASE_POOL_MAX: "${DATABASE_POOL_MAX:-10}"
+  DATABASE_CONNECTION_TIMEOUT_MS: "${DATABASE_CONNECTION_TIMEOUT_MS:-5000}"
+  DATABASE_IDLE_TIMEOUT_MS: "${DATABASE_IDLE_TIMEOUT_MS:-30000}"
+  DATABASE_MIGRATIONS_DIR: /app/migrations
+  ADMIN_API_TOKEN: "${ADMIN_API_TOKEN:?Set ADMIN_API_TOKEN in .env}"
+  MODERATION_OPERATOR_ID: "${MODERATION_OPERATOR_ID:-tournament-operator}"
+  COMMENT_MODERATION_RULES_PATH: /app/config/comment-moderation-rules.json
+
+x-api-container: &api-container
+  image: ruski-report-api:${RUSKI_IMAGE_TAG:-local}
+  build:
+    context: ../../backend
+    dockerfile: Dockerfile
+    target: runtime
+  environment: *api-environment
+  init: true
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=64m
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  networks:
+    - database
+
+x-service-logging: &service-logging
+  driver: local
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-ruski_report}"
+      POSTGRES_USER: "${POSTGRES_USER:-ruski}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
+    volumes:
+      - type: bind
+        source: ${RUSKI_POSTGRES_DATA_PATH:-/srv/ruski-report/postgres}
+        target: /var/lib/postgresql/data
+    networks:
+      - database
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${POSTGRES_USER}" -d "$${POSTGRES_DB}"
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+    stop_grace_period: 30s
+    logging: *service-logging
+
+  migrate:
+    <<: *api-container
+    command: ["node", "dist/database/migrate.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    logging: *service-logging
+
+  api:
+    <<: *api-container
+    networks:
+      - database
+      - edge
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "${RUSKI_API_BIND_ADDRESS:-127.0.0.1}:${RUSKI_API_PORT:-3000}:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3000/api/health').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    stop_grace_period: 20s
+    logging: *service-logging
+
+networks:
+  database:
+    internal: true
+  edge:
+    name: ruski-report-edge
