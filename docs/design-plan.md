@@ -260,7 +260,8 @@ Required components:
 - PostgreSQL as the primary persistence layer for tournament snapshots, comments, users, and upload reports.
 - In-memory workbook processing; retain source metadata and normalized records
   in PostgreSQL while the operator backs up the canonical workbook separately.
-- Caddy/Nginx/Cloudflare Tunnel/Tailscale Funnel for public HTTPS access.
+- Cloudflare Tunnel at `api.ruskireport.com` for public HTTPS and WSS access,
+  with no inbound homelab port forwarding.
 - Health endpoint and structured log files.
 
 ## Test Plan

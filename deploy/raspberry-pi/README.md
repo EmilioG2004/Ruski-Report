@@ -1,8 +1,8 @@
 # Raspberry Pi Deployment Runbook
 
-This runbook implements ADR 0005 for the production NestJS and PostgreSQL
-runtime. Public HTTPS/WSS, automated backups, monitoring, and the iOS production
-URL are tracked separately by GitHub issues 36, 37, and 38.
+This runbook implements ADRs 0005 and 0006 for the production NestJS,
+PostgreSQL, and Cloudflare Tunnel runtime. Automated backups, monitoring, and
+the iOS production URL are tracked separately by GitHub issues 37 and 38.
 
 ## Target Host
 
@@ -28,10 +28,13 @@ The production Compose project contains:
 - `migrate`: a one-shot copy of the API image that applies transactional,
   advisory-locked migrations before the API starts.
 - `api`: the compiled NestJS process, running as the unprivileged `node` user.
+- `cloudflared`: the outbound-only public edge connector for
+  `api.ruskireport.com`.
 
-The API port binds to `127.0.0.1` by default. Issue 36 will attach the public
-HTTPS/WSS edge to the `ruski-report-edge` Docker network. The database remains
-on a separate internal network.
+The API port binds to `127.0.0.1` by default. Cloudflare Tunnel attaches the
+public HTTPS/WSS edge to the `ruski-report-edge` Docker network. `cloudflared`
+joins only that edge network and reaches the backend at `http://api:3000`.
+The database remains on a separate internal network with no published port.
 
 Uploaded workbook bytes are processed from the request buffer and are not
 retained on the Pi. PostgreSQL stores normalized tournament data, source
@@ -134,6 +137,35 @@ cp .env.example .env
 chmod 600 .env
 ```
 
+Create a separate connector secret outside the Git checkout. If this file was
+already created during tunnel provisioning, do not replace it:
+
+```bash
+sudo install -d -o clbemi -g clbemi -m 0700 /opt/ruski-report/secrets
+```
+
+For a new or rotated token, run the following command exactly, then paste the
+token only at the hidden prompt and press Return:
+
+```bash
+read -rsp "Paste Cloudflare tunnel token: " RUSKI_TUNNEL_TOKEN; echo
+```
+
+Store it without placing the value in shell history:
+
+```bash
+umask 077
+printf 'TUNNEL_TOKEN=%s\n' "$RUSKI_TUNNEL_TOKEN" > /opt/ruski-report/secrets/cloudflared.env
+unset RUSKI_TUNNEL_TOKEN
+chmod 600 /opt/ruski-report/secrets/cloudflared.env
+```
+
+Verify the token prefix without printing the credential:
+
+```bash
+grep -q '^TUNNEL_TOKEN=eyJ' /opt/ruski-report/secrets/cloudflared.env && echo OK
+```
+
 Generate two different URL-safe secrets:
 
 ```bash
@@ -147,6 +179,10 @@ source control, screenshots, the iOS app, or operator documentation.
 
 Set `RUSKI_IMAGE_TAG` to the checked-out tag or short commit SHA. Keep
 `RUSKI_API_BIND_ADDRESS=127.0.0.1` except during the LAN acceptance test below.
+Keep `CLOUDFLARED_ENV_FILE` outside the source directory. The production
+defaults allow browser origins `https://ruskireport.com` and
+`https://www.ruskireport.com`, trust the single `cloudflared` proxy hop, limit
+normal request bodies to 256 KiB, and limit scorebook files to 10 MiB.
 
 Validate interpolation without printing the rendered configuration, which
 would expose secrets:
@@ -174,7 +210,7 @@ docker compose --env-file .env ps --all
 Inspect startup without disclosing the `.env` file:
 
 ```bash
-docker compose --env-file .env logs --since 10m postgres migrate api
+docker compose --env-file .env logs --since 10m postgres migrate api cloudflared
 ```
 
 Verify the loopback health endpoint on the Pi:
@@ -229,13 +265,66 @@ nc -vz 192.168.8.129 5432
 ```
 
 That command must fail. Restore `RUSKI_API_BIND_ADDRESS=127.0.0.1` and recreate
-the API before beginning issue 36:
+the API before starting the public connector:
 
 ```bash
 docker compose --env-file .env up -d --no-deps --force-recreate api
 ```
 
-## 7. Recovery Verification
+## 7. Publish the Cloudflare Route
+
+Before adding the public route, verify the connector is running:
+
+```bash
+docker compose --env-file .env ps cloudflared
+docker compose --env-file .env logs --since 5m cloudflared
+```
+
+The logs should show registered tunnel connections, and the Cloudflare
+dashboard should show the tunnel as `Healthy`. The token value must not appear
+in the logs.
+
+In the Cloudflare dashboard:
+
+1. Go to **Networking > Tunnels** and select the existing Ruski Report tunnel.
+2. Open **Routes**, then select **Add route > Published application**.
+3. Set the hostname to `api.ruskireport.com`.
+4. Set the service URL to `http://api:3000`.
+5. Leave the path empty and save the route.
+
+Do not use `localhost`, the Pi's LAN address, or the loopback host binding as
+the service URL. `api` is Docker's internal DNS name for the backend container.
+Cloudflare creates the public DNS record and terminates TLS; the origin hop
+stays inside the Docker edge network.
+
+From a device outside the homelab network, verify HTTPS:
+
+```bash
+curl --fail --show-error https://api.ruskireport.com/api/health
+curl --fail --show-error https://api.ruskireport.com/api/games
+```
+
+From a machine with Node.js 22 or newer, verify two WSS connections:
+
+```bash
+cd backend
+npm run smoke:realtime -- https://api.ruskireport.com
+```
+
+Before accepting the deployment, also exercise a production account login,
+comment post, tournament read, and authorized scorebook upload. Confirm the Pi
+still shows only the loopback API binding and no PostgreSQL host port:
+
+```bash
+docker compose --env-file .env ps --all
+sudo ss -ltnp | grep -E ':(3000|5432)\b' || true
+```
+
+The Compose output should show `127.0.0.1:3000->3000/tcp` for the API and no
+published PostgreSQL port. SSH remains a LAN or WireGuard service; do not add
+it as a Cloudflare published application.
+
+## 8. Recovery Verification
 
 Verify automatic API crash recovery:
 
@@ -267,6 +356,23 @@ After reconnecting:
 cd /opt/ruski-report/source/deploy/raspberry-pi
 docker compose --env-file .env ps --all
 curl --fail --show-error http://127.0.0.1:3000/api/health
+```
+
+Verify connector recovery and then repeat the public health and WSS checks:
+
+```bash
+docker compose --env-file .env restart cloudflared
+docker compose --env-file .env logs --since 5m cloudflared
+curl --fail --show-error https://api.ruskireport.com/api/health
+```
+
+To rotate the tunnel token, use **Networking > Tunnels > select tunnel >
+Refresh token** in Cloudflare. Copy only the new `eyJ...` value, replace the
+Pi file through the same hidden-prompt procedure in section 4, and recreate
+only the connector:
+
+```bash
+docker compose --env-file .env up -d --no-deps --force-recreate cloudflared
 ```
 
 ## Deploy an Update
@@ -339,3 +445,17 @@ Record these results in issue 35 before closing it:
 - API crash-recovery result.
 - Pi reboot-recovery result.
 - The rollback commit used for the rehearsal.
+
+## Issue 36 Acceptance Record
+
+Record these results in issue 36 before closing it:
+
+- Exact deployed Git commit and pinned `cloudflared` version.
+- Cloudflare tunnel `Healthy` status and registered-connection log evidence.
+- `https://api.ruskireport.com/api/health` and public API smoke-test results.
+- WSS initial connection and reconnection result.
+- Account login, comment posting, tournament read, and scorebook-upload result.
+- Confirmation that PostgreSQL, port 3000, SSH, and Docker administration are
+  not publicly exposed.
+- Connector restart and Pi reboot-recovery results.
+- Date the public privacy policy was updated to identify Cloudflare.
