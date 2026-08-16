@@ -128,10 +128,11 @@ does not sell personal information.
 
 GitHub Pages processes normal web requests for the public policy site, Google
 processes email sent to the Gmail support address, and Apple distributes the
-iOS app. A production tunnel, reverse proxy, or other network provider has not
-yet been selected. If one is added during Raspberry Pi deployment, its data
-handling must be reviewed against the public policy before it receives
-production traffic.
+iOS app. Cloudflare provides DNS, TLS termination, and outbound tunnel delivery
+for `api.ruskireport.com`. In that role, Cloudflare may process IP addresses,
+connection and request metadata, and request content in transit as needed to
+deliver and secure API and realtime traffic. The public policy identifies this
+role before the production route receives app traffic.
 
 ## Failure Handling
 
