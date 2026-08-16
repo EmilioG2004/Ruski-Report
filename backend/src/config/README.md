@@ -10,6 +10,17 @@ URL.
 - `HOST`: Address used by the NestJS listener. Defaults to `0.0.0.0`, which is
   required inside the production container. Restrict host exposure through the
   Compose port binding rather than changing the container listener.
+- `CORS_ALLOWED_ORIGINS`: Comma-separated exact HTTP or HTTPS browser origins.
+  Wildcards, credentials, paths, queries, and fragments are rejected. An empty
+  value allows no cross-origin browser origin; native iOS requests do not
+  require CORS.
+- `HTTP_TRUST_PROXY_HOPS`: Number of reverse-proxy hops trusted by Express.
+  Defaults to `0`; the Raspberry Pi Cloudflare deployment uses `1` because
+  `cloudflared` is the only container directly in front of the API.
+- `HTTP_REQUEST_BODY_LIMIT_BYTES`: Maximum parsed JSON or URL-encoded request
+  body. Defaults to `262144` bytes and cannot exceed 10 MiB.
+- `SCOREBOOK_UPLOAD_LIMIT_BYTES`: Maximum multipart scorebook file size.
+  Defaults to 10 MiB and cannot exceed 50 MiB.
 - `ADMIN_API_TOKEN`: Preferred token for scorebook and comment-moderation
   operator routes. Clients send it in the `x-admin-token` header.
 - `ADMIN_UPLOAD_TOKEN`: Legacy fallback when `ADMIN_API_TOKEN` is absent.

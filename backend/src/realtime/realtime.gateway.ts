@@ -12,6 +12,10 @@ import {
 } from "@nestjs/websockets";
 import { Server, Socket } from "socket.io";
 
+import {
+  createCorsOptions,
+  loadHttpServerConfig
+} from "../config/http-server.config";
 import { LiveUpdateEvent, MatchId, Metadata, TournamentId } from "../domain";
 import { APP_LOGGER, AppLogger } from "../logging";
 import { RealtimeEventBroadcaster } from "./realtime-event-broadcaster";
@@ -23,12 +27,13 @@ import {
 
 export const LIVE_UPDATE_EVENT_NAME = "live.update";
 export const SUBSCRIBE_EVENT_NAME = "subscribe";
+const realtimeCorsOptions = createCorsOptions(
+  loadHttpServerConfig().allowedOrigins
+);
 
 @WebSocketGateway({
   namespace: "/live",
-  cors: {
-    origin: true
-  }
+  cors: realtimeCorsOptions
 })
 export class RealtimeGateway
   implements OnGatewayConnection, OnGatewayDisconnect, RealtimeEventBroadcaster

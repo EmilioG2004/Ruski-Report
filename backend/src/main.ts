@@ -1,10 +1,27 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
+import { NestExpressApplication } from "@nestjs/platform-express";
 
 import { AppModule } from "./app.module";
+import {
+  createCorsOptions,
+  loadHttpServerConfig
+} from "./config/http-server.config";
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  const httpConfig = loadHttpServerConfig();
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  app.set(
+    "trust proxy",
+    httpConfig.trustedProxyHops === 0 ? false : httpConfig.trustedProxyHops
+  );
+  app.useBodyParser("json", { limit: httpConfig.requestBodyLimitBytes });
+  app.useBodyParser("urlencoded", {
+    extended: false,
+    limit: httpConfig.requestBodyLimitBytes
+  });
+  app.enableCors(createCorsOptions(httpConfig.allowedOrigins));
   app.setGlobalPrefix("api");
   app.enableShutdownHooks();
 
