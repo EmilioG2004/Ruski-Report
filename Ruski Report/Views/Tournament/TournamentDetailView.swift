@@ -2,12 +2,15 @@
 //  TournamentDetailView.swift
 //  Ruski Report
 //
+//  Owns tournament loading and destination selection while delegating every
+//  content surface to a focused section view.
+//
 
 import SwiftUI
 
 struct TournamentDetailView: View {
     @StateObject private var controller: TournamentDetailController
-    @State private var selectedSection: TournamentDetailSection = .overview
+    @State private var selectedSection: TournamentDetailSection = .matches
 
     init(
         tournamentId: TournamentPreview.ID,
@@ -32,8 +35,8 @@ struct TournamentDetailView: View {
             switch controller.state {
             case .loading:
                 AppLoadingStateView(
-                    title: "Loading tournament",
-                    message: "Fetching standings, matches, and bracket results."
+                    title: TournamentCopy.loadingTitle,
+                    message: TournamentCopy.loadingMessage
                 )
                     .accessibilityIdentifier("tournament.loading")
             case .loaded(let screen):
@@ -43,8 +46,9 @@ struct TournamentDetailView: View {
             }
         }
         .background(Color.appGroupedBackground)
-        .navigationTitle("Tournament")
+        .navigationTitle(TournamentCopy.navigationTitle)
         .appInlineNavigationTitle()
+        .tint(Color.appBrand)
         .task {
             await controller.loadTournament()
         }
@@ -55,12 +59,14 @@ struct TournamentDetailView: View {
 
     private func detailContent(_ screen: TournamentDetailScreen) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: AppLayout.largeSpacing) {
                 TournamentOverviewHeader(detail: screen.detail)
 
                 TournamentSectionPicker(selection: $selectedSection)
 
                 sectionContent(screen)
+                    .id(selectedSection)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
             .padding(AppLayout.pagePadding)
             .frame(
@@ -89,7 +95,7 @@ struct TournamentDetailView: View {
 
     private func errorContent(_ message: String) -> some View {
         AppErrorStateView(
-            title: "Tournament unavailable",
+            title: TournamentCopy.unavailableTitle,
             message: message
         ) {
             Task {
