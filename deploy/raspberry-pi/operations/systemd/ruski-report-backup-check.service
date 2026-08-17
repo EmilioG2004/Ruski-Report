@@ -1,0 +1,24 @@
+[Unit]
+Description=Verify Ruski Report restic repository integrity
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+UMask=0077
+EnvironmentFile=/opt/ruski-report/secrets/restic.env
+ExecStart=/usr/local/lib/ruski-report/check-backup.sh
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/ruski-report-backup /var/cache/ruski-report-restic
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

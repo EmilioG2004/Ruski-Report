@@ -131,6 +131,18 @@ function validateRequiredCopy() {
     "analytics and advertising disclosure"
   );
   requireMatch(
+    "privacy/index.html",
+    privacy,
+    /Amazon Web Services stores\s+client-side encrypted rotating backups in S3/i,
+    "AWS backup-provider disclosure"
+  );
+  requireMatch(
+    "privacy/index.html",
+    privacy,
+    /production logs and encrypted rotating\s+backups are enabled with a maximum 30-day retention/i,
+    "production operational-copy retention"
+  );
+  requireMatch(
     "community-standards/index.html",
     standards,
     /Report Comment/,

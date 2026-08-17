@@ -7,6 +7,7 @@ import { AppExceptionFilter } from "./errors";
 import { LoggingModule } from "./logging";
 import { CommentReportingModule } from "./moderation";
 import { PublicApiModule } from "./public-api";
+import { PersistenceModule } from "./repositories";
 import { HealthService } from "./services/health.service";
 import { UserBlockingModule } from "./user-blocking";
 
@@ -15,6 +16,7 @@ import { UserBlockingModule } from "./user-blocking";
     AdminModule,
     CommentReportingModule,
     LoggingModule,
+    PersistenceModule,
     PublicApiModule,
     UserBlockingModule
   ],

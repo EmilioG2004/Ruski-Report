@@ -2,18 +2,19 @@ import { HealthController } from "./health.controller";
 import { HealthResponse, HealthService } from "../services/health.service";
 
 describe("HealthController", () => {
-  it("returns the service health response", () => {
+  it("returns the service health response", async () => {
     const response: HealthResponse = {
       status: "ok",
-      service: "ruski-report-backend"
+      service: "ruski-report-backend",
+      database: "ok"
     };
     const service = {
-      getHealth: jest.fn(() => response)
+      getHealth: jest.fn().mockResolvedValue(response)
     } as unknown as HealthService;
 
     const controller = new HealthController(service);
 
-    expect(controller.getHealth()).toEqual(response);
+    await expect(controller.getHealth()).resolves.toEqual(response);
     expect(service.getHealth).toHaveBeenCalledTimes(1);
   });
 });

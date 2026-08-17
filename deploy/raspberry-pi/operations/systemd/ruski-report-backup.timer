@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Ruski Report S3 backup every hour
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=5m
+Unit=ruski-report-backup.service
+
+[Install]
+WantedBy=timers.target

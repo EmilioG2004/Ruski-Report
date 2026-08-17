@@ -120,9 +120,9 @@ environment variables, logs should go to standard output, and health checks
 should be exposed through an HTTP endpoint.
 
 The deployment plan must define persistent storage for PostgreSQL and preserve
-the canonical source workbook through the operator's separate backup process.
-It must also document database backup and restore steps before the app is used
-for a live tournament.
+the canonical source workbook through the encrypted off-site backup process
+adopted by ADR 0007. It must also document and rehearse database backup and
+restore steps before the app is used for a live tournament.
 
 Public access must support both HTTPS for normal API calls and WSS for
 WebSocket live updates. The selected reverse proxy or tunnel must be configured

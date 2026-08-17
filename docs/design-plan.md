@@ -259,10 +259,13 @@ Required components:
 - Node/TypeScript backend process managed by Docker Compose.
 - PostgreSQL as the primary persistence layer for tournament snapshots, comments, users, and upload reports.
 - In-memory workbook processing; retain source metadata and normalized records
-  in PostgreSQL while the operator backs up the canonical workbook separately.
+  in PostgreSQL, while an operator copy of the canonical workbook joins the
+  database dump and deployment configuration in encrypted hourly S3 backups.
 - Cloudflare Tunnel at `api.ruskireport.com` for public HTTPS and WSS access,
   with no inbound homelab port forwarding.
-- Health endpoint and structured log files.
+- A health endpoint that verifies both the API process and PostgreSQL.
+- Structured container/service output in a persistent 30-day system journal.
+- Five-minute external HTTPS and WSS checks with CloudWatch/SNS email alerts.
 
 ## Test Plan
 
