@@ -1,0 +1,303 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Scheduled public HTTPS and realtime monitoring with CloudWatch alarms and
+  operator email notifications for Ruski Report.
+
+Parameters:
+  OperatorAlertEmail:
+    Type: String
+    Default: ruskisupport@gmail.com
+    Description: Email address that receives production availability alarms.
+    AllowedPattern: ^[^@\s]+@[^@\s]+\.[^@\s]+$
+    ConstraintDescription: Enter a valid email address.
+
+  PublicBaseUrl:
+    Type: String
+    Default: https://api.ruskireport.com
+    Description: Public HTTPS origin checked by the scheduled monitor.
+    AllowedPattern: ^https://[A-Za-z0-9.-]+$
+    ConstraintDescription: Enter an HTTPS origin without a path or trailing slash.
+
+Resources:
+  OperatorAlertTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: ruski-report-operator-alerts
+      DisplayName: Ruski Report alerts
+      Subscription:
+        - Endpoint: !Ref OperatorAlertEmail
+          Protocol: email
+      Tags:
+        - Key: Application
+          Value: ruski-report
+        - Key: Purpose
+          Value: operator-alerts
+
+  PublicMonitorLogGroup:
+    Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties:
+      LogGroupName: /aws/lambda/ruski-report-public-monitor
+      RetentionInDays: 30
+      Tags:
+        - Key: Application
+          Value: ruski-report
+        - Key: Purpose
+          Value: availability-monitoring
+
+  PublicMonitorRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ruski-report-public-monitor
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: write-monitor-logs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource: !Sub >-
+                  arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ruski-report-public-monitor:*
+      Tags:
+        - Key: Application
+          Value: ruski-report
+        - Key: Purpose
+          Value: availability-monitoring
+
+  PublicMonitorFunction:
+    Type: AWS::Lambda::Function
+    DependsOn: PublicMonitorLogGroup
+    Properties:
+      FunctionName: ruski-report-public-monitor
+      Description: Checks public HTTPS and Socket.IO connectivity every five minutes.
+      Architectures:
+        - arm64
+      Runtime: nodejs22.x
+      Handler: index.handler
+      MemorySize: 128
+      Timeout: 45
+      Role: !GetAtt PublicMonitorRole.Arn
+      Environment:
+        Variables:
+          PUBLIC_BASE_URL: !Ref PublicBaseUrl
+      Code:
+        ZipFile: |
+          "use strict";
+
+          const connectionTimeoutMilliseconds = 15_000;
+
+          exports.handler = async (event) => {
+            if (event?.forceFailure === true) {
+              throw new Error("Controlled monitor failure requested by the operator.");
+            }
+
+            const publicBaseUrl = process.env.PUBLIC_BASE_URL;
+            if (publicBaseUrl === undefined) {
+              throw new Error("PUBLIC_BASE_URL is not configured.");
+            }
+
+            const startedAt = Date.now();
+            await verifyHealth(publicBaseUrl);
+
+            const websocketEndpoint = createWebSocketEndpoint(publicBaseUrl);
+            await verifyRealtimeConnection(websocketEndpoint, "initial connection");
+            await verifyRealtimeConnection(websocketEndpoint, "reconnection");
+
+            const result = {
+              status: "ok",
+              checkedOrigin: new URL(publicBaseUrl).origin,
+              durationMilliseconds: Date.now() - startedAt
+            };
+            console.log(JSON.stringify(result));
+            return result;
+          };
+
+          async function verifyHealth(publicBaseUrl) {
+            const healthUrl = new URL("/api/health", publicBaseUrl);
+            const response = await fetch(healthUrl, {
+              headers: { accept: "application/json" },
+              signal: AbortSignal.timeout(10_000)
+            });
+
+            if (!response.ok) {
+              throw new Error(`Public health check returned HTTP ${response.status}.`);
+            }
+
+            const body = await response.json();
+            if (
+              body?.status !== "ok" ||
+              body?.service !== "ruski-report-backend" ||
+              body?.database !== "ok"
+            ) {
+              throw new Error("Public health response did not confirm API and database readiness.");
+            }
+          }
+
+          function createWebSocketEndpoint(publicBaseUrl) {
+            const websocketUrl = new URL("/socket.io/", publicBaseUrl);
+            websocketUrl.protocol = "wss:";
+            websocketUrl.searchParams.set("EIO", "4");
+            websocketUrl.searchParams.set("transport", "websocket");
+            return websocketUrl;
+          }
+
+          function verifyRealtimeConnection(endpointUrl, label) {
+            return new Promise((resolve, reject) => {
+              const socket = new WebSocket(endpointUrl);
+              let settled = false;
+              const timeout = setTimeout(() => {
+                finish(new Error(`Timed out during ${label}.`));
+              }, connectionTimeoutMilliseconds);
+
+              socket.addEventListener("message", (event) => {
+                const message = String(event.data);
+
+                if (message.startsWith("0")) {
+                  socket.send("40/live,");
+                  return;
+                }
+
+                if (message === "2") {
+                  socket.send("3");
+                  return;
+                }
+
+                if (message.startsWith("44/live,")) {
+                  finish(new Error(`Socket.IO rejected ${label}: ${message}`));
+                  return;
+                }
+
+                const eventPrefix = "42/live,";
+                if (!message.startsWith(eventPrefix)) {
+                  return;
+                }
+
+                const payload = JSON.parse(message.slice(eventPrefix.length));
+                if (
+                  Array.isArray(payload) &&
+                  payload[0] === "live.update" &&
+                  payload[1]?.type === "connection.ready"
+                ) {
+                  finish();
+                }
+              });
+
+              socket.addEventListener("error", () => {
+                finish(new Error(`WebSocket error during ${label}.`));
+              });
+
+              socket.addEventListener("close", (closeEvent) => {
+                if (!settled) {
+                  finish(new Error(
+                    `WebSocket closed before ${label} completed (code ${closeEvent.code}).`
+                  ));
+                }
+              });
+
+              function finish(error) {
+                if (settled) {
+                  return;
+                }
+
+                settled = true;
+                clearTimeout(timeout);
+
+                if (socket.readyState === WebSocket.OPEN) {
+                  socket.close(1000, "Monitor check complete");
+                }
+
+                if (error === undefined) {
+                  resolve();
+                } else {
+                  reject(error);
+                }
+              }
+            });
+          }
+      Tags:
+        - Key: Application
+          Value: ruski-report
+        - Key: Purpose
+          Value: availability-monitoring
+
+  PublicMonitorSchedule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: ruski-report-public-monitor
+      Description: Run the public service monitor every five minutes.
+      ScheduleExpression: rate(5 minutes)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt PublicMonitorFunction.Arn
+          Id: RuskiReportPublicMonitor
+          Input: '{"source":"eventbridge"}'
+
+  PublicMonitorSchedulePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref PublicMonitorFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt PublicMonitorSchedule.Arn
+
+  PublicMonitorErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ruski-report-public-monitor-errors
+      AlarmDescription: Public HTTPS, database readiness, or WSS monitoring failed.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref PublicMonitorFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref OperatorAlertTopic
+      OKActions:
+        - !Ref OperatorAlertTopic
+
+  PublicMonitorMissingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ruski-report-public-monitor-missing
+      AlarmDescription: The scheduled public monitor has not run in fifteen minutes.
+      Namespace: AWS/Lambda
+      MetricName: Invocations
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref PublicMonitorFunction
+      Statistic: Sum
+      Period: 900
+      EvaluationPeriods: 1
+      DatapointsToAlarm: 1
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions:
+        - !Ref OperatorAlertTopic
+      OKActions:
+        - !Ref OperatorAlertTopic
+
+Outputs:
+  OperatorAlertTopicArn:
+    Description: SNS topic used by production availability alarms.
+    Value: !Ref OperatorAlertTopic
+  PublicMonitorFunctionName:
+    Description: Lambda function that checks public HTTPS and WSS behavior.
+    Value: !Ref PublicMonitorFunction

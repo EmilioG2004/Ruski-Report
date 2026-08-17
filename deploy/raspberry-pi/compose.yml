@@ -37,10 +37,7 @@ x-api-container: &api-container
     - database
 
 x-service-logging: &service-logging
-  driver: local
-  options:
-    max-size: 10m
-    max-file: "3"
+  driver: journald
 
 services:
   postgres:
