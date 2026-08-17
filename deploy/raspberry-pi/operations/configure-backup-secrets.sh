@@ -9,6 +9,11 @@ fi
 secrets_dir=/opt/ruski-report/secrets
 environment_file=${secrets_dir}/restic.env
 password_file=${secrets_dir}/restic-password
+operator_group=root
+
+if [[ -n ${SUDO_USER:-} && ${SUDO_USER} != root ]]; then
+  operator_group=$(id -gn "${SUDO_USER}")
+fi
 
 if [[ -e "${environment_file}" || -e "${password_file}" ]]; then
   printf 'Backup secret files already exist; refusing to overwrite them.\n' >&2
@@ -41,7 +46,7 @@ if [[ ${#secret_access_key} -ne 40 ]]; then
   exit 1
 fi
 
-install -d -o root -g root -m 0700 "${secrets_dir}"
+install -d -o root -g "${operator_group}" -m 0750 "${secrets_dir}"
 umask 077
 environment_temp=$(mktemp "${secrets_dir}/restic.env.XXXXXX")
 password_temp=$(mktemp "${secrets_dir}/restic-password.XXXXXX")

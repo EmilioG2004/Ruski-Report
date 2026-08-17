@@ -33,7 +33,7 @@ Then install the package and create the protected host directories:
 ```bash
 sudo apt update
 sudo apt install -y restic
-sudo install -d -o root -g root -m 0700 /opt/ruski-report/secrets
+sudo install -d -o root -g clbemi -m 0750 /opt/ruski-report/secrets
 sudo install -d -o root -g root -m 0700 /var/lib/ruski-report-backup
 sudo install -d -o root -g root -m 0700 /var/cache/ruski-report-restic
 sudo install -d -o clbemi -g clbemi -m 0750 /srv/ruski-report/source-workbooks
@@ -89,6 +89,10 @@ sudo stat -c '%A %U:%G %n' /opt/ruski-report/secrets/restic.env /opt/ruski-repor
 ```
 
 Both lines must begin with `-rw------- root:root`.
+
+The parent directory is `root:clbemi` mode `0750` so Compose can traverse it
+to the separately group-readable Cloudflare file. The AWS/restic files remain
+unreadable to the group.
 
 Copy the canonical operator workbook into the included source directory. The
 API intentionally does not retain upload request bytes:

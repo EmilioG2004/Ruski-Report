@@ -164,6 +164,10 @@ umask 077
 printf 'TUNNEL_TOKEN=%s\n' "$RUSKI_TUNNEL_TOKEN" > /opt/ruski-report/secrets/cloudflared.env
 unset RUSKI_TUNNEL_TOKEN
 chmod 600 /opt/ruski-report/secrets/cloudflared.env
+sudo chown root:clbemi /opt/ruski-report/secrets
+sudo chown root:clbemi /opt/ruski-report/secrets/cloudflared.env
+sudo chmod 750 /opt/ruski-report/secrets
+sudo chmod 640 /opt/ruski-report/secrets/cloudflared.env
 ```
 
 Verify the token prefix without printing the credential:
@@ -376,9 +380,11 @@ curl --fail --show-error https://api.ruskireport.com/api/health
 ```
 
 To rotate the tunnel token, use **Networking > Tunnels > select tunnel >
-Refresh token** in Cloudflare. Copy only the new `eyJ...` value, replace the
-Pi file through the same hidden-prompt procedure in section 4, and recreate
-only the connector:
+Refresh token** in Cloudflare. Copy only the new `eyJ...` value. Because the
+production secrets directory is root-owned after initial setup, enter a root
+shell and repeat the hidden prompt and `printf` commands from section 4. Then
+restore `root:clbemi` ownership and mode `0640` on `cloudflared.env`, exit the
+root shell, and recreate only the connector:
 
 ```bash
 docker compose --env-file .env up -d --no-deps --force-recreate cloudflared
