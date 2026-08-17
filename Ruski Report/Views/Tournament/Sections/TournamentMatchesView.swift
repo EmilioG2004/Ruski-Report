@@ -2,6 +2,9 @@
 //  TournamentMatchesView.swift
 //  Ruski Report
 //
+//  Presents tournament games as status-based score feed sections and delegates
+//  route ownership to the application navigation controller.
+//
 
 import SwiftUI
 
@@ -13,58 +16,72 @@ struct TournamentMatchesView: View {
     var body: some View {
         if detail.matches.isEmpty {
             TournamentEmptySectionView(
-                title: "Matches are not available yet",
+                title: TournamentCopy.gamesUnavailable,
                 systemImage: "sportscourt"
             )
         } else {
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(detail.matches) { match in
-                    Button {
-                        navigation.showMatch(match, in: detail)
-                    } label: {
-                        TournamentMatchCard(detail: detail, match: match)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("tournament.match.\(match.id)")
+            VStack(alignment: .leading, spacing: AppLayout.sectionSpacing) {
+                if !liveMatches.isEmpty {
+                    matchGroup(
+                        title: TournamentCopy.liveTitle,
+                        subtitle: TournamentCopy.liveSubtitle,
+                        matches: liveMatches
+                    )
+                }
+
+                if !upcomingMatches.isEmpty {
+                    matchGroup(
+                        title: TournamentCopy.upcomingTitle,
+                        subtitle: TournamentCopy.upcomingSubtitle,
+                        matches: upcomingMatches
+                    )
+                }
+
+                if !completedMatches.isEmpty {
+                    matchGroup(
+                        title: TournamentCopy.finalTitle,
+                        subtitle: TournamentCopy.finalSubtitle,
+                        matches: completedMatches
+                    )
                 }
             }
         }
     }
-}
 
-private struct TournamentMatchCard: View {
-    let detail: TournamentDetail
-    let match: MatchPreview
+    private var liveMatches: [MatchPreview] {
+        detail.matches.filter { $0.status == .inProgress }
+    }
 
-    var body: some View {
-        TournamentDetailCard {
-            StatusMetadataLine(
-                status: match.status,
-                metadata: match.currentPhaseLabel
-            )
+    private var upcomingMatches: [MatchPreview] {
+        detail.matches.filter { $0.status == .scheduled }
+    }
 
-            Text(detail.participantsLabel(for: match))
-                .font(.headline)
-                .fixedSize(horizontal: false, vertical: true)
+    private var completedMatches: [MatchPreview] {
+        detail.matches.filter { $0.status == .final }
+    }
 
-            if let score = detail.scoreLabel(for: match) {
-                Text(score)
-                    .font(.title3.weight(.bold).monospacedDigit())
+    private func matchGroup(
+        title: String,
+        subtitle: String,
+        matches: [MatchPreview]
+    ) -> some View {
+        VStack(alignment: .leading, spacing: AppLayout.standardSpacing) {
+            AppSectionHeader(title, subtitle: subtitle, count: matches.count)
+
+            ForEach(matches) { match in
+                MatchScoreCard(
+                    match: match,
+                    teamName: detail.teamName,
+                    context: TournamentMatchContextFormatter.label(
+                        for: match,
+                        in: detail
+                    ),
+                    accessibilityIdentifier: "tournament.match.\(match.id)"
+                ) {
+                    navigation.showMatch(match, in: detail)
+                }
             }
-
-            Divider()
-
-            HStack {
-                Text("Match details")
-                    .font(.subheadline.weight(.semibold))
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.subheadline.weight(.semibold))
-                    .accessibilityHidden(true)
-            }
-            .foregroundStyle(Color.accentColor)
         }
     }
+
 }
