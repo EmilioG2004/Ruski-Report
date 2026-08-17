@@ -2,6 +2,9 @@
 //  HomeView.swift
 //  Ruski Report
 //
+//  Owns the home screen shell and connects declarative score content to the
+//  shared application router.
+//
 
 import SwiftUI
 
@@ -14,11 +17,13 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: AppLayout.sectionSpacing) {
-                Text("Official Tournament")
-                    .font(.title2.bold())
-                    .accessibilityIdentifier("home.title")
-
-                content
+                HomeScreenHeader()
+                HomeStateContentView(
+                    state: state,
+                    retry: retry,
+                    openTournament: openTournament,
+                    openMatch: openMatch
+                )
             }
             .padding(AppLayout.pagePadding)
             .frame(
@@ -28,39 +33,19 @@ struct HomeView: View {
             .frame(maxWidth: .infinity)
         }
         .background(Color.appGroupedBackground)
-        .navigationTitle("Ruski Report")
-        .appLargeNavigationTitle()
+        .navigationTitle(HomeCopy.navigationTitle)
+        .appInlineNavigationTitle()
+        .refreshable {
+            await retry()
+        }
+        .tint(Color.appBrand)
     }
 
-    @ViewBuilder
-    private var content: some View {
-        switch state {
-        case .idle, .loading:
-            AppSurface {
-                AppLoadingStateView(
-                    title: "Loading tournament",
-                    message: "Fetching the latest official tournament summary."
-                )
-                .frame(minHeight: 180)
-            }
-            .accessibilityIdentifier("home.loading")
-        case .loaded(let tournament):
-            TournamentCardView(tournament: tournament) {
-                navigation.showTournament(tournament)
-            }
-        case .failed(let message):
-            AppSurface {
-                AppErrorStateView(
-                    title: "Tournament unavailable",
-                    message: message
-                ) {
-                    Task {
-                        await retry()
-                    }
-                }
-                .frame(minHeight: 220)
-            }
-            .accessibilityIdentifier("home.error")
-        }
+    private func openTournament(_ tournament: TournamentPreview) {
+        navigation.showTournament(tournament)
+    }
+
+    private func openMatch(_ match: MatchPreview, in detail: TournamentDetail) {
+        navigation.showMatch(match, in: detail)
     }
 }

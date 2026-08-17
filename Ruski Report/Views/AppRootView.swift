@@ -81,6 +81,7 @@ struct AppRootView: View {
         }
         .environmentObject(navigation)
         .environmentObject(sheetRouter)
+        .tint(Color.appBrand)
     }
 
     @ViewBuilder

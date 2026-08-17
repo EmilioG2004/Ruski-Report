@@ -52,7 +52,13 @@ final class HomeController: ObservableObject {
         do {
             let loadedTournament = try await tournaments.activeTournament()
             cachedTournaments[loadedTournament.id] = loadedTournament
-            state = .loaded(loadedTournament)
+            let detail = await loadTournamentDetail(for: loadedTournament)
+            state = .loaded(
+                HomeScreen(
+                    tournament: loadedTournament,
+                    detail: detail
+                )
+            )
         } catch {
             logger.log(
                 .warning,
@@ -72,5 +78,23 @@ final class HomeController: ObservableObject {
 
     func tournament(id: TournamentPreview.ID) -> TournamentPreview? {
         cachedTournaments[id]
+    }
+
+    private func loadTournamentDetail(
+        for tournament: TournamentPreview
+    ) async -> TournamentDetail? {
+        do {
+            return try await tournaments.tournament(id: tournament.id)
+        } catch {
+            logger.log(
+                .warning,
+                "Unable to load home score feed",
+                metadata: [
+                    "error": String(describing: error),
+                    "tournamentId": tournament.id
+                ]
+            )
+            return nil
+        }
     }
 }

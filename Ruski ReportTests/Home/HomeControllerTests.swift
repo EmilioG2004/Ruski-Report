@@ -21,7 +21,14 @@ struct HomeControllerTests {
 
         await controller.loadActiveTournament()
 
-        #expect(controller.state == .loaded(PreviewData.tournamentPreview))
+        #expect(
+            controller.state == .loaded(
+                HomeScreen(
+                    tournament: PreviewData.tournamentPreview,
+                    detail: PreviewData.tournamentDetail
+                )
+            )
+        )
         #expect(controller.tournament(id: "tournament-2026") != nil)
     }
 
@@ -41,6 +48,52 @@ struct HomeControllerTests {
         #expect(
             controller.state == .failed(message: "The tournament API is offline.")
         )
+    }
+
+    @Test func loadActiveTournamentKeepsSummaryWhenScoreFeedFails() async {
+        let controller = HomeController(
+            tournaments: StubTournamentRepository(
+                activeTournamentResult: .success(PreviewData.tournamentPreview),
+                tournamentResult: .failure(
+                    AppError.networkUnavailable("Tournament details are offline.")
+                )
+            ),
+            logger: NoopAppLogger(),
+            initialTournament: PreviewData.tournamentPreview
+        )
+
+        await controller.loadActiveTournament()
+
+        #expect(
+            controller.state == .loaded(
+                HomeScreen(
+                    tournament: PreviewData.tournamentPreview,
+                    detail: nil
+                )
+            )
+        )
+    }
+
+    @Test func homeScreenGroupsLiveUpcomingAndFinalGames() {
+        let screen = HomeScreen(
+            tournament: PreviewData.tournamentPreview,
+            detail: PreviewData.tournamentDetail
+        )
+
+        #expect(screen.liveMatches.map(\.id) == [PreviewData.openingMatch.id])
+        #expect(screen.upcomingMatches.map(\.id) == [PreviewData.secondMatch.id])
+        #expect(screen.completedMatches.map(\.id) == [PreviewData.championshipMatch.id])
+    }
+
+    @Test func homeScreenBuildsOrderedFeedSections() {
+        let screen = HomeScreen(
+            tournament: PreviewData.tournamentPreview,
+            detail: PreviewData.tournamentDetail
+        )
+
+        #expect(screen.matchSections.map(\.kind) == [.live, .upcoming, .completed])
+        #expect(screen.matchSections.map(\.matches.count) == [1, 1, 1])
+        #expect(screen.matchSections.map(\.title) == ["Live now", "Up next", "Latest results"])
     }
 
     @Test func realtimeTournamentUpdateReloadsActiveTournament() async {
