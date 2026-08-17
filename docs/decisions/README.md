@@ -9,6 +9,7 @@ Use this folder for architecture and product decisions that should be easy to re
 - [ADR 0003: Use WebSockets for Live Updates](0003-use-websockets-for-live-updates.md)
 - [ADR 0004: Use PostgreSQL for Persistence](0004-use-postgresql-for-persistence.md)
 - [ADR 0005: Deploy with Docker Compose on Raspberry Pi](0005-deploy-with-docker-compose-on-raspberry-pi.md)
+- [ADR 0006: Use Cloudflare Tunnel for Public Ingress](0006-use-cloudflare-tunnel-for-public-ingress.md)
 
 Suggested naming:
 

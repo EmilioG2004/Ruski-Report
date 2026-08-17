@@ -1,5 +1,7 @@
 import { Module } from "@nestjs/common";
+import { MulterModule } from "@nestjs/platform-express";
 
+import { loadHttpServerConfig } from "../config/http-server.config";
 import {
   GamePluginRegistry,
   ruskiGamePlugin
@@ -13,7 +15,19 @@ import { AdminScorebookController } from "./admin-scorebook.controller";
 import { AdminScorebookService } from "./admin-scorebook.service";
 
 @Module({
-  imports: [AdminAuthModule, PersistenceModule, RealtimeModule],
+  imports: [
+    AdminAuthModule,
+    MulterModule.registerAsync({
+      useFactory: () => ({
+        limits: {
+          fileSize: loadHttpServerConfig().scorebookUploadLimitBytes,
+          files: 1
+        }
+      })
+    }),
+    PersistenceModule,
+    RealtimeModule
+  ],
   controllers: [AdminScorebookController],
   providers: [
     AdminScorebookService,
