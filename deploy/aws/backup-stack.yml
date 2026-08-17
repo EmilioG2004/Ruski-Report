@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Private Amazon S3 storage and a least-privilege IAM identity for encrypted
+  Ruski Report backups from the Raspberry Pi.
+
+Resources:
+  BackupBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub ruski-report-backups-${AWS::AccountId}-${AWS::Region}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireOldResticObjectVersions
+            Prefix: restic/
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 1
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+          - Id: RemoveExpiredResticDeleteMarkers
+            Prefix: restic/
+            Status: Enabled
+            ExpiredObjectDeleteMarker: true
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Application
+          Value: ruski-report
+        - Key: Purpose
+          Value: encrypted-backups
+      VersioningConfiguration:
+        Status: Enabled
+
+  BackupBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BackupBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource:
+              - !GetAtt BackupBucket.Arn
+              - !Sub ${BackupBucket.Arn}/*
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+
+  PiBackupUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: ruski-report-pi-backup
+      Tags:
+        - Key: Application
+          Value: ruski-report
+        - Key: Purpose
+          Value: encrypted-backups
+
+  PiBackupPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: ruski-report-restic-s3
+      Users:
+        - !Ref PiBackupUser
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ReadBucketLocation
+            Effect: Allow
+            Action:
+              - s3:GetBucketLocation
+            Resource: !GetAtt BackupBucket.Arn
+          - Sid: ListOnlyTheResticRepository
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+            Resource: !GetAtt BackupBucket.Arn
+            Condition:
+              StringLike:
+                s3:prefix:
+                  - restic
+                  - restic/*
+          - Sid: ManageOnlyResticRepositoryObjects
+            Effect: Allow
+            Action:
+              - s3:DeleteObject
+              - s3:GetObject
+              - s3:PutObject
+            Resource: !Sub ${BackupBucket.Arn}/restic/*
+
+Outputs:
+  BackupBucketName:
+    Description: Private bucket that holds the encrypted restic repository.
+    Value: !Ref BackupBucket
+  PiBackupUserName:
+    Description: IAM user for the Pi; create its access key outside this stack.
+    Value: !Ref PiBackupUser
+  ResticRepository:
+    Description: RESTIC_REPOSITORY value for the Raspberry Pi.
+    Value: !Sub s3:s3.${AWS::Region}.amazonaws.com/${BackupBucket}/restic

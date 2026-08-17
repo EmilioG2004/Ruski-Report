@@ -1,0 +1,11 @@
+[Unit]
+Description=Run a weekly Ruski Report backup integrity check
+
+[Timer]
+OnCalendar=Sun *-*-* 04:30:00
+Persistent=true
+RandomizedDelaySec=15m
+Unit=ruski-report-backup-check.service
+
+[Install]
+WantedBy=timers.target
