@@ -26,8 +26,53 @@ final class Ruski_ReportUITests: XCTestCase {
         assertExists(liveMatch)
         liveMatch.tap()
 
-        assertExists(app.scrollViews["match.detail"])
+        assertExists(app.descendants(matching: .any)["match.detail"])
         assertExists(app.descendants(matching: .any)["match.scoreHeader"])
+    }
+
+    @MainActor
+    func testOpensLiveGameFromHomeScoreFeed() throws {
+        let app = launchPreviewApp()
+
+        let liveMatch = app.buttons["home.match.match-2026-001"]
+        assertExists(liveMatch)
+        liveMatch.tap()
+
+        assertExists(app.descendants(matching: .any)["match.scoreHeader"])
+        assertExists(app.descendants(matching: .any)["match.panelPicker"])
+        assertExists(app.descendants(matching: .any)["match.overview"])
+    }
+
+    @MainActor
+    func testSwitchesBetweenMatchPanels() throws {
+        let app = launchPreviewApp()
+
+        openLiveMatch(in: app)
+        assertExists(app.descendants(matching: .any)["match.overview"])
+
+        app.buttons["match.panel.plays"].tap()
+        assertExists(app.descendants(matching: .any)["match.events"])
+
+        app.buttons["match.panel.scorecard"].tap()
+        assertExists(app.descendants(matching: .any)["match.scorecard"])
+
+        app.buttons["match.panel.chat"].tap()
+        assertExists(app.buttons["match.comments.signIn"])
+    }
+
+    @MainActor
+    func testLongNamesRemainNavigable() throws {
+        let app = launchPreviewApp(scenario: "longContent")
+
+        assertExists(
+            app.staticTexts[
+                "North Durham Longtable Society of Extremely Confident Shooters"
+            ]
+        )
+        app.buttons["home.match.match-2026-001"].tap()
+
+        assertExists(app.descendants(matching: .any)["match.scoreHeader"])
+        assertExists(app.buttons["match.panel.scorecard"])
     }
 
     @MainActor
@@ -42,7 +87,7 @@ final class Ruski_ReportUITests: XCTestCase {
         assertExists(app.staticTexts["Pods are not available yet"])
 
         app.buttons["tournament.section.matches"].tap()
-        assertExists(app.staticTexts["Matches are not available yet"])
+        assertExists(app.staticTexts["Games are not available yet"])
     }
 
     @MainActor
@@ -109,8 +154,8 @@ final class Ruski_ReportUITests: XCTestCase {
     func testShowsSafeModerationErrorAndPreservesDraft() throws {
         let app = launchPreviewApp(scenario: "moderationRejected")
 
-        openLiveMatch(in: app)
-        let scrollView = app.scrollViews["match.detail"]
+        openComments(in: app)
+        let scrollView = app.scrollViews["match.comments.scroll"]
         let input = app.textFields["match.comments.input"]
         scrollUntilHittable(input, in: scrollView)
         input.tap()
@@ -133,8 +178,8 @@ final class Ruski_ReportUITests: XCTestCase {
     func testReportsACommentAndShowsConfirmation() throws {
         let app = launchPreviewApp(scenario: "reporting")
 
-        openLiveMatch(in: app)
-        let scrollView = app.scrollViews["match.detail"]
+        openComments(in: app)
+        let scrollView = app.scrollViews["match.comments.scroll"]
         let actions = app.buttons["match.comments.actions.comment-preview-1"]
         scrollUntilHittable(actions, in: scrollView)
         actions.tap()
@@ -161,8 +206,8 @@ final class Ruski_ReportUITests: XCTestCase {
     func testBlocksACommentAuthorAndRefreshesTheVisibleFeed() throws {
         let app = launchPreviewApp(scenario: "blocking")
 
-        openLiveMatch(in: app)
-        let scrollView = app.scrollViews["match.detail"]
+        openComments(in: app)
+        let scrollView = app.scrollViews["match.comments.scroll"]
         let commentBody =
             app.staticTexts["Alpha Table is one cup away from closing this out."]
         let actions = app.buttons["match.comments.actions.comment-preview-1"]
@@ -236,7 +281,16 @@ final class Ruski_ReportUITests: XCTestCase {
         let liveMatch = app.buttons["tournament.match.match-2026-001"]
         assertExists(liveMatch)
         liveMatch.tap()
-        assertExists(app.scrollViews["match.detail"])
+        assertExists(app.descendants(matching: .any)["match.detail"])
+    }
+
+    @MainActor
+    private func openComments(in app: XCUIApplication) {
+        openLiveMatch(in: app)
+        let chat = app.buttons["match.panel.chat"]
+        assertExists(chat)
+        chat.tap()
+        assertExists(app.scrollViews["match.comments.scroll"])
     }
 
     @MainActor
