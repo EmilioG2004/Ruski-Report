@@ -59,4 +59,15 @@ struct SocketIOFrameTests {
                 "ws://127.0.0.1:3000/socket.io/?EIO=4&transport=websocket"
         )
     }
+
+    @Test func derivesSecureProductionWebSocketURLFromAPIBaseURL() {
+        let url = URLSessionSocketIORealtimeUpdateRepository.makeWebSocketURL(
+            apiBaseURL: URL(string: "https://api.ruskireport.com/api")!
+        )
+
+        #expect(
+            url.absoluteString ==
+                "wss://api.ruskireport.com/socket.io/?EIO=4&transport=websocket"
+        )
+    }
 }
