@@ -43,6 +43,7 @@ sudo install -d -o root -g root -m 0750 /usr/local/lib/ruski-report
 ```bash
 sudo install -o root -g root -m 0750 operations/backup.sh /usr/local/lib/ruski-report/backup.sh
 sudo install -o root -g root -m 0750 operations/check-backup.sh /usr/local/lib/ruski-report/check-backup.sh
+sudo install -o root -g root -m 0750 operations/configure-backup-secrets.sh /usr/local/lib/ruski-report/configure-backup-secrets.sh
 sudo install -o root -g root -m 0750 operations/restore-rehearsal.sh /usr/local/lib/ruski-report/restore-rehearsal.sh
 sudo install -o root -g root -m 0644 operations/systemd/* /etc/systemd/system/
 sudo install -D -o root -g root -m 0644 \
