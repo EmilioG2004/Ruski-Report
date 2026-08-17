@@ -2,6 +2,9 @@
 //  MatchEventLogView.swift
 //  Ruski Report
 //
+//  Presents ordered game events with route-provided participant context while
+//  remaining independent of panel navigation and scrolling.
+//
 
 import SwiftUI
 
@@ -15,16 +18,16 @@ struct MatchEventLogView: View {
 
     var body: some View {
         MatchSectionView(
-            title: "Shot & Event Log",
+            title: MatchCopy.eventLogTitle,
             systemImage: "list.bullet.rectangle"
         ) {
             if events.isEmpty {
                 EmptyMatchSectionView(
-                    title: "Event log is not available yet",
+                    title: MatchCopy.eventLogUnavailable,
                     systemImage: "list.bullet.rectangle"
                 )
             } else {
-                VStack(spacing: 12) {
+                VStack(spacing: AppLayout.standardSpacing) {
                     ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
                         if index > 0 {
                             Divider()
@@ -49,7 +52,7 @@ struct MatchEventLogView: View {
             routeContext.playerName(for: event.playerId)
         ]
         .compactMap { $0 }
-        .joined(separator: " - ")
+        .joined(separator: " · ")
     }
 }
 
@@ -60,13 +63,13 @@ private struct MatchEventRow: View {
     let value: Double?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: AppLayout.standardSpacing) {
             Text("\(sequence)")
                 .font(.caption.weight(.bold).monospacedDigit())
                 .foregroundStyle(Color.accentColor)
-                .frame(width: 28, alignment: .trailing)
+                .frame(width: AppLayout.eventSequenceWidth, alignment: .trailing)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: AppLayout.microSpacing) {
                 Text(label)
                     .font(.subheadline.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
@@ -79,7 +82,7 @@ private struct MatchEventRow: View {
                 }
             }
 
-            Spacer(minLength: 8)
+            Spacer(minLength: AppLayout.smallSpacing)
 
             if let value {
                 Text(MatchValueFormatter.stat(value, valueType: "number"))

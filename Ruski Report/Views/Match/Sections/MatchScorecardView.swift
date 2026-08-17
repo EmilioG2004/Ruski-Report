@@ -2,6 +2,8 @@
 //  MatchScorecardView.swift
 //  Ruski Report
 //
+//  Renders schema-driven scorecard columns in a horizontally scalable grid.
+//
 
 import SwiftUI
 
@@ -9,12 +11,16 @@ struct MatchScorecardView: View {
     let scorecard: Scorecard?
 
     var body: some View {
-        MatchSectionView(title: "Scorecard", systemImage: "tablecells") {
+        MatchSectionView(title: MatchCopy.scorecardTitle, systemImage: "tablecells") {
             if let scorecard,
                !scorecard.columns.isEmpty,
                !scorecard.rows.isEmpty {
                 ScrollView(.horizontal, showsIndicators: true) {
-                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 12) {
+                    Grid(
+                        alignment: .leading,
+                        horizontalSpacing: AppLayout.compactSpacing,
+                        verticalSpacing: AppLayout.standardSpacing
+                    ) {
                         GridRow {
                             ForEach(scorecard.columns) { column in
                                 Text(column.label)
@@ -38,12 +44,12 @@ struct MatchScorecardView: View {
                             }
                         }
                     }
-                    .padding(.vertical, 2)
+                    .padding(.vertical, AppLayout.microSpacing)
                 }
                 .accessibilityIdentifier("match.scorecard")
             } else {
                 EmptyMatchSectionView(
-                    title: "Scorecard rows are not available yet",
+                    title: MatchCopy.scorecardUnavailable,
                     systemImage: "tablecells"
                 )
             }
