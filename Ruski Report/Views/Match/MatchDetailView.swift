@@ -2,11 +2,15 @@
 //  MatchDetailView.swift
 //  Ruski Report
 //
+//  Owns game loading and destination selection. The loaded layout keeps game
+//  context fixed while each destination controls its own scrolling behavior.
+//
 
 import SwiftUI
 
 struct MatchDetailView: View {
     @StateObject private var controller: MatchDetailController
+    @State private var selectedPanel: MatchDetailPanel = .overview
 
     private let routeContext: MatchRouteContext
     private let comments: any CommentRepository
@@ -51,8 +55,8 @@ struct MatchDetailView: View {
             switch controller.state {
             case .loading:
                 AppLoadingStateView(
-                    title: "Loading match",
-                    message: "Fetching the official scorecard and match activity."
+                    title: MatchCopy.loadingTitle,
+                    message: MatchCopy.loadingMessage
                 )
                     .accessibilityIdentifier("match.loading")
             case .loaded(let screen):
@@ -62,8 +66,9 @@ struct MatchDetailView: View {
             }
         }
         .background(Color.appGroupedBackground)
-        .navigationTitle("Match")
+        .navigationTitle(MatchCopy.navigationTitle)
         .appInlineNavigationTitle()
+        .tint(Color.appBrand)
         .task {
             await controller.loadMatch()
         }
@@ -73,30 +78,16 @@ struct MatchDetailView: View {
     }
 
     private func detailContent(_ screen: MatchDetailScreen) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: AppLayout.contentSpacing) {
                 MatchScoreHeaderView(
                     screen: screen,
                     routeContext: routeContext
                 )
 
-                MatchBoxScoreView(screen: screen)
-
-                MatchScorecardView(scorecard: screen.match.scorecard)
-
-                MatchEventLogView(
-                    screen: screen,
-                    routeContext: routeContext
-                )
-
-                MatchCommentsView(
-                    matchId: screen.match.id,
-                    comments: comments,
-                    commentReports: commentReports,
-                    userBlocking: userBlocking,
-                    session: session,
-                    realtime: realtime,
-                    logger: logger
+                MatchPanelPicker(
+                    selection: $selectedPanel,
+                    commentCount: screen.match.commentsSummary?.count ?? 0
                 )
             }
             .padding(AppLayout.pagePadding)
@@ -105,12 +96,50 @@ struct MatchDetailView: View {
                 alignment: .leading
             )
             .frame(maxWidth: .infinity)
+
+            Divider()
+
+            panelContent(screen)
+                .id(selectedPanel)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .animation(AppVisualTokens.selectionAnimation, value: selectedPanel)
         }
         .accessibilityIdentifier("match.detail")
     }
 
+    @ViewBuilder
+    private func panelContent(_ screen: MatchDetailScreen) -> some View {
+        switch selectedPanel {
+        case .overview:
+            MatchPanelScrollView {
+                MatchOverviewPanel(screen: screen)
+            }
+        case .plays:
+            MatchPanelScrollView {
+                MatchEventLogView(
+                    screen: screen,
+                    routeContext: routeContext
+                )
+            }
+        case .scorecard:
+            MatchPanelScrollView {
+                MatchScorecardView(scorecard: screen.match.scorecard)
+            }
+        case .chat:
+            MatchCommentsView(
+                matchId: screen.match.id,
+                comments: comments,
+                commentReports: commentReports,
+                userBlocking: userBlocking,
+                session: session,
+                realtime: realtime,
+                logger: logger
+            )
+        }
+    }
+
     private func errorContent(_ message: String) -> some View {
-        AppErrorStateView(title: "Match unavailable", message: message) {
+        AppErrorStateView(title: MatchCopy.unavailableTitle, message: message) {
             Task {
                 await controller.loadMatch()
             }
