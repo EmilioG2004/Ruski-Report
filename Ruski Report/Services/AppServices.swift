@@ -35,8 +35,15 @@ struct AppServices {
             scenario == .reporting ||
             scenario == .reportUnavailable ||
             scenario == .blocking
-        let tournamentDetail = scenario == .empty ?
-            PreviewData.emptyTournamentDetail : PreviewData.tournamentDetail
+        let tournamentDetail: TournamentDetail
+        switch scenario {
+        case .empty:
+            tournamentDetail = PreviewData.emptyTournamentDetail
+        case .longContent:
+            tournamentDetail = PreviewData.longContentTournamentDetail
+        default:
+            tournamentDetail = PreviewData.tournamentDetail
+        }
         let tournamentFailure: AppError? = scenario == .unavailable ?
             .networkUnavailable("The tournament service is temporarily unavailable.") : nil
 
@@ -67,7 +74,7 @@ struct AppServices {
             ),
             realtime: NoopRealtimeUpdateRepository(),
             logger: logger,
-            initialTournament: PreviewData.tournamentPreview,
+            initialTournament: tournamentDetail.preview,
             policyLinks: .productionFallback
         )
     }
