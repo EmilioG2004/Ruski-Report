@@ -45,6 +45,20 @@ available through `RUSKI_PRIVACY_POLICY_URL`, `RUSKI_SUPPORT_URL`, and
 The detailed contract and local commands are in
 [`docs/ios-release-configuration.md`](../ios-release-configuration.md).
 
+## iOS Production Networking
+
+- [x] Keep the Debug API endpoint explicitly configured as
+      `http://127.0.0.1:3000/api`.
+- [x] Inject `https://api.ruskireport.com/api` into Release builds through the
+      Release build configuration.
+- [x] Derive the production realtime endpoint as secure WSS at
+      `wss://api.ruskireport.com/socket.io/`.
+- [x] Ignore Debug process-environment overrides in Release builds.
+- [x] Require HTTPS and reject embedded URL credentials for Release.
+- [x] Keep App Transport Security enabled without production exceptions.
+- [x] Inspect an unsigned Release archive for loopback endpoints and server
+      credential markers.
+
 ## App Store Age Rating
 
 - [x] Record 18+ as the intended v1 storefront rating.

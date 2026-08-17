@@ -211,7 +211,7 @@ Backend config:
 
 iOS config:
 
-- `AppConfig.plist` or bundled JSON for API base URL, realtime endpoint, feature flags, and refresh fallback interval.
+- A processed Info.plist setting for the build-specific API base URL, with bundled JSON reserved for public policy links and future non-secret feature flags.
 
 No tournament data is manually translated into JSON. Tournament snapshots are generated only by backend ingestion.
 
