@@ -1,8 +1,12 @@
 # Raspberry Pi Deployment Runbook
 
 This runbook implements ADRs 0005 and 0006 for the production NestJS,
-PostgreSQL, and Cloudflare Tunnel runtime. Automated backups, monitoring, and
-the iOS production URL are tracked separately by GitHub issues 37 and 38.
+PostgreSQL, and Cloudflare Tunnel runtime. The encrypted AWS S3 backup and
+restore procedure from ADR 0007 lives in
+[`operations/README.md`](operations/README.md). AWS Lambda and CloudWatch
+monitor the public production path as documented in
+[`../aws/README.md`](../aws/README.md). The iOS production URL remains tracked
+by GitHub issue 38.
 
 ## Target Host
 
@@ -39,7 +43,9 @@ The database remains on a separate internal network with no published port.
 Uploaded workbook bytes are processed from the request buffer and are not
 retained on the Pi. PostgreSQL stores normalized tournament data, source
 metadata, checksums, validation results, and publication history. Preserve the
-canonical workbook through the operator Mac's normal backup process.
+canonical workbook on the operator Mac and copy it into
+`/srv/ruski-report/source-workbooks` so the encrypted hourly S3 snapshot covers
+both recovery sources.
 
 ## 1. Prepare Debian
 
@@ -222,8 +228,11 @@ curl --fail --show-error http://127.0.0.1:3000/api/health
 The expected response is:
 
 ```json
-{"status":"ok","service":"ruski-report-backend"}
+{"status":"ok","service":"ruski-report-backend","database":"ok"}
 ```
+
+The route performs a PostgreSQL `SELECT 1`. A non-200 response therefore means
+that either the API process or its database dependency is not ready.
 
 ## 6. LAN Acceptance Test
 

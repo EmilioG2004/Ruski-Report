@@ -151,9 +151,14 @@
           distributes the iOS app. Cloudflare provides DNS, TLS, and encrypted
           tunnel delivery for the production API and may process IP addresses,
           connection and request metadata, and request content in transit as
-          needed to deliver and secure app traffic. Providers are expected to
-          protect information consistently with this policy. This policy will
-          be updated before another provider receives app data.
+          needed to deliver and secure app traffic. Amazon Web Services stores
+          client-side encrypted rotating backups in S3, runs external
+          availability checks, retains content-minimized monitor logs in
+          CloudWatch, and sends operator alarms through SNS. AWS does not
+          receive the separate password needed to decrypt the restic backups.
+          Providers are expected to protect information consistently with this
+          policy. This policy will be updated before another provider receives
+          app data.
         </p>
         <p>
           Information may also be disclosed when reasonably necessary to
@@ -202,10 +207,16 @@
 
           <dt>Operational copies and support</dt>
           <dd>
-            Production logs and rotating backups, if enabled, are configured
-            for a maximum 30-day retention unless a longer period is required
-            for security investigation or law. Support correspondence is
-            normally deleted within one year after the request is resolved.
+            Ruski Report-controlled production logs and encrypted rotating
+            backups are enabled with a maximum 30-day retention unless a
+            longer period is required for a security investigation or law.
+            Restic backup snapshots normally expire after 27 days. A backup
+            may contain account or comment information that existed when the
+            snapshot was made, including information later deleted from the
+            live service. Backup copies are unavailable to normal app reads,
+            are used only for recovery, and expire through that rotation.
+            Support correspondence is normally deleted within one year after
+            the request is resolved.
           </dd>
         </dl>
       </section>

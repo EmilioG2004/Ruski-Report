@@ -86,12 +86,12 @@ or post comments.
 
 Complete these when production networking and storage are selected:
 
-- [ ] Serve app API and realtime traffic over HTTPS.
-- [ ] Record any tunnel, reverse-proxy, DNS, or hosting provider that processes
+- [x] Serve app API and realtime traffic over HTTPS.
+- [x] Record any tunnel, reverse-proxy, DNS, or hosting provider that processes
       production request metadata.
-- [ ] Confirm each provider can protect data consistently with the privacy
+- [x] Confirm each provider can protect data consistently with the privacy
       policy; update the policy before adding a provider with broader use.
-- [ ] Configure persistent logs and rotating backups, if enabled, with a
+- [x] Configure persistent logs and rotating backups, if enabled, with a
       maximum 30-day retention.
 - [ ] Verify logs exclude passwords, raw session tokens, comment bodies, report
       context, and reporter identities.

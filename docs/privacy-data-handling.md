@@ -112,13 +112,27 @@ resolution after the reporter identity and optional context are erased. A
 second request using the former token is unauthorized because its server
 session was deleted.
 
-No production backup or persistent access-log facility is implemented in this
-pre-deployment repository. The public policy limits production logs and rotating
-backups, if enabled, to 30 days unless a security investigation or law requires
-longer retention. Raspberry Pi deployment must configure and verify that limit
-before App Store submission. The release checklist records this as an explicit
-deployment gate rather than claiming that an undeployed service already
-enforces it.
+The production Pi sends application-container and system-service output to a
+persistent systemd journal. The journal has a 30-day maximum age, a 256 MiB
+system cap, and a 64 MiB volatile-runtime cap. AWS Lambda availability-monitor
+logs use a CloudWatch log group with the same 30-day maximum. Application logs
+exclude passwords, raw session tokens, comment text, report context, and
+reporter identities by design.
+
+Every hour, the Pi makes a consistent PostgreSQL logical dump and stages the
+deployment configuration and operator's canonical source workbook. Restic
+encrypts the snapshot on the Pi before uploading it to a private Amazon S3
+bucket in `us-east-1`. Restic retains snapshots for 27 days, while S3 retains a
+noncurrent repository-object version for one additional day. The Pi's S3
+identity cannot permanently delete object versions. The independent restic
+password and AWS credentials are root-only and are not included in a snapshot.
+
+A backup can contain account or comment data that existed when its snapshot was
+created, including data later removed through account deletion. Such a copy is
+not returned to normal application reads and expires through the rotating
+retention schedule. It is used only for disaster recovery, and a restored
+system must honor deletion or moderation actions known to have occurred after
+the selected recovery point.
 
 ## Age, Analytics, And Service Providers
 
@@ -131,8 +145,12 @@ processes email sent to the Gmail support address, and Apple distributes the
 iOS app. Cloudflare provides DNS, TLS termination, and outbound tunnel delivery
 for `api.ruskireport.com`. In that role, Cloudflare may process IP addresses,
 connection and request metadata, and request content in transit as needed to
-deliver and secure API and realtime traffic. The public policy identifies this
-role before the production route receives app traffic.
+deliver and secure API and realtime traffic. Amazon Web Services stores
+client-side encrypted backup objects in S3, runs the external Lambda monitor,
+retains content-minimized monitor logs in CloudWatch, and sends availability
+alarms through SNS. AWS receives encrypted backup objects and repository
+metadata but not the restic decryption password. The public policy identifies
+these provider roles before they receive production app data.
 
 ## Failure Handling
 
