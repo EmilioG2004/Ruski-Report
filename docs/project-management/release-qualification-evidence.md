@@ -3,7 +3,7 @@
 This file records observed results, not intended coverage. Update it after each
 release-candidate run and link any blocker to its GitHub issue.
 
-## 2026-08-18 · Production And Compact Simulator
+## 2026-08-18 · Production And Simulator Matrix
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
@@ -23,7 +23,10 @@ release-candidate run and link any blocker to its GitHub issue.
 | Compact iPhone unit suite | Pass | iPhone 17e on iOS 26.5; 96 tests passed serially. |
 | Compact iPhone UI suite | Pass | iPhone 17e on iOS 26.5; 17 tests passed serially with one simulator destination. |
 | Compact accessibility/content | Pass | Accessibility XXXL, long names, scorecard content, labels, unavailable states, and moderation flows passed UI qualification. |
-| Large iPhone simulator | Blocked | iPhone 17 Pro Max is available but has not been booted and qualified. |
+| Large iPhone unit suite | Pass | iPhone 17 Pro Max on iOS 26.5; 96 tests passed serially. |
+| Large iPhone UI suite | Pass | iPhone 17 Pro Max on iOS 26.5; 17 tests passed serially with one simulator destination. |
+| Large iPhone light appearance | Pass | The standard score feed was inspected with its accessibility hierarchy and rendered without clipping or overlap. |
+| Large iPhone dark appearance | Blocked | Simulator automation reported dark mode, but the relaunched app retained a light trait; confirm manually before sign-off. |
 | Physical iPhone Release pass | Blocked | No registered physical device/provisioning is available yet. |
 | Network/failure-state pass | Blocked | Offline launch, slow network, backend outage, expired session, and recovery still require the manual device pass. |
 
@@ -49,9 +52,8 @@ release-candidate run and link any blocker to its GitHub issue.
 
 ## Remaining Acceptance Work
 
-- Run complete iOS unit/UI suites on the large simulator, one destination at a
-  time.
-- Review compact and large layouts in both light and dark appearance.
+- Complete the manual dark-appearance review; the automated Pro Max appearance
+  switch did not propagate into the relaunched app process.
 - Complete the manual network-fault and physical-device Release pass, including
   offline launch, slow network, backend outage, expired session, and recovery.
 - File a dedicated blocker issue for any failed behavior; do not close issue 45
