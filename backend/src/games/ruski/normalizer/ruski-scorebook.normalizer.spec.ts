@@ -171,6 +171,28 @@ describe("RuskiScorebookNormalizer", () => {
     expect(bracket?.metadata?.championTeamId).toBe("team-everett-hulu");
   });
 
+  it("binds reversed scorecard sides to teams by their exact rosters", async () => {
+    const snapshot = await normalizeCanonicalFixture(await parseFixture());
+    const match = snapshot.matches.find(
+      (candidate) => candidate.id === "match-brandoheath-vs-tolsmaemilio"
+    );
+    const participantsByTeam = new Map(
+      match?.participants.map((participant) => [participant.teamId, participant])
+    );
+
+    expect(participantsByTeam.get("team-brando-heath")).toMatchObject({
+      playerIds: ["player-heath-lawry", "player-luke-brandon"],
+      score: 10,
+      result: "win"
+    });
+    expect(participantsByTeam.get("team-tolsma-emilio")).toMatchObject({
+      playerIds: ["player-john-tolsma", "player-emilio-garcia"],
+      score: 7,
+      result: "loss"
+    });
+    expect(match?.score.winnerTeamId).toBe("team-brando-heath");
+  });
+
   it("reuses canonical team IDs across standings, matches, stats, and bracket", async () => {
     const snapshot = await normalizeCanonicalFixture(await parseFixture());
     const teamIds = new Set(snapshot.tournament.teams.map((team) => team.id));
@@ -193,6 +215,55 @@ describe("RuskiScorebookNormalizer", () => {
     expect(referencedTeamIds.every((teamId) => teamIds.has(teamId))).toBe(true);
     expect(snapshot.matches.filter((match) => match.podId !== undefined)).toHaveLength(44);
     expect(snapshot.matches.filter((match) => match.bracketMatchId !== undefined)).toHaveLength(12);
+  });
+
+  it("does not assign a completely foreign roster to a canonical team", async () => {
+    const snapshot = await normalizeCanonicalFixture(await parseFixture());
+    const rosterByTeamId = new Map(
+      snapshot.tournament.teams.map((team) => [
+        team.id,
+        new Set(team.players.map((player) => player.id))
+      ])
+    );
+
+    const mismatches = snapshot.matches.flatMap((match) =>
+      match.participants.flatMap((participant) => {
+        const playerIds = participant.playerIds ?? [];
+        const includesCanonicalPlayer = playerIds.length > 0 && playerIds.some(
+          (playerId) => rosterByTeamId.get(participant.teamId)?.has(playerId)
+        );
+
+        return includesCanonicalPlayer
+          ? []
+          : [{ matchId: match.id, teamId: participant.teamId, playerIds }];
+      })
+    );
+
+    expect(mismatches).toEqual([]);
+  });
+
+  it("keeps linked bracket winners consistent with final match scores", async () => {
+    const snapshot = await normalizeCanonicalFixture(await parseFixture());
+    const matchesById = new Map(snapshot.matches.map((match) => [match.id, match]));
+    const mismatches = (snapshot.tournament.bracket?.rounds ?? []).flatMap((round) =>
+      round.matches.flatMap((bracketMatch) => {
+        const match = bracketMatch.matchId === undefined
+          ? undefined
+          : matchesById.get(bracketMatch.matchId);
+        const matchWinnerTeamId = match?.score.winnerTeamId;
+
+        return bracketMatch.winnerTeamId === undefined || matchWinnerTeamId === undefined ||
+          bracketMatch.winnerTeamId === matchWinnerTeamId
+          ? []
+          : [{
+            bracketMatchId: bracketMatch.id,
+            bracketWinnerTeamId: bracketMatch.winnerTeamId,
+            matchWinnerTeamId
+          }];
+      })
+    );
+
+    expect(mismatches).toEqual([]);
   });
 });
 

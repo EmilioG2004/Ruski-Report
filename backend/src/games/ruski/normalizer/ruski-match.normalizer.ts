@@ -14,6 +14,7 @@ import {
 } from "../definition";
 import { ruskiScorecardDefinition } from "../definition";
 import { calculateRuskiBoxScore } from "./ruski-box-score";
+import { calculateRuskiCupScore } from "./ruski-cup-score";
 import { createStableId } from "./ruski-id";
 import { normalizeRuskiScorecard } from "./ruski-scorecard.normalizer";
 import {
@@ -106,11 +107,7 @@ function createParticipant(
   return {
     teamId: resolution.team.id,
     playerIds: resolution.playerIds,
-    score: events.filter(
-      (event) =>
-        event.teamId === resolution.team.id &&
-        event.type === RUSKI_EVENT_TYPE_IDS.make
-    ).length,
+    score: calculateRuskiCupScore(events, resolution.team.id),
     result: status === "final" ? "pending" : "pending",
     metadata: {
       sideId: side.id,
