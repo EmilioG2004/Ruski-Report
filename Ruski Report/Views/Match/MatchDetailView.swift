@@ -78,32 +78,27 @@ struct MatchDetailView: View {
     }
 
     private func detailContent(_ screen: MatchDetailScreen) -> some View {
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: AppLayout.contentSpacing) {
-                MatchScoreHeaderView(
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                MatchDetailHeaderView(
                     screen: screen,
-                    routeContext: routeContext
+                    routeContext: routeContext,
+                    availableHeight: proxy.size.height,
+                    selection: $selectedPanel
                 )
 
-                MatchPanelPicker(
-                    selection: $selectedPanel,
-                    commentCount: screen.match.commentsSummary?.count ?? 0
-                )
+                Divider()
+
+                panelContent(screen)
+                    .id(selectedPanel)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .animation(
+                        AppVisualTokens.selectionAnimation,
+                        value: selectedPanel
+                    )
             }
-            .padding(AppLayout.pagePadding)
-            .frame(
-                maxWidth: AppLayout.maximumContentWidth,
-                alignment: .leading
-            )
-            .frame(maxWidth: .infinity)
-
-            Divider()
-
-            panelContent(screen)
-                .id(selectedPanel)
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-                .animation(AppVisualTokens.selectionAnimation, value: selectedPanel)
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("match.detail")
     }
 

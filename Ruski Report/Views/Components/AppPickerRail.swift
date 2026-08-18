@@ -49,6 +49,7 @@ struct AppPickerRail<Option: Hashable & Identifiable>: View {
             }
             .padding(.vertical, AppLayout.microSpacing)
         }
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private func select(_ option: Option) {

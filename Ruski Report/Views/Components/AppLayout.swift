@@ -43,6 +43,7 @@ enum AppLayout {
     static let compactStateHeight: CGFloat = 180
     static let standardStateHeight: CGFloat = 220
 
+    static let matchHeaderAccessibilityHeightFraction: CGFloat = 0.55
     static let maximumContentWidth: CGFloat = 760
     static let bracketRoundWidth: CGFloat = 300
     static let bracketProgressionIconWidth: CGFloat = 18
