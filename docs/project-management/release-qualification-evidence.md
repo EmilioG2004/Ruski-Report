@@ -26,7 +26,7 @@ release-candidate run and link any blocker to its GitHub issue.
 | Large iPhone unit suite | Pass | iPhone 17 Pro Max on iOS 26.5; 96 tests passed serially. |
 | Large iPhone UI suite | Pass | iPhone 17 Pro Max on iOS 26.5; 17 tests passed serially with one simulator destination. |
 | Large iPhone light appearance | Pass | The standard score feed was inspected with its accessibility hierarchy and rendered without clipping or overlap. |
-| Large iPhone dark appearance | Blocked | Simulator automation reported dark mode, but the relaunched app retained a light trait; confirm manually before sign-off. |
+| Large iPhone dark appearance | Pass | After restarting a stuck simulator runtime, iOS Settings and the standard score feed both rendered correctly in system dark mode. |
 | Physical iPhone Release pass | Blocked | No registered physical device/provisioning is available yet. |
 | Network/failure-state pass | Blocked | Offline launch, slow network, backend outage, expired session, and recovery still require the manual device pass. |
 
@@ -52,8 +52,6 @@ release-candidate run and link any blocker to its GitHub issue.
 
 ## Remaining Acceptance Work
 
-- Complete the manual dark-appearance review; the automated Pro Max appearance
-  switch did not propagate into the relaunched app process.
 - Complete the manual network-fault and physical-device Release pass, including
   offline launch, slow network, backend outage, expired session, and recovery.
 - File a dedicated blocker issue for any failed behavior; do not close issue 45
