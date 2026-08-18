@@ -35,7 +35,9 @@ final class AccountUITests: PreviewAppUITestCase {
         let app = launchPreviewApp(scenario: "authenticated")
         openAccount(in: app)
         app.buttons["account.delete"].tap()
-        let cancelButton = app.buttons["account.delete.cancel"]
+        let cancelButton = app.buttons
+            .matching(identifier: "account.delete.cancel")
+            .firstMatch
         assertExists(cancelButton)
         cancelButton.tap()
         assertExists(app.buttons["account.delete"])
@@ -46,7 +48,9 @@ final class AccountUITests: PreviewAppUITestCase {
         let app = launchPreviewApp(scenario: "authenticated")
         openAccount(in: app)
         app.buttons["account.delete"].tap()
-        let confirmButton = app.buttons["account.delete.confirm"]
+        let confirmButton = app.buttons
+            .matching(identifier: "account.delete.confirm")
+            .firstMatch
         assertExists(confirmButton)
         confirmButton.tap()
         assertExists(app.descendants(matching: .any)["account.status.guest"])

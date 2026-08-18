@@ -2,8 +2,8 @@
 //  PreviewAppUITestCase.swift
 //  Ruski ReportUITests
 //
-//  Owns deterministic app launch, navigation, scrolling, and assertions shared
-//  by the focused UI qualification suites.
+//  Owns deterministic app launch, scrolling, and assertions shared by the
+//  focused UI qualification suites. Navigation lives in a focused extension.
 //
 
 import XCTest
@@ -26,39 +26,6 @@ class PreviewAppUITestCase: XCTestCase {
         ] + additionalArguments
         app.launch()
         return app
-    }
-
-    @MainActor
-    func openAccount(in app: XCUIApplication) {
-        let accountButton = app.buttons["account.toolbar"]
-        assertExists(accountButton)
-        accountButton.tap()
-        assertExists(app.navigationBars["Account"])
-    }
-
-    @MainActor
-    func openLiveMatch(in app: XCUIApplication) {
-        let tournament = app.buttons["home.tournamentCard"]
-        assertExists(tournament)
-        tournament.tap()
-
-        let matches = app.buttons["tournament.section.matches"]
-        assertExists(matches)
-        matches.tap()
-
-        let liveMatch = app.buttons["tournament.match.match-2026-001"]
-        assertExists(liveMatch)
-        liveMatch.tap()
-        assertExists(app.descendants(matching: .any)["match.detail"])
-    }
-
-    @MainActor
-    func openComments(in app: XCUIApplication) {
-        openLiveMatch(in: app)
-        let chat = app.buttons["match.panel.chat"]
-        assertExists(chat)
-        chat.tap()
-        assertExists(app.scrollViews["match.comments.scroll"])
     }
 
     @MainActor

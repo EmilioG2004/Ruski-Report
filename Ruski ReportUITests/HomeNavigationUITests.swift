@@ -13,19 +13,14 @@ final class HomeNavigationUITests: PreviewAppUITestCase {
     func testNavigatesFromHomeToLiveMatch() throws {
         let app = launchPreviewApp()
         assertExists(app.staticTexts["home.title"])
-        app.buttons["home.tournamentCard"].tap()
-        assertExists(app.descendants(matching: .any)["tournament.header"])
-        app.buttons["tournament.section.matches"].tap()
-        app.buttons["tournament.match.match-2026-001"].tap()
+        openLiveMatch(in: app)
         assertExists(app.descendants(matching: .any)["match.scoreHeader"])
     }
 
     @MainActor
     func testOpensLiveGameFromHomeScoreFeed() throws {
         let app = launchPreviewApp()
-        let liveMatch = app.buttons["home.match.match-2026-001"]
-        assertExists(liveMatch)
-        liveMatch.tap()
+        openHomeMatch(in: app)
         assertExists(app.descendants(matching: .any)["match.overview"])
     }
 
@@ -33,11 +28,11 @@ final class HomeNavigationUITests: PreviewAppUITestCase {
     func testSwitchesBetweenMatchPanels() throws {
         let app = launchPreviewApp()
         openLiveMatch(in: app)
-        app.buttons["match.panel.plays"].tap()
+        selectMatchPanel("match.panel.plays", in: app)
         assertExists(app.descendants(matching: .any)["match.events"])
-        app.buttons["match.panel.scorecard"].tap()
+        selectMatchPanel("match.panel.scorecard", in: app)
         assertExists(app.descendants(matching: .any)["match.scorecard"])
-        app.buttons["match.panel.chat"].tap()
+        selectMatchPanel("match.panel.chat", in: app)
         assertExists(app.buttons["match.comments.signIn"])
     }
 
@@ -49,8 +44,9 @@ final class HomeNavigationUITests: PreviewAppUITestCase {
                 "North Durham Longtable Society of Extremely Confident Shooters"
             ]
         )
-        app.buttons["home.match.match-2026-001"].tap()
-        assertExists(app.buttons["match.panel.scorecard"])
+        openHomeMatch(in: app)
+        selectMatchPanel("match.panel.scorecard", in: app)
+        assertExists(app.descendants(matching: .any)["match.scorecard"])
     }
 
     @MainActor
@@ -63,9 +59,10 @@ final class HomeNavigationUITests: PreviewAppUITestCase {
             ]
         )
         assertExists(app.buttons["home.tournamentCard"])
-        app.buttons["home.match.match-2026-001"].tap()
+        openHomeMatch(in: app)
         assertExists(app.descendants(matching: .any)["match.scoreHeader"])
-        assertExists(app.buttons["match.panel.scorecard"])
+        selectMatchPanel("match.panel.scorecard", in: app)
+        assertExists(app.descendants(matching: .any)["match.scorecard"])
     }
 
     @MainActor
@@ -74,18 +71,25 @@ final class HomeNavigationUITests: PreviewAppUITestCase {
         assertHasAccessibleLabel(app.buttons["account.toolbar"])
         assertHasAccessibleLabel(app.buttons["home.tournamentCard"])
         assertHasAccessibleLabel(app.buttons["home.match.match-2026-001"])
-        app.buttons["home.match.match-2026-001"].tap()
+        openHomeMatch(in: app)
         assertHasAccessibleLabel(app.buttons["match.panel.overview"])
-        assertHasAccessibleLabel(app.buttons["match.panel.chat"])
+        selectMatchPanel("match.panel.chat", in: app)
+        assertHasAccessibleLabel(app.buttons["match.comments.signIn"])
     }
 
     @MainActor
     func testShowsEmptyTournamentSections() throws {
         let app = launchPreviewApp(scenario: "empty")
-        app.buttons["home.tournamentCard"].tap()
-        app.buttons["tournament.section.pods"].tap()
+        let tournament = app.buttons["home.tournamentCard"]
+        assertExists(tournament)
+        tournament.tap()
+        let pods = app.buttons["tournament.section.pods"]
+        assertExists(pods)
+        pods.tap()
         assertExists(app.staticTexts["Pods are not available yet"])
-        app.buttons["tournament.section.matches"].tap()
+        let matches = app.buttons["tournament.section.matches"]
+        assertExists(matches)
+        matches.tap()
         assertExists(app.staticTexts["Games are not available yet"])
     }
 

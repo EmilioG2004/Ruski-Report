@@ -13,7 +13,8 @@ final class CommunitySafetyUITests: PreviewAppUITestCase {
     func testShowsSafeModerationErrorAndPreservesDraft() throws {
         let app = launchPreviewApp(scenario: "moderationRejected")
         openComments(in: app)
-        let scrollView = app.scrollViews["match.comments.scroll"]
+        let scrollView =
+            app.descendants(matching: .any)["match.comments.scroll"]
         let input = app.textFields["match.comments.input"]
         scrollUntilHittable(input, in: scrollView)
         input.tap()
@@ -33,7 +34,8 @@ final class CommunitySafetyUITests: PreviewAppUITestCase {
     func testReportsACommentAndShowsConfirmation() throws {
         let app = launchPreviewApp(scenario: "reporting")
         openComments(in: app)
-        let scrollView = app.scrollViews["match.comments.scroll"]
+        let scrollView =
+            app.descendants(matching: .any)["match.comments.scroll"]
         let actions = app.buttons["match.comments.actions.comment-preview-1"]
         scrollUntilHittable(actions, in: scrollView)
         actions.tap()
@@ -53,7 +55,8 @@ final class CommunitySafetyUITests: PreviewAppUITestCase {
     func testBlocksACommentAuthorAndRefreshesTheVisibleFeed() throws {
         let app = launchPreviewApp(scenario: "blocking")
         openComments(in: app)
-        let scrollView = app.scrollViews["match.comments.scroll"]
+        let scrollView =
+            app.descendants(matching: .any)["match.comments.scroll"]
         let commentBody =
             app.staticTexts["Alpha Table is one cup away from closing this out."]
         let actions = app.buttons["match.comments.actions.comment-preview-1"]
@@ -61,7 +64,10 @@ final class CommunitySafetyUITests: PreviewAppUITestCase {
         assertExists(commentBody)
         actions.tap()
         app.buttons["Block User"].tap()
-        app.buttons["match.comments.block.confirm"].tap()
+        app.buttons
+            .matching(identifier: "match.comments.block.confirm")
+            .firstMatch
+            .tap()
         assertExists(
             app.descendants(matching: .any)["match.comments.blockSuccess"]
         )
