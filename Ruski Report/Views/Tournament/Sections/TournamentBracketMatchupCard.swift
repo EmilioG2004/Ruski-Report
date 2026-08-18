@@ -38,7 +38,18 @@ struct TournamentBracketMatchupCard: View {
             if let progressionText = matchup.progressionText {
                 progressionLabel(progressionText)
             }
+
+            if matchup.isScoreUnavailable {
+                scoreUnavailableLabel
+            }
         }
+    }
+
+    private var scoreUnavailableLabel: some View {
+        Label(AppSportsCopy.scoreNotRecorded, systemImage: "doc.badge.ellipsis")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .accessibilityIdentifier("tournament.bracket.scoreUnavailable")
     }
 
     private func progressionLabel(_ text: String) -> some View {

@@ -11,6 +11,9 @@ nonisolated enum AppSportsCopy {
     static let teamsPending = "Teams will be announced"
     static let championshipBracket = "Championship bracket"
     static let winner = "Winner"
+    static let scoreNotRecorded = "Score not recorded"
+    static let scoreNotRecordedMessage =
+        "The source workbook identifies the winner but has no scorecard for this game."
 
     static func seed(_ value: Int) -> String {
         "Seed \(value)"

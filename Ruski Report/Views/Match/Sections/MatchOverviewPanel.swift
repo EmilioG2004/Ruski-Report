@@ -13,6 +13,10 @@ struct MatchOverviewPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: AppLayout.sectionSpacing) {
+            if screen.isScoreUnavailable {
+                MatchScoreAvailabilityNotice()
+            }
+
             VStack(alignment: .leading, spacing: AppLayout.standardSpacing) {
                 AppSectionHeader(
                     MatchCopy.overviewTitle,

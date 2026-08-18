@@ -65,6 +65,7 @@ struct TournamentBracketRoundSectionsTests {
         #expect(sections.first?.matchups.first?.progressionText == "Winner advances to Final")
         #expect(sections.first?.matchups.first?.slots.first?.isWinner == true)
         #expect(sections.first?.matchups.first?.slots.first?.score == 10)
+        #expect(sections.first?.matchups.first?.isScoreUnavailable == false)
         #expect(sections.last?.matchups.first?.progressionText == "Bracket winner")
     }
 
@@ -98,6 +99,7 @@ struct TournamentBracketRoundSectionsTests {
         #expect(matchup?.title == "Match 1")
         #expect(matchup?.statusText == "Pending")
         #expect(matchup?.isAvailable == false)
+        #expect(matchup?.isScoreUnavailable == true)
         #expect(matchup?.slots.isEmpty == true)
     }
 

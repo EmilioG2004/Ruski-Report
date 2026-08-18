@@ -15,6 +15,13 @@ nonisolated struct MatchDetailScreen: Equatable {
     let match: MatchDetail
     let gameDefinition: GameDefinition?
 
+    var isScoreUnavailable: Bool {
+        match.preview.status == .final &&
+            match.preview.score?.winnerTeamId != nil &&
+            match.preview.participants.allSatisfy { $0.score == nil } &&
+            (match.preview.score?.participants.isEmpty ?? true)
+    }
+
     var eventTypesById: [String: GameEventTypeDefinition] {
         Dictionary(
             uniqueKeysWithValues: (gameDefinition?.eventTypes ?? []).map {
