@@ -24,8 +24,10 @@ describe("RuskiScorebookNormalizer", () => {
       .length;
 
     expect(snapshot.validation.valid).toBe(true);
-    expect(snapshot.matches).toHaveLength(gameSheetCount);
-    expect(snapshot.tournament.matchSummaries).toHaveLength(gameSheetCount);
+    expect(snapshot.matches.filter((match) =>
+      typeof match.metadata?.sourceSheetName === "string"
+    )).toHaveLength(gameSheetCount);
+    expect(snapshot.tournament.matchSummaries).toHaveLength(snapshot.matches.length);
     expect(snapshot.tournament.teams.length).toBeGreaterThan(0);
     expect(snapshot.tournament.metadata).toMatchObject({
       normalizedFrom: "ruski-scorebook",
@@ -171,6 +173,42 @@ describe("RuskiScorebookNormalizer", () => {
     expect(bracket?.metadata?.championTeamId).toBe("team-everett-hulu");
   });
 
+  it("creates navigable bracket-only matches when scorecards are absent", async () => {
+    const snapshot = await normalizeCanonicalFixture(await parseFixture());
+    const bracketMatches = snapshot.tournament.bracket?.rounds.flatMap(
+      (round) => round.matches
+    ) ?? [];
+    const finalFour = bracketMatches.find((match) => match.id === "final-4-1");
+    const placeholder = snapshot.matches.find(
+      (match) => match.id === finalFour?.matchId
+    );
+
+    expect(bracketMatches).toHaveLength(15);
+    expect(bracketMatches.every((match) => match.matchId !== undefined)).toBe(true);
+    expect(finalFour?.matchId).toBe("match-final-4-1");
+    expect(placeholder).toMatchObject({
+      status: "final",
+      bracketMatchId: "final-4-1",
+      participants: expect.arrayContaining([
+        expect.objectContaining({ teamId: "team-wigs-boggs", result: "win" }),
+        expect.objectContaining({ teamId: "team-mati-takoa", result: "loss" })
+      ]),
+      score: {
+        participants: [],
+        winnerTeamId: "team-wigs-boggs",
+        isFinal: true,
+        metadata: { availability: "unrecorded" }
+      },
+      events: [],
+      metadata: {
+        source: "playoff-bracket-sheet",
+        detailAvailability: "bracket-only"
+      }
+    });
+    expect(placeholder?.boxScore.rows).toEqual([]);
+    expect(placeholder?.scorecard.rows).toEqual([]);
+  });
+
   it("binds reversed scorecard sides to teams by their exact rosters", async () => {
     const snapshot = await normalizeCanonicalFixture(await parseFixture());
     const match = snapshot.matches.find(
@@ -214,7 +252,13 @@ describe("RuskiScorebookNormalizer", () => {
 
     expect(referencedTeamIds.every((teamId) => teamIds.has(teamId))).toBe(true);
     expect(snapshot.matches.filter((match) => match.podId !== undefined)).toHaveLength(44);
-    expect(snapshot.matches.filter((match) => match.bracketMatchId !== undefined)).toHaveLength(12);
+    const bracketMatchCount = snapshot.tournament.bracket?.rounds.reduce(
+      (count, round) => count + round.matches.length,
+      0
+    ) ?? 0;
+    expect(snapshot.matches.filter(
+      (match) => match.bracketMatchId !== undefined
+    )).toHaveLength(bracketMatchCount);
   });
 
   it("does not assign a completely foreign roster to a canonical team", async () => {

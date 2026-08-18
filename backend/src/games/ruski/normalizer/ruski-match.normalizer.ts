@@ -27,6 +27,10 @@ interface NormalizedSide {
   resolution: RuskiTeamResolution;
 }
 
+interface ScoredParticipant extends MatchParticipant {
+  score: number;
+}
+
 export function normalizeRuskiGameSheet(
   sheet: ParsedScorebookSheet,
   tournamentId: TournamentId,
@@ -103,7 +107,7 @@ function createParticipant(
   resolution: RuskiTeamResolution,
   events: readonly GameEvent[],
   status: MatchStatus
-): MatchParticipant {
+): ScoredParticipant {
   return {
     teamId: resolution.team.id,
     playerIds: resolution.playerIds,
@@ -121,7 +125,7 @@ function mapGameStatus(status: string | null): MatchStatus {
 }
 
 function getWinnerTeamId(
-  participants: readonly MatchParticipant[],
+  participants: readonly ScoredParticipant[],
   status: MatchStatus
 ): TeamId | undefined {
   if (status !== "final" || participants.length !== 2) {
