@@ -268,8 +268,9 @@ curl --fail --show-error \
   http://192.168.8.129:3000/api/tournaments/TOURNAMENT_ID
 ```
 
-`GET /api/tournaments/active` returns a tournament only while its normalized
-status is `active`; a completed workbook correctly returns `404` there.
+`GET /api/tournaments/active` returns the newest active published snapshot.
+The response retains its normalized `scheduled`, `active`, or `completed`
+status so clients can distinguish a live event from final tournament results.
 
 Confirm that PostgreSQL is not reachable from the LAN:
 
