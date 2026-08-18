@@ -3,6 +3,30 @@
 This file records observed results, not intended coverage. Update it after each
 release-candidate run and link any blocker to its GitHub issue.
 
+## 2026-08-18 · Production And Compact Simulator
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Backend TypeScript lint | Pass | `npm run lint` completed without diagnostics. |
+| Backend production build | Pass | `npm run build` completed successfully. |
+| Backend unit suite | Pass | 51 suites and 200 tests passed. |
+| PostgreSQL integration | Pass | PostgreSQL 17.11; 11 persistence tests passed. |
+| Qualification tool tests | Pass | 8 Node tests passed. |
+| iOS Release configuration | Pass | Release validator completed successfully. |
+| Production deployment | Pass | API commit `9d592fe` deployed; API and PostgreSQL remained healthy. |
+| Production read paths | Pass | One game, 32 teams, 32 standings, 56 matches, match detail, and guest comments read from the published tournament. |
+| Production publication | Pass | Malformed upload remained atomic; the canonical workbook published and remained readable after completion. |
+| Production accounts/community | Pass | Registration, login persistence, sign-out/login, comments, moderation rejection, reports, blocks, unblocks, operator removal, and account deletion passed. |
+| Production realtime | Pass | Tournament and comment events, initial connection, and reconnect passed. |
+| Production cleanup | Pass | No qualification accounts or comments remained after the write workflow. |
+| Production log audit | Pass | A 37-entry post-workflow sample and the prior 1,008-line/963-structured-entry sample passed without displaying content. |
+| Compact iPhone unit suite | Pass | iPhone 17e on iOS 26.5; 96 tests passed serially. |
+| Compact iPhone UI suite | Pass | iPhone 17e on iOS 26.5; 17 tests passed serially with one simulator destination. |
+| Compact accessibility/content | Pass | Accessibility XXXL, long names, scorecard content, labels, unavailable states, and moderation flows passed UI qualification. |
+| Large iPhone simulator | Blocked | iPhone 17 Pro Max is available but has not been booted and qualified. |
+| Physical iPhone Release pass | Blocked | No registered physical device/provisioning is available yet. |
+| Network/failure-state pass | Blocked | Offline launch, slow network, backend outage, expired session, and recovery still require the manual device pass. |
+
 ## 2026-08-17 · Development Branch
 
 | Gate | Result | Evidence |
@@ -25,10 +49,10 @@ release-candidate run and link any blocker to its GitHub issue.
 
 ## Remaining Acceptance Work
 
-- Publish the canonical 2026 scorebook and rerun both production gates.
-- Repeat the live-log audit after the synthetic account/community workflow.
-- Run complete iOS unit/UI suites on compact and large simulators.
-- Capture visual, Dynamic Type, long-name, and dense-score evidence.
-- Complete the manual network-fault and physical-device Release pass.
+- Run complete iOS unit/UI suites on the large simulator, one destination at a
+  time.
+- Review compact and large layouts in both light and dark appearance.
+- Complete the manual network-fault and physical-device Release pass, including
+  offline launch, slow network, backend outage, expired session, and recovery.
 - File a dedicated blocker issue for any failed behavior; do not close issue 45
   until every blocker is resolved or explicitly accepted.

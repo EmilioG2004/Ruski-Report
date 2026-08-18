@@ -67,6 +67,18 @@ Run the complete unit and UI schemes on both current representative sizes:
 - Compact: iPhone 17e, portrait, light and dark appearance.
 - Large: iPhone 17 Pro Max, portrait, light and dark appearance.
 
+Run one simulator size at a time on resource-constrained hosts. Disable test
+parallelization and cap Xcode to one simulator destination:
+
+```bash
+xcodebuild test \
+  -project "Ruski Report.xcodeproj" \
+  -scheme "Ruski Report" \
+  -destination "platform=iOS Simulator,id=$RUSKI_SIMULATOR_ID" \
+  -parallel-testing-enabled NO \
+  -maximum-concurrent-test-simulator-destinations 1
+```
+
 Retain the `.xcresult` summaries and screenshots of standard, unavailable,
 long-content, authenticated, reporting, and blocking states. Repeat the core
 home-to-match path at an accessibility Dynamic Type size with VoiceOver labels
