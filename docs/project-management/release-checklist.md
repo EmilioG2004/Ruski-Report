@@ -45,6 +45,10 @@ available through `RUSKI_PRIVACY_POLICY_URL`, `RUSKI_SUPPORT_URL`, and
 The detailed contract and local commands are in
 [`docs/ios-release-configuration.md`](../ios-release-configuration.md).
 
+The end-to-end procedure and current observed results are in
+[`release-qualification.md`](release-qualification.md) and
+[`release-qualification-evidence.md`](release-qualification-evidence.md).
+
 ## iOS Production Networking
 
 - [x] Keep the Debug API endpoint explicitly configured as
@@ -107,7 +111,7 @@ Complete these when production networking and storage are selected:
       policy; update the policy before adding a provider with broader use.
 - [x] Configure persistent logs and rotating backups, if enabled, with a
       maximum 30-day retention.
-- [ ] Verify logs exclude passwords, raw session tokens, comment bodies, report
+- [x] Verify logs exclude passwords, raw session tokens, comment bodies, report
       context, and reporter identities.
 - [ ] Exercise account deletion against the production database and confirm
       authored comments, credentials, sessions, and blocks are removed.
