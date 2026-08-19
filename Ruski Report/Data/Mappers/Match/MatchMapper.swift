@@ -112,7 +112,13 @@ nonisolated enum MatchMapper {
         ScorecardRow(
             id: dto.id,
             sequence: dto.sequence,
-            values: dto.values.mapValues { $0.stringValue ?? "" }
+            teamId: dto.teamId,
+            playerId: dto.playerId,
+            values: dto.values.mapValues { $0.stringValue ?? "" },
+            eventIds: dto.eventIds ?? [],
+            turnNumber: MatchTurnMetadataMapper.turnNumber(in: dto.metadata),
+            teamTurnOrder: MatchTurnMetadataMapper.teamTurnOrder(in: dto.metadata),
+            shotInTeamTurn: MatchTurnMetadataMapper.shotInTeamTurn(in: dto.metadata)
         )
     }
 
@@ -123,7 +129,10 @@ nonisolated enum MatchMapper {
             sequence: dto.sequence,
             teamId: dto.teamId,
             playerId: dto.playerId,
-            value: dto.value
+            value: dto.value,
+            turnNumber: MatchTurnMetadataMapper.turnNumber(in: dto.metadata),
+            teamTurnOrder: MatchTurnMetadataMapper.teamTurnOrder(in: dto.metadata),
+            shotInTeamTurn: MatchTurnMetadataMapper.shotInTeamTurn(in: dto.metadata)
         )
     }
 

@@ -14,6 +14,16 @@ nonisolated enum MatchDetailViewState: Equatable {
 nonisolated struct MatchDetailScreen: Equatable {
     let match: MatchDetail
     let gameDefinition: GameDefinition?
+    let turns: [MatchTurn]
+
+    init(match: MatchDetail, gameDefinition: GameDefinition?) {
+        self.match = match
+        self.gameDefinition = gameDefinition
+        turns = MatchTurnProjector.project(
+            scorecard: match.scorecard,
+            events: match.events
+        )
+    }
 
     var isScoreUnavailable: Bool {
         match.preview.status == .final &&
