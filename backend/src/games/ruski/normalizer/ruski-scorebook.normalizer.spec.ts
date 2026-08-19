@@ -66,7 +66,21 @@ describe("RuskiScorebookNormalizer", () => {
     });
     expect(match?.participants).toHaveLength(2);
     expect(match?.scorecard.definition.id).toBe("ruski-scorecard");
-    expect(match?.scorecard.rows).toHaveLength(160);
+    expect(match?.scorecard.rows).toHaveLength(94);
+    expect(
+      match?.scorecard.rows.slice(0, 4).map((row) => ({
+        shot: row.values.shotNumber,
+        teamId: row.teamId,
+        turn: row.metadata?.turnNumber,
+        order: row.metadata?.teamTurnOrder
+      }))
+    ).toEqual([
+      { shot: 1, teamId: "team-jp-shu", turn: 1, order: 1 },
+      { shot: 1, teamId: "team-jp-shu", turn: 1, order: 1 },
+      { shot: 1, teamId: "team-ev-hulu", turn: 1, order: 2 },
+      { shot: 1, teamId: "team-ev-hulu", turn: 1, order: 2 }
+    ]);
+    expect(match?.metadata?.firstPossessionTeamId).toBe("team-jp-shu");
     expect(match?.events.length).toBeGreaterThan(0);
     expect(match?.boxScore.rows.length).toBeGreaterThan(0);
   });

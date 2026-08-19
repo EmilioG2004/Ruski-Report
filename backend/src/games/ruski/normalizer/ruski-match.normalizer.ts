@@ -10,6 +10,7 @@ import { ParsedScorebookSheet, ParsedScorebookSide } from "../../parsed-scoreboo
 import {
   RUSKI_EVENT_TYPE_IDS,
   RUSKI_GAME_TYPE,
+  RUSKI_MATCH_METADATA_KEYS,
   RUSKI_PHASE_IDS
 } from "../definition";
 import { ruskiScorecardDefinition } from "../definition";
@@ -95,7 +96,9 @@ export function normalizeRuskiGameSheet(
     },
     metadata: {
       sourceSheetName: sheet.name,
-      sourceSheetIndex: sheet.index
+      sourceSheetIndex: sheet.index,
+      [RUSKI_MATCH_METADATA_KEYS.firstPossessionTeamId]:
+        normalizedSides[0]?.resolution.team.id
     },
     version: 1,
     updatedAt
