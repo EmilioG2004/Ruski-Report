@@ -113,5 +113,5 @@ Complete these when production networking and storage are selected:
       maximum 30-day retention.
 - [x] Verify logs exclude passwords, raw session tokens, comment bodies, report
       context, and reporter identities.
-- [ ] Exercise account deletion against the production database and confirm
+- [x] Exercise account deletion against the production database and confirm
       authored comments, credentials, sessions, and blocks are removed.

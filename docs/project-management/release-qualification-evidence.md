@@ -9,12 +9,12 @@ release-candidate run and link any blocker to its GitHub issue.
 | --- | --- | --- |
 | Backend TypeScript lint | Pass | `npm run lint` completed without diagnostics. |
 | Backend production build | Pass | `npm run build` completed successfully. |
-| Backend unit suite | Pass | 51 suites and 200 tests passed. |
+| Backend unit suite | Pass | 208 tests passed in the final backend run; 11 PostgreSQL-gated tests were also qualified separately. |
 | PostgreSQL integration | Pass | PostgreSQL 17.11; 11 persistence tests passed. |
 | Qualification tool tests | Pass | 8 Node tests passed. |
 | iOS Release configuration | Pass | Release validator completed successfully. |
-| Production deployment | Pass | API commit `9d592fe` deployed; API and PostgreSQL remained healthy. |
-| Production read paths | Pass | One game, 32 teams, 32 standings, 56 matches, match detail, and guest comments read from the published tournament. |
+| Production deployment | Pass | API commit `9f9c0d2` deployed; API and PostgreSQL remained healthy. |
+| Production read paths | Pass | The final read gate returned one game, 32 teams, 32 standings, 59 matches, match detail, and guest comments from the published tournament. |
 | Production publication | Pass | Malformed upload remained atomic; the canonical workbook published and remained readable after completion. |
 | Production accounts/community | Pass | Registration, login persistence, sign-out/login, comments, moderation rejection, reports, blocks, unblocks, operator removal, and account deletion passed. |
 | Production realtime | Pass | Tournament and comment events, initial connection, and reconnect passed. |
@@ -27,8 +27,9 @@ release-candidate run and link any blocker to its GitHub issue.
 | Large iPhone UI suite | Pass | iPhone 17 Pro Max on iOS 26.5; 17 tests passed serially with one simulator destination. |
 | Large iPhone light appearance | Pass | The standard score feed was inspected with its accessibility hierarchy and rendered without clipping or overlap. |
 | Large iPhone dark appearance | Pass | After restarting a stuck simulator runtime, iOS Settings and the standard score feed both rendered correctly in system dark mode. |
-| Physical iPhone Release pass | Blocked | No registered physical device/provisioning is available yet. |
-| Network/failure-state pass | Blocked | Offline launch, slow network, backend outage, expired session, and recovery still require the manual device pass. |
+| Physical iPhone Release pass | Pass | On a connected, trusted development iPhone, the Release app was exercised through appearance, guest browsing, tournament, bracket, match, score, and turn-based scorebook paths without a crash. |
+| Network/failure-state pass | Pass | Thirty-nine focused unit checks covered malformed data, offline errors, expired sessions, and realtime reloads. Serial UI checks covered unavailable launch plus a three-second delayed failure, visible retry, and successful recovery. |
+| Final iOS Release validation | Pass | The unsigned archive, resolved production settings, app icons, HTTPS endpoint, ATS posture, and credential-marker scan passed after the fault fixture was added. |
 
 ## 2026-08-17 · Development Branch
 
@@ -50,9 +51,11 @@ release-candidate run and link any blocker to its GitHub issue.
 | Physical iPhone Release pass | Blocked | No registered physical device/provisioning is available yet. |
 | Production log audit | Pass | 1,008 lines/963 structured entries from a bounded 24-hour API sample passed without displaying content. |
 
-## Remaining Acceptance Work
+## Issue 45 Closeout Decision
 
-- Complete the manual network-fault and physical-device Release pass, including
-  offline launch, slow network, backend outage, expired session, and recovery.
-- File a dedicated blocker issue for any failed behavior; do not close issue 45
-  until every blocker is resolved or explicitly accepted.
+Issue 45 has no remaining release blocker. The live production Pi was not
+deliberately stopped, and the physical phone was not placed under 100 percent
+packet loss. Equivalent client loading, outage, retry, session-expiration, and
+recovery paths passed deterministic qualification instead. This production-safe
+substitution is accepted for the v1 qualification closeout; live service
+resilience remains part of the TestFlight observation window in issue 47.
