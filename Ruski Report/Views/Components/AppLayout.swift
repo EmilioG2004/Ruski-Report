@@ -38,7 +38,7 @@ enum AppLayout {
     static let heroTeamMonogramSize: CGFloat = 42
     static let commentAvatarSize: CGFloat = 36
     static let matchHeaderScoreWidth: CGFloat = 38
-    static let eventSequenceWidth: CGFloat = 28
+    static let shotMarkerSize: CGFloat = 26
 
     static let compactStateHeight: CGFloat = 180
     static let standardStateHeight: CGFloat = 220
@@ -54,8 +54,4 @@ enum AppLayout {
     static let tableRankWidth: CGFloat = 44
     static let tableSubjectWidth: CGFloat = 168
     static let tableValueWidth: CGFloat = 96
-    static let scorecardBooleanWidth: CGFloat = 78
-    static let scorecardNumberWidth: CGFloat = 70
-    static let scorecardPlayerWidth: CGFloat = 132
-    static let scorecardDefaultWidth: CGFloat = 116
 }

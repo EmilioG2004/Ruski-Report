@@ -34,4 +34,23 @@ enum MatchCopy {
     static let eventLogUnavailable = "Event log is not available yet"
     static let scorecardTitle = "Scorecard"
     static let scorecardUnavailable = "Scorecard rows are not available yet"
+    static let unknownTeam = "Unknown team"
+    static let unknownShooter = "Unknown shooter"
+    static let unrecordedShot = "No result recorded"
+
+    static func turnTitle(_ number: Int) -> String {
+        "TURN \(number)"
+    }
+
+    static func shotTitle(_ position: Int) -> String {
+        "Shot \(position)"
+    }
+
+    static func shootingOrder(_ order: Int) -> String {
+        switch order {
+        case 1: "Shoots first"
+        case 2: "Shoots second"
+        default: "Shooting order \(order)"
+        }
+    }
 }

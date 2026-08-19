@@ -3,7 +3,7 @@
 //  Ruski Report
 //
 //  Centralizes server-driven score and scorecard value formatting, along with
-//  the header styles shared by their horizontally scalable tables.
+//  the shared box-score table header style.
 //
 
 import Foundation
@@ -32,10 +32,6 @@ enum MatchValueFormatter {
 
 extension Text {
     func boxScoreHeaderStyle(width: CGFloat, alignment: Alignment) -> some View {
-        matchTableHeaderStyle(width: width, alignment: alignment)
-    }
-
-    func scorecardHeaderStyle(width: CGFloat, alignment: Alignment) -> some View {
         matchTableHeaderStyle(width: width, alignment: alignment)
     }
 

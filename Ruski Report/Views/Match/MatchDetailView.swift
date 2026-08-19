@@ -118,7 +118,10 @@ struct MatchDetailView: View {
             }
         case .scorecard:
             MatchPanelScrollView {
-                MatchScorecardView(scorecard: screen.match.scorecard)
+                MatchScorecardView(
+                    screen: screen,
+                    routeContext: routeContext
+                )
             }
         case .chat:
             MatchCommentsView(

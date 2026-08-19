@@ -2,8 +2,8 @@
 //  MatchEventLogView.swift
 //  Ruski Report
 //
-//  Presents ordered game events with route-provided participant context while
-//  remaining independent of panel navigation and scrolling.
+//  Presents recorded plays by turn, keeping each team's two shooters together
+//  before handing possession to the opponent.
 //
 
 import SwiftUI
@@ -12,8 +12,8 @@ struct MatchEventLogView: View {
     let screen: MatchDetailScreen
     let routeContext: MatchRouteContext
 
-    private var events: [GameEvent] {
-        screen.match.events.sorted { $0.sequence < $1.sequence }
+    private var recordedTurns: [MatchTurn] {
+        screen.turns.filter(\.hasEvents)
     }
 
     var body: some View {
@@ -21,75 +21,85 @@ struct MatchEventLogView: View {
             title: MatchCopy.eventLogTitle,
             systemImage: "list.bullet.rectangle"
         ) {
-            if events.isEmpty {
+            if recordedTurns.isEmpty {
                 EmptyMatchSectionView(
                     title: MatchCopy.eventLogUnavailable,
                     systemImage: "list.bullet.rectangle"
                 )
             } else {
-                VStack(spacing: AppLayout.standardSpacing) {
-                    ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
-                        if index > 0 {
-                            Divider()
+                LazyVStack(spacing: AppLayout.contentSpacing) {
+                    ForEach(recordedTurns) { turn in
+                        MatchTurnCard(turn: turn, routeContext: routeContext) { teamTurn in
+                            VStack(spacing: AppLayout.standardSpacing) {
+                                ForEach(teamTurn.shots) { shot in
+                                    MatchPlayShotRow(
+                                        shot: shot,
+                                        screen: screen,
+                                        routeContext: routeContext
+                                    )
+                                }
+                            }
                         }
-
-                        MatchEventRow(
-                            sequence: event.sequence,
-                            label: screen.eventLabel(for: event),
-                            detail: eventDetailText(for: event),
-                            value: event.value
-                        )
                     }
                 }
                 .accessibilityIdentifier("match.events")
             }
         }
     }
-
-    private func eventDetailText(for event: GameEvent) -> String {
-        [
-            routeContext.teamName(for: event.teamId),
-            routeContext.playerName(for: event.playerId)
-        ]
-        .compactMap { $0 }
-        .joined(separator: " · ")
-    }
 }
 
-private struct MatchEventRow: View {
-    let sequence: Int
-    let label: String
-    let detail: String
-    let value: Double?
+private struct MatchPlayShotRow: View {
+    let shot: MatchTurnShot
+    let screen: MatchDetailScreen
+    let routeContext: MatchRouteContext
+
+    private var shooterName: String {
+        routeContext.playerName(for: shot.playerId)
+            ?? shot.scorecardRow?.values[MatchScorecardField.shooter]
+            ?? MatchCopy.unknownShooter
+    }
 
     var body: some View {
         HStack(alignment: .top, spacing: AppLayout.standardSpacing) {
-            Text("\(sequence)")
-                .font(.caption.weight(.bold).monospacedDigit())
-                .foregroundStyle(Color.accentColor)
-                .frame(width: AppLayout.eventSequenceWidth, alignment: .trailing)
+            MatchShotMarker(position: shot.position)
 
             VStack(alignment: .leading, spacing: AppLayout.microSpacing) {
-                Text(label)
+                Text(shooterName)
                     .font(.subheadline.weight(.semibold))
-                    .fixedSize(horizontal: false, vertical: true)
 
-                if !detail.isEmpty {
-                    Text(detail)
+                if shot.events.isEmpty {
+                    Text(MatchCopy.unrecordedShot)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    ForEach(shot.events) { event in
+                        MatchPlayResultView(
+                            label: screen.eventLabel(for: event),
+                            value: event.value
+                        )
+                    }
                 }
             }
 
             Spacer(minLength: AppLayout.smallSpacing)
-
-            if let value {
-                Text(MatchValueFormatter.stat(value, valueType: "number"))
-                    .font(.caption.weight(.semibold).monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
         }
         .accessibilityElement(children: .combine)
+    }
+}
+
+private struct MatchPlayResultView: View {
+    let label: String
+    let value: Double?
+
+    var body: some View {
+        HStack(spacing: AppLayout.microSpacing) {
+            Text(label)
+            if let value {
+                Text(MatchValueFormatter.stat(value, valueType: "number"))
+                    .monospacedDigit()
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
     }
 }
