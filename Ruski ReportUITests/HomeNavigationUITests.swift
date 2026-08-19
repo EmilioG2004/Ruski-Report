@@ -99,4 +99,16 @@ final class HomeNavigationUITests: PreviewAppUITestCase {
         assertExists(app.staticTexts["Tournament unavailable"])
         assertExists(app.buttons["Retry"])
     }
+
+    @MainActor
+    func testRecoversAfterDelayedTournamentFailure() throws {
+        let app = launchPreviewApp(scenario: "recovering")
+        assertExists(app.descendants(matching: .any)["home.loading"])
+        assertExists(app.staticTexts["Tournament unavailable"])
+
+        app.buttons["Retry"].tap()
+
+        assertExists(app.buttons["home.tournamentCard"])
+        assertExists(app.buttons["home.match.match-2026-001"])
+    }
 }

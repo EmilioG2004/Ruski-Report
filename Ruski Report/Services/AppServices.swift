@@ -44,8 +44,14 @@ struct AppServices {
         default:
             tournamentDetail = PreviewData.tournamentDetail
         }
-        let tournamentFailure: AppError? = scenario == .unavailable ?
-            .networkUnavailable("The tournament service is temporarily unavailable.") : nil
+        let tournamentNetworkCondition: PreviewNetworkCondition = switch scenario {
+        case .unavailable:
+            .unavailable
+        case .recovering:
+            .delayedRecovery
+        default:
+            .available
+        }
 
         let blockingState = PreviewUserBlockingState()
 
@@ -53,7 +59,7 @@ struct AppServices {
             games: PreviewGameRepository(),
             tournaments: PreviewTournamentRepository(
                 detail: tournamentDetail,
-                failure: tournamentFailure
+                networkCondition: tournamentNetworkCondition
             ),
             matches: PreviewMatchRepository(),
             comments: PreviewCommentRepository(

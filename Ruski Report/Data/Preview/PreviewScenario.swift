@@ -11,6 +11,7 @@ nonisolated enum PreviewScenario: String, Equatable {
     case standard
     case empty
     case unavailable
+    case recovering
     case authenticated
     case moderationRejected
     case reporting
