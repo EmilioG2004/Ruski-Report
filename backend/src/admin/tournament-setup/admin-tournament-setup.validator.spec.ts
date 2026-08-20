@@ -120,6 +120,39 @@ describe("AdminTournamentSetupValidator", () => {
     });
   });
 
+  it("rejects a valid round robin that exceeds canonical workbook capacity", () => {
+    expect(() => validator.parseCreate({
+      name: "Oversized Round Robin",
+      year: 2027,
+      configuration: {
+        kind: "advanced",
+        value: {
+          formatVersion: 1,
+          formatType: "pod_and_single_elimination",
+          teamCount: 24,
+          podCount: 1,
+          podSizes: [24],
+          playersPerTeam: 2,
+          gamesPerPair: 1,
+          qualifiersPerPod: 16,
+          bracketSize: 16,
+          allowByes: false,
+          standingsRules: [
+            "record",
+            "cupDifferential",
+            "teamShootingPercentage",
+            "administratorResolution"
+          ]
+        }
+      }
+    })).toThrow(expect.objectContaining({
+      details: expect.arrayContaining([expect.objectContaining({
+        code: "ADVANCED_CONFIGURATION_LIMIT_EXCEEDED",
+        path: "configuration.value.podSizes"
+      })])
+    }));
+  });
+
   it("allows distinct players to share a display name", () => {
     const pod = current.pods[0];
     const result = validator.parseReplacement({

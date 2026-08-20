@@ -12,7 +12,9 @@ import {
   TournamentVisibility
 } from "../../tournament-engine/domain";
 import { AdminTournamentSetupRecord } from "../../tournament-engine/persistence";
+import { CANONICAL_WORKBOOK_LIMITS } from "../../tournament-engine/workbook/schema";
 import {
+  AdminTournamentValidationIssue,
   CreateAdminTournamentRequest,
   PreviewAdminTournamentSetupRequest,
   PublishAdminTournamentSetupRequest,
@@ -26,6 +28,8 @@ const MAXIMUM_ADVANCED_PODS = 32;
 const MAXIMUM_ADVANCED_PLAYERS_PER_TEAM = 8;
 const MAXIMUM_ADVANCED_GAMES_PER_PAIR = 4;
 const MAXIMUM_ADVANCED_BRACKET_SIZE = 256;
+const MAXIMUM_CANONICAL_GAME_SHEETS =
+  CANONICAL_WORKBOOK_LIMITS.maximumWorksheetCount - 3;
 
 export interface ValidatedCreateTournamentRequest {
   name: string;
@@ -614,4 +618,24 @@ function validateAdvancedBounds(
       });
     }
   });
+  details.push(...canonicalWorkbookCapacityIssues(configuration));
+}
+
+export function canonicalWorkbookCapacityIssues(
+  configuration: TournamentFormatConfiguration
+): AdminTournamentValidationIssue[] {
+  const gameSheetCount = configuration.podSizes.reduce(
+    (total, podSize) => total +
+      podSize * (podSize - 1) / 2 * configuration.gamesPerPair,
+    0
+  );
+  if (!Number.isSafeInteger(gameSheetCount) ||
+      gameSheetCount > MAXIMUM_CANONICAL_GAME_SHEETS) {
+    return [{
+      code: "ADVANCED_CONFIGURATION_LIMIT_EXCEEDED",
+      message: `Pod play cannot require more than ${MAXIMUM_CANONICAL_GAME_SHEETS} canonical game sheets.`,
+      path: "configuration.value.podSizes"
+    }];
+  }
+  return [];
 }

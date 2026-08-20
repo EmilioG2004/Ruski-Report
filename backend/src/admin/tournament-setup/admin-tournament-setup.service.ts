@@ -40,6 +40,7 @@ import {
 } from "./admin-tournament-setup.contracts";
 import {
   AdminTournamentSetupValidator,
+  canonicalWorkbookCapacityIssues,
   ValidatedDraftPlayerRequest
 } from "./admin-tournament-setup.validator";
 
@@ -413,6 +414,7 @@ function mapDetail(record: AdminTournamentSetupRecord): AdminTournamentDetailRes
     toSetup(record),
     record.tournament.rowVersion
   );
+  const capacityIssues = canonicalWorkbookCapacityIssues(record.configuration);
   return {
     tournament: mapSummary(record.tournament),
     configuration: record.configuration,
@@ -438,8 +440,8 @@ function mapDetail(record: AdminTournamentSetupRecord): AdminTournamentDetailRes
       }))
     })),
     validation: {
-      publishable: preview.valid,
-      issues: preview.issues
+      publishable: preview.valid && capacityIssues.length === 0,
+      issues: [...preview.issues, ...capacityIssues]
     }
   };
 }
@@ -452,12 +454,13 @@ function mapPreview(
     toSetup(record),
     record.tournament.rowVersion
   );
+  const capacityIssues = canonicalWorkbookCapacityIssues(record.configuration);
   return {
     tournamentId: record.tournament.tournamentId,
     rowVersion: record.tournament.rowVersion,
-    publishable: preview.valid,
-    issues: preview.issues,
-    previewDigest: preview.digest,
+    publishable: preview.valid && capacityIssues.length === 0,
+    issues: [...preview.issues, ...capacityIssues],
+    previewDigest: capacityIssues.length === 0 ? preview.digest : null,
     matchCount: preview.matches.length,
     matches: preview.matches
   };
