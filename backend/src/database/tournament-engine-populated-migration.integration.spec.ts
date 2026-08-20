@@ -30,16 +30,17 @@ postgresDescribe("populated tournament-engine migration rehearsal", () => {
   it("upgrades populated 0006 state without changing legacy rows or reads", async () => {
     await applyMigrationsThrough0006(database, migrationsDirectory);
     await seedLegacySnapshot(database);
-    const legacyDigestBefore = await digestLegacyTables(database);
+    const legacyTables = await listLegacyTables(database);
+    const legacyDigestBefore = await digestLegacyTables(database, legacyTables);
 
     const config = loadDatabaseConfig({
       DATABASE_URL: rehearsalDatabaseUrl,
       DATABASE_MIGRATIONS_DIR: migrationsDirectory
     });
     const applied = await new MigrationRunner(database, config).migrate();
-    const legacyDigestAfter = await digestLegacyTables(database);
+    const legacyDigestAfter = await digestLegacyTables(database, legacyTables);
 
-    expect(applied).toEqual([7]);
+    expect(applied).toEqual([7, 8]);
     expect(legacyDigestAfter).toBe(legacyDigestBefore);
     expect(await new MigrationRunner(database, config).migrate()).toEqual([]);
 
@@ -177,19 +178,27 @@ async function seedLegacySnapshot(database: PostgresDatabase): Promise<void> {
   );
 }
 
-async function digestLegacyTables(database: PostgresDatabase): Promise<string> {
+async function listLegacyTables(
+  database: PostgresDatabase
+): Promise<readonly string[]> {
   const tableResult = await database.query<{ tablename: string }>(
     `
       SELECT tablename
       FROM pg_tables
       WHERE schemaname = 'public'
         AND tablename <> 'schema_migrations'
-        AND tablename NOT LIKE 'engine_%'
       ORDER BY tablename
     `
   );
+  return tableResult.rows.map(({ tablename }) => tablename);
+}
+
+async function digestLegacyTables(
+  database: PostgresDatabase,
+  tableNames: readonly string[]
+): Promise<string> {
   const hash = createHash("sha256");
-  for (const { tablename } of tableResult.rows) {
+  for (const tablename of tableNames) {
     if (!/^[a-z_]+$/.test(tablename)) {
       throw new Error(`Unexpected legacy table name '${tablename}'.`);
     }
