@@ -14,7 +14,6 @@ import {
   TournamentTeamId,
   TournamentVisibility
 } from "../domain";
-import { ScheduledPodMatch } from "../scheduling";
 
 export type EngineMetadata = Record<string, unknown>;
 
@@ -87,7 +86,8 @@ export interface CreateTournamentDraftInput {
 export interface PublishTournamentSetupInput {
   tournamentId: TournamentId;
   expectedRowVersion: number;
-  schedule: readonly ScheduledPodMatch[];
+  expectedPreviewDigest: string;
+  visibility: TournamentVisibility;
   publishedAt: string;
   audit: EngineAuditCommand;
 }
@@ -96,6 +96,45 @@ export interface TournamentCommandResult {
   tournamentId: TournamentId;
   lifecycle: TournamentLifecycle;
   rowVersion: number;
+}
+
+export interface AdminTournamentSummaryRecord {
+  tournamentId: TournamentId;
+  publicKey: string;
+  gameType: string;
+  year: number;
+  name: string;
+  lifecycle: TournamentLifecycle;
+  visibility: TournamentVisibility;
+  rowVersion: number;
+  setupPublishedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminTournamentSetupPlayerRecord extends DraftPlayerInput {}
+
+export interface AdminTournamentSetupTeamRecord extends DraftTeamInput {}
+
+export interface AdminTournamentSetupRecord {
+  tournament: AdminTournamentSummaryRecord;
+  configuration: CopiedTournamentConfiguration;
+  pods: readonly DraftPodInput[];
+  teams: readonly AdminTournamentSetupTeamRecord[];
+}
+
+export interface ReplaceTournamentDraftInput {
+  tournamentId: TournamentId;
+  expectedRowVersion: number;
+  pods: readonly DraftPodInput[];
+  teams: readonly DraftTeamInput[];
+  updatedAt: string;
+  audit: EngineAuditCommand;
+}
+
+export interface PublishedTournamentSetupResult extends TournamentCommandResult {
+  matchCount: number;
+  setupPublishedAt: string;
 }
 
 export interface ReplaceRosterPlayerInput {
@@ -264,8 +303,15 @@ export interface ProjectionActivationResult extends TournamentCommandResult {
 }
 
 export interface TournamentSetupRepositoryContract {
+  list(): Promise<readonly AdminTournamentSummaryRecord[]>;
+  findById(tournamentId: TournamentId): Promise<AdminTournamentSetupRecord | null>;
   createDraft(input: CreateTournamentDraftInput): Promise<TournamentCommandResult>;
-  publishSetup(input: PublishTournamentSetupInput): Promise<TournamentCommandResult>;
+  replaceDraft(
+    input: ReplaceTournamentDraftInput
+  ): Promise<TournamentCommandResult>;
+  publishSetup(
+    input: PublishTournamentSetupInput
+  ): Promise<PublishedTournamentSetupResult>;
 }
 
 export interface RosterRepositoryContract {
