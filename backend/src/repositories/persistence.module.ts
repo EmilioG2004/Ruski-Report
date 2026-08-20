@@ -14,6 +14,7 @@ import {
   PostgresTournamentSetupRepository,
   TournamentEngineTransactionManager
 } from "../tournament-engine/persistence";
+import { PostgresWorkbookReconciliationRepository } from "../tournament-engine/workbook";
 import {
   PostgresAccountRepository,
   PostgresAuthSessionRepository,
@@ -79,7 +80,8 @@ const tournamentEngineRepositoryTokens = [
   PostgresRosterRepository,
   PostgresMatchWriterRepository,
   PostgresMatchRevisionRepository,
-  PostgresProjectionRepository
+  PostgresProjectionRepository,
+  PostgresWorkbookReconciliationRepository
 ];
 
 const tournamentEngineRepositoryProviders = [
@@ -128,6 +130,14 @@ const tournamentEngineRepositoryProviders = [
       database: PostgresDatabase,
       transactions: TournamentEngineTransactionManager
     ) => new PostgresProjectionRepository(database, transactions)
+  },
+  {
+    provide: PostgresWorkbookReconciliationRepository,
+    inject: [PostgresDatabase, TournamentEngineTransactionManager],
+    useFactory: (
+      database: PostgresDatabase,
+      transactions: TournamentEngineTransactionManager
+    ) => new PostgresWorkbookReconciliationRepository(database, transactions)
   }
 ];
 
