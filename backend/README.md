@@ -32,9 +32,8 @@ the database endpoint requires TLS. After compiling a production artifact, run
 `npm run db:migrate:prod` before `npm start`.
 
 PostgreSQL integration tests require two disposable databases. Repository and
-backfill cases truncate application tables, while the populated-migration
-rehearsal builds an isolated schema through migration `0006` before applying
-the current migration set:
+administrator/setup/backfill cases truncate application tables, while the
+populated-migration database is reserved for upgrade rehearsals:
 
 ```bash
 docker compose -f compose.postgres.yml exec postgres \
@@ -48,6 +47,57 @@ npm run test:postgres
 
 Unit tests continue to use the in-memory repository adapters directly and do
 not require PostgreSQL.
+
+## Private Administrator Application
+
+The server-rendered administrator application is available at
+`/api/admin/app`. It uses separate administrator identities, opaque cookie
+sessions, strict same-origin CSRF protection, persisted rate limits, and
+immutable security and tournament-command audit records. The legacy
+`x-admin-token` remains limited to scorebook upload and moderation routes; it
+does not authorize the new tournament setup APIs.
+
+Production must provide an exact HTTPS `ADMIN_WEB_ORIGIN`, secure cookies, and
+a unique `ADMIN_AUTH_SECURITY_SECRET` of at least 32 bytes. Apply migrations
+before creating the first administrator. The bootstrap command writes the
+single-use credential only to a newly created mode-0600 file outside the
+repository; it never prints the raw token:
+
+```bash
+npm run db:admin-credential -- bootstrap \
+  --login-name tournament-admin \
+  --display-name "Tournament Administrator" \
+  --token-output /absolute/private/path/ruski-admin-bootstrap.json
+```
+
+Use the non-secret acceptance URL and token from that file to complete setup in
+the browser. After an administrator exists, create additional invitations from
+the authenticated administrator API. A local recovery credential uses the
+same protected-file workflow:
+
+```bash
+npm run db:admin-credential -- recover \
+  --administrator-id 00000000-0000-0000-0000-000000000000 \
+  --token-output /absolute/private/path/ruski-admin-recovery.json
+```
+
+Delete the credential file after the token is consumed or expires. Production
+artifacts without a `.git` checkout also require
+`--protected-output-root /absolute/private/directory`. The Raspberry Pi
+runbook documents the one-shot container invocation and protected bind mount.
+
+Authenticated JSON setup routes live under `/api/admin/tournaments`. Setup
+publication accepts only the expected row version, server-issued preview
+digest, and visibility; the database transaction regenerates the schedule and
+atomically locks setup, creates scheduled matches, and writes its engine audit.
+The built-in 32-team preset generates 48 pod-play matches. Canonical workbook
+download remains unavailable until Phase 3.
+
+Migration `0008` is additive. A previous application binary can run while its
+new tables and guards remain in place; do not drop administrator audit or
+tournament-engine history to roll back an application release. A database
+rollback uses a verified pre-migration backup and the documented restore
+rehearsal in `deploy/raspberry-pi/operations`, never a destructive down script.
 
 Health check:
 
