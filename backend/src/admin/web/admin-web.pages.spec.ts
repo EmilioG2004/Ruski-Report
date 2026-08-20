@@ -72,7 +72,7 @@ describe("administrator web rendering", () => {
     expect(signIn).not.toContain("token=");
   });
 
-  it("renders setup labels, error anchors, escaped names, and Phase 3 workbook status", () => {
+  it("renders setup labels, error anchors, escaped names, and workbook availability", () => {
     const detail = {
       ...DETAIL,
       teams: [{
@@ -102,8 +102,24 @@ describe("administrator web rendering", () => {
     expect(html).toContain("href=\"#field-teams-0-name\"");
     expect(html).toContain("&lt;img src=x onerror=alert(1)&gt;");
     expect(html).not.toContain("<img src=x");
-    expect(html).toContain("Workbook generation becomes available in Phase 3");
+    expect(html).toContain("Publish setup before generating");
     expect(html).not.toContain("Download workbook");
+
+    const published = renderTournamentSetupPage({
+      principal: PRINCIPAL,
+      csrfToken: "csrf",
+      detail: {
+        ...detail,
+        tournament: {
+          ...detail.tournament,
+          lifecycle: "setup_published",
+          setupPublishedAt: "2027-01-02T00:00:00.000Z"
+        }
+      }
+    });
+    expect(published).toContain(
+      `/api/admin/app/tournaments/${TOURNAMENT_ID}/workbooks`
+    );
   });
 
   it("renders an explicit unknown schedule and a server-owned publication digest", () => {

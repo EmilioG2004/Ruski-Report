@@ -43,7 +43,10 @@ export function renderTournamentSetupPage(input: {
     </section>
     <section class="panel locked">
       <h2>Canonical workbook</h2>
-      <p>Workbook generation becomes available in Phase 3. No placeholder download is provided.</p>
+      ${locked
+        ? `<p>Generate the canonical scorekeeping workbook, preview cumulative updates, and apply selected revisions without deleting omitted scorecards.</p>
+          <p><a class="button secondary" href="${ADMIN_WEB_ROOT}/tournaments/${escapeAttribute(detail.tournament.id)}/workbooks">Open workbook operations</a></p>`
+        : `<p>Publish setup before generating or reconciling the canonical workbook.</p>`}
     </section>`
   });
 }
