@@ -176,23 +176,28 @@ Verify the token prefix without printing the credential:
 grep -q '^TUNNEL_TOKEN=eyJ' /opt/ruski-report/secrets/cloudflared.env && echo OK
 ```
 
-Generate two different URL-safe secrets:
+Generate three different URL-safe secrets:
 
 ```bash
 openssl rand -hex 32
 openssl rand -hex 48
+openssl rand -hex 48
 ```
 
 Open `.env` in an editor and assign the first value to `POSTGRES_PASSWORD` and
-the second to `ADMIN_API_TOKEN`. Do not place either value in shell history,
-source control, screenshots, the iOS app, or operator documentation.
+the second to `ADMIN_API_TOKEN`. Assign the third to
+`ADMIN_AUTH_SECURITY_SECRET`, and set `ADMIN_WEB_ORIGIN` to the canonical exact
+HTTPS origin used to open the private administrator app. Do not place any
+secret in shell history, source control, screenshots, the iOS app, or operator
+documentation.
 
 Set `RUSKI_IMAGE_TAG` to the checked-out tag or short commit SHA. Keep
 `RUSKI_API_BIND_ADDRESS=127.0.0.1` except during the LAN acceptance test below.
 Keep `CLOUDFLARED_ENV_FILE` outside the source directory. The production
 defaults allow browser origins `https://ruskireport.com` and
 `https://www.ruskireport.com`, trust the single `cloudflared` proxy hop, limit
-normal request bodies to 256 KiB, and limit scorebook files to 10 MiB.
+parsed request bodies to 8 MiB with at most 7,000 URL-encoded fields for the
+bounded advanced setup form, and limit scorebook files to 10 MiB.
 
 Validate interpolation without printing the rendered configuration, which
 would expose secrets:
@@ -228,6 +233,46 @@ Verify the loopback health endpoint on the Pi:
 ```bash
 curl --fail --show-error http://127.0.0.1:3000/api/health
 ```
+
+### Bootstrap the first administrator
+
+After migrations and the API are healthy, create a temporary host directory
+for the one-time credential. It must be owned by the invoking user and grant no
+group or other permissions:
+
+```bash
+install -d -m 0700 /opt/ruski-report/operator-credentials
+```
+
+Run the production credential command inside the shipped API image so it can
+reach PostgreSQL on the private Compose network. The bind mount is the only
+writable credential location and the raw token is never printed:
+
+```bash
+docker compose --env-file .env run --rm --no-deps \
+  --user "$(id -u):$(id -g)" \
+  --volume /opt/ruski-report/operator-credentials:/run/ruski-admin-credentials \
+  api node dist/database/admin-bootstrap.js bootstrap \
+  --login-name tournament-admin \
+  --display-name "Tournament Administrator" \
+  --protected-output-root /run/ruski-admin-credentials \
+  --token-output /run/ruski-admin-credentials/bootstrap.json
+```
+
+Open the mode-0600 host file, visit its non-secret `browserUrl`, and paste the
+single-use token into the form. Delete the file after the token is consumed or
+expires. To recover an existing administrator, use the same container and
+mount command with:
+
+```bash
+api node dist/database/admin-bootstrap.js recover \
+  --administrator-id 00000000-0000-0000-0000-000000000000 \
+  --protected-output-root /run/ruski-admin-credentials \
+  --token-output /run/ruski-admin-credentials/recovery.json
+```
+
+The abbreviated recovery block replaces the command beginning with `api` in
+the full invocation above; retain `docker compose`, `--user`, and `--volume`.
 
 The expected response is:
 
