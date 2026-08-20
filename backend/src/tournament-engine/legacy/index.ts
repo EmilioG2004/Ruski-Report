@@ -5,4 +5,3 @@ export * from "./legacy-backfill.tool";
 export * from "./legacy-backfill.types";
 export * from "./postgres-legacy-backfill.repository";
 export * from "./postgres-legacy-snapshot.reader";
-

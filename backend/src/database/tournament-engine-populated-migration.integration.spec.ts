@@ -205,4 +205,3 @@ async function digestLegacyTables(database: PostgresDatabase): Promise<string> {
   }
   return hash.digest("hex");
 }
-
