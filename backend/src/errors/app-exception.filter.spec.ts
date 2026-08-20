@@ -76,6 +76,41 @@ describe("AppExceptionFilter", () => {
       })
     );
   });
+
+  it("sets Retry-After without logging URL query values", () => {
+    const logger = createMockLogger();
+    const response = createMockResponse();
+    const host = createMockHost(response, "/api/admin/auth/login?token=secret");
+    const filter = new AppExceptionFilter(logger);
+
+    filter.catch(new AppError({
+      code: "RATE_LIMITED",
+      message: "Try again later.",
+      statusCode: HttpStatus.TOO_MANY_REQUESTS,
+      details: [{
+        message: "Authentication attempts are temporarily limited.",
+        metadata: { retryAfterSeconds: 60 }
+      }]
+    }), host);
+
+    expect(response.setHeader).toHaveBeenCalledWith("Retry-After", "60");
+    expect(logger.warning).toHaveBeenCalledWith(
+      "Try again later.",
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          path: "/api/admin/auth/login"
+        })
+      })
+    );
+    expect(logger.warning).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          url: expect.stringContaining("secret")
+        })
+      })
+    );
+  });
 });
 
 function createMockLogger(): jest.Mocked<AppLogger> {
@@ -88,10 +123,12 @@ function createMockLogger(): jest.Mocked<AppLogger> {
 }
 
 function createMockResponse(): {
+  setHeader: jest.Mock;
   status: jest.Mock;
   json: jest.Mock;
 } {
   const response = {
+    setHeader: jest.fn(),
     status: jest.fn(),
     json: jest.fn()
   };
@@ -100,12 +137,13 @@ function createMockResponse(): {
 }
 
 function createMockHost(response: {
+  setHeader: jest.Mock;
   status: jest.Mock;
   json: jest.Mock;
-}): ArgumentsHost {
+}, url = "/api/tournaments/active"): ArgumentsHost {
   const request = {
     method: "GET",
-    url: "/api/tournaments/active",
+    url,
     headers: {
       "x-request-id": "request-1"
     }

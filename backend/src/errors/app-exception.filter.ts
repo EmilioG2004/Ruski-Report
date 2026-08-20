@@ -16,6 +16,7 @@ interface RequestLike {
 }
 
 interface ResponseLike {
+  setHeader?(name: string, value: string): unknown;
   status(statusCode: number): {
     json(body: unknown): unknown;
   };
@@ -32,9 +33,28 @@ export class AppExceptionFilter implements ExceptionFilter {
     const requestId = extractRequestId(request);
     const errorResponse = createErrorResponse(exception, requestId);
 
+    this.writeRateLimitHeader(exception, response);
     this.logException(exception, request, requestId, errorResponse.statusCode);
 
     response.status(errorResponse.statusCode).json(errorResponse.body);
+  }
+
+  private writeRateLimitHeader(
+    exception: unknown,
+    response: ResponseLike
+  ): void {
+    if (!(exception instanceof AppError) || exception.code !== "RATE_LIMITED") {
+      return;
+    }
+
+    const retryAfter = exception.details
+      .map((detail) => detail.metadata?.retryAfterSeconds)
+      .find((value) =>
+        typeof value === "number" && Number.isSafeInteger(value) && value > 0
+      );
+    if (typeof retryAfter === "number") {
+      response.setHeader?.("Retry-After", String(retryAfter));
+    }
   }
 
   private logException(
@@ -49,7 +69,7 @@ export class AppExceptionFilter implements ExceptionFilter {
       requestId,
       metadata: {
         method: request.method,
-        url: request.url,
+        path: request.url?.split("?", 1)[0],
         statusCode
       }
     };
