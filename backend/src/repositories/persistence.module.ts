@@ -7,6 +7,14 @@ import {
   PostgresTransactionManager
 } from "../database";
 import {
+  PostgresMatchRevisionRepository,
+  PostgresMatchWriterRepository,
+  PostgresProjectionRepository,
+  PostgresRosterRepository,
+  PostgresTournamentSetupRepository,
+  TournamentEngineTransactionManager
+} from "../tournament-engine/persistence";
+import {
   PostgresAccountRepository,
   PostgresAuthSessionRepository,
   PostgresCommentReportRepository,
@@ -65,6 +73,64 @@ const repositoryProviders = [
   }
 ];
 
+const tournamentEngineRepositoryTokens = [
+  TournamentEngineTransactionManager,
+  PostgresTournamentSetupRepository,
+  PostgresRosterRepository,
+  PostgresMatchWriterRepository,
+  PostgresMatchRevisionRepository,
+  PostgresProjectionRepository
+];
+
+const tournamentEngineRepositoryProviders = [
+  {
+    provide: TournamentEngineTransactionManager,
+    inject: [PostgresDatabase],
+    useFactory: (database: PostgresDatabase) =>
+      new TournamentEngineTransactionManager(database)
+  },
+  {
+    provide: PostgresTournamentSetupRepository,
+    inject: [PostgresDatabase, TournamentEngineTransactionManager],
+    useFactory: (
+      database: PostgresDatabase,
+      transactions: TournamentEngineTransactionManager
+    ) => new PostgresTournamentSetupRepository(database, transactions)
+  },
+  {
+    provide: PostgresRosterRepository,
+    inject: [PostgresDatabase, TournamentEngineTransactionManager],
+    useFactory: (
+      database: PostgresDatabase,
+      transactions: TournamentEngineTransactionManager
+    ) => new PostgresRosterRepository(database, transactions)
+  },
+  {
+    provide: PostgresMatchWriterRepository,
+    inject: [PostgresDatabase, TournamentEngineTransactionManager],
+    useFactory: (
+      database: PostgresDatabase,
+      transactions: TournamentEngineTransactionManager
+    ) => new PostgresMatchWriterRepository(database, transactions)
+  },
+  {
+    provide: PostgresMatchRevisionRepository,
+    inject: [PostgresDatabase, TournamentEngineTransactionManager],
+    useFactory: (
+      database: PostgresDatabase,
+      transactions: TournamentEngineTransactionManager
+    ) => new PostgresMatchRevisionRepository(database, transactions)
+  },
+  {
+    provide: PostgresProjectionRepository,
+    inject: [PostgresDatabase, TournamentEngineTransactionManager],
+    useFactory: (
+      database: PostgresDatabase,
+      transactions: TournamentEngineTransactionManager
+    ) => new PostgresProjectionRepository(database, transactions)
+  }
+];
+
 @Module({
   providers: [
     {
@@ -81,8 +147,13 @@ const repositoryProviders = [
     PostgresTournamentSnapshotRepository,
     PostgresUploadReportRepository,
     PostgresUserBlockRepository,
+    ...tournamentEngineRepositoryProviders,
     ...repositoryProviders
   ],
-  exports: [PostgresDatabase, ...repositoryProviders]
+  exports: [
+    PostgresDatabase,
+    ...tournamentEngineRepositoryTokens,
+    ...repositoryProviders
+  ]
 })
 export class PersistenceModule {}
