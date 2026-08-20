@@ -31,13 +31,18 @@ provide `DATABASE_URL` through its secret manager and enable `DATABASE_SSL` when
 the database endpoint requires TLS. After compiling a production artifact, run
 `npm run db:migrate:prod` before `npm start`.
 
-PostgreSQL integration tests require a disposable database because they truncate
-application tables between cases:
+PostgreSQL integration tests require two disposable databases. Repository and
+backfill cases truncate application tables, while the populated-migration
+rehearsal builds an isolated schema through migration `0006` before applying
+the current migration set:
 
 ```bash
 docker compose -f compose.postgres.yml exec postgres \
   createdb -U ruski ruski_report_test
+docker compose -f compose.postgres.yml exec postgres \
+  createdb -U ruski ruski_report_migration_test
 export TEST_DATABASE_URL=postgresql://ruski:local-development-only@localhost:5432/ruski_report_test
+export POPULATED_MIGRATION_DATABASE_URL=postgresql://ruski:local-development-only@localhost:5432/ruski_report_migration_test
 npm run test:postgres
 ```
 
