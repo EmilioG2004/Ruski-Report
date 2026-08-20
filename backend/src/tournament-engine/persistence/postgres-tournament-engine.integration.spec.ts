@@ -13,6 +13,10 @@ import {
 } from "../domain";
 import { generatePodRoundRobinSchedule } from "../scheduling";
 import {
+  completeMainTournamentFixture,
+  createTournamentSetupPreview
+} from "../setup";
+import {
   ActivateMatchRevisionInput,
   CreateTournamentDraftInput,
   EngineAuditCommand
@@ -71,7 +75,8 @@ postgresDescribe("canonical tournament engine PostgreSQL persistence", () => {
     const published = await setupRepository.publishSetup({
       tournamentId: fixture.tournamentId,
       expectedRowVersion: draft.rowVersion,
-      schedule: fixture.schedule,
+      expectedPreviewDigest: previewDigest(fixture),
+      visibility: "public",
       publishedAt: "2027-01-02T00:00:00.000Z",
       audit: audit(901, "tournament_setup_published")
     });
@@ -119,6 +124,14 @@ postgresDescribe("canonical tournament engine PostgreSQL persistence", () => {
       "UPDATE engine_teams SET name = 'Renamed' WHERE id = $1::uuid",
       [fixture.teamIds[0]]
     )).rejects.toThrow(/immutable/i);
+    await expect(database.query(
+      "UPDATE engine_players SET display_name = 'Renamed' WHERE id = $1::uuid",
+      [fixture.playerIds[0]]
+    )).rejects.toThrow(/immutable/i);
+    await expect(database.query(
+      "DELETE FROM engine_players WHERE id = $1::uuid",
+      [fixture.playerIds[0]]
+    )).rejects.toThrow(/immutable/i);
     await expect(database.query(`
       INSERT INTO engine_tournament_configurations
       SELECT * FROM engine_tournament_configurations
@@ -148,33 +161,17 @@ postgresDescribe("canonical tournament engine PostgreSQL persistence", () => {
     `, [fixture.tournamentId, fixture.teamIds[0]])).rejects.toThrow(/immutable/i);
   });
 
-  it("rejects same-length altered or duplicated generated schedules atomically", async () => {
+  it("rejects an unconfirmed schedule preview atomically", async () => {
     const fixture = createFixture();
     await setupRepository.createDraft(fixture.input);
-    const altered = fixture.schedule.map((match, index) => index === 0
-      ? {
-          ...match,
-          participantTeamIds: [
-            match.participantTeamIds[0],
-            fixture.teamIds[2]
-          ] as const
-        }
-      : match
-    );
-    const duplicated = fixture.schedule.map((match, index) => index === 1
-      ? { ...match, id: fixture.schedule[0].id }
-      : match
-    );
-
-    for (const schedule of [altered, duplicated]) {
-      await expect(setupRepository.publishSetup({
-        tournamentId: fixture.tournamentId,
-        expectedRowVersion: 1,
-        schedule,
-        publishedAt: "2027-01-02T00:00:00.000Z",
-        audit: audit(930, "invalid_setup_publication")
-      })).rejects.toBeInstanceOf(EnginePersistenceInvariantError);
-    }
+    await expect(setupRepository.publishSetup({
+      tournamentId: fixture.tournamentId,
+      expectedRowVersion: 1,
+      expectedPreviewDigest: "0".repeat(64),
+      visibility: "public",
+      publishedAt: "2027-01-02T00:00:00.000Z",
+      audit: audit(930, "invalid_setup_publication")
+    })).rejects.toThrow(/preview/i);
     const unchanged = await database.query<{
       lifecycle: string;
       match_count: string;
@@ -190,6 +187,209 @@ postgresDescribe("canonical tournament engine PostgreSQL persistence", () => {
       lifecycle: "draft_setup",
       match_count: "0"
     });
+  });
+
+  it("rolls back every publication write when the final engine audit insert fails", async () => {
+    const fixture = createFixture();
+    await setupRepository.createDraft({
+      ...fixture.input,
+      tournament: { ...fixture.input.tournament, visibility: "private" }
+    });
+    await database.query(`
+      DROP TRIGGER IF EXISTS test_fail_setup_publication_audit
+        ON engine_audit_events
+    `);
+    await database.query(
+      "DROP FUNCTION IF EXISTS test_fail_setup_publication_audit()"
+    );
+    await database.query(`
+      CREATE OR REPLACE FUNCTION test_fail_setup_publication_audit()
+      RETURNS trigger
+      LANGUAGE plpgsql
+      AS $$
+      BEGIN
+        IF NEW.command_type = 'faulted_tournament_setup_published' THEN
+          RAISE EXCEPTION 'injected publication audit fault';
+        END IF;
+        RETURN NEW;
+      END;
+      $$
+    `);
+    await database.query(`
+      CREATE TRIGGER test_fail_setup_publication_audit
+      AFTER INSERT ON engine_audit_events
+      FOR EACH ROW EXECUTE FUNCTION test_fail_setup_publication_audit()
+    `);
+
+    try {
+      await expect(setupRepository.publishSetup({
+        tournamentId: fixture.tournamentId,
+        expectedRowVersion: 1,
+        expectedPreviewDigest: previewDigest(fixture),
+        visibility: "public",
+        publishedAt: "2027-01-02T00:00:00.000Z",
+        audit: audit(936, "faulted_tournament_setup_published")
+      })).rejects.toThrow("injected publication audit fault");
+    } finally {
+      await database.query(`
+        DROP TRIGGER IF EXISTS test_fail_setup_publication_audit
+          ON engine_audit_events
+      `);
+      await database.query(
+        "DROP FUNCTION IF EXISTS test_fail_setup_publication_audit()"
+      );
+    }
+
+    const state = await database.query<{
+      lifecycle: string;
+      visibility: string;
+      row_version: string;
+      setup_published_at: Date | null;
+      locked_at: Date | null;
+      match_count: string;
+      slot_count: string;
+      identity_count: string;
+      publication_audit_count: string;
+    }>(`
+      SELECT tournament.lifecycle, tournament.visibility,
+             tournament.row_version::text, tournament.setup_published_at,
+             configuration.locked_at,
+             (SELECT count(*)::text FROM engine_matches match
+              WHERE match.tournament_id = tournament.id) AS match_count,
+             (SELECT count(*)::text FROM engine_match_slots slot
+              WHERE slot.tournament_id = tournament.id) AS slot_count,
+             (SELECT count(*)::text FROM match_identities identity
+              WHERE identity.tournament_id = tournament.public_key) AS identity_count,
+             (SELECT count(*)::text FROM engine_audit_events audit
+              WHERE audit.tournament_id = tournament.id
+                AND audit.command_type = 'faulted_tournament_setup_published')
+               AS publication_audit_count
+      FROM engine_tournaments tournament
+      JOIN engine_tournament_configurations configuration
+        ON configuration.tournament_id = tournament.id
+      WHERE tournament.id = $1::uuid
+    `, [fixture.tournamentId]);
+    expect(state.rows[0]).toEqual({
+      lifecycle: "draft_setup",
+      visibility: "private",
+      row_version: "1",
+      setup_published_at: null,
+      locked_at: null,
+      match_count: "0",
+      slot_count: "0",
+      identity_count: "0",
+      publication_audit_count: "0"
+    });
+    const audits = await database.query<{ command_type: string }>(`
+      SELECT command_type
+      FROM engine_audit_events
+      WHERE tournament_id = $1::uuid
+      ORDER BY occurred_at, id
+    `, [fixture.tournamentId]);
+    expect(audits.rows).toEqual([{ command_type: "tournament_draft_created" }]);
+  });
+
+  it("reads and replaces a partial draft under optimistic concurrency", async () => {
+    const fixture = createFixture();
+    await setupRepository.createDraft({
+      ...fixture.input,
+      teams: []
+    });
+
+    const partial = await setupRepository.replaceDraft({
+      tournamentId: fixture.tournamentId,
+      expectedRowVersion: 1,
+      pods: fixture.input.pods,
+      teams: fixture.input.teams.slice(0, 2),
+      updatedAt: "2027-01-01T01:00:00.000Z",
+      audit: audit(931, "tournament_draft_setup_updated")
+    });
+    expect(partial.rowVersion).toBe(2);
+
+    const detail = await setupRepository.findById(fixture.tournamentId);
+    expect(detail?.teams).toHaveLength(2);
+    expect(detail?.teams[0].players).toHaveLength(2);
+    await expect(setupRepository.replaceDraft({
+      tournamentId: fixture.tournamentId,
+      expectedRowVersion: 1,
+      pods: fixture.input.pods,
+      teams: fixture.input.teams,
+      updatedAt: "2027-01-01T02:00:00.000Z",
+      audit: audit(932, "stale_tournament_draft_setup_updated")
+    })).rejects.toThrow(/changed/i);
+
+    const summaries = await setupRepository.list();
+    expect(summaries).toHaveLength(1);
+    expect(summaries[0]).toMatchObject({
+      tournamentId: fixture.tournamentId,
+      rowVersion: 2,
+      lifecycle: "draft_setup"
+    });
+    const audits = await database.query<{ command_type: string }>(`
+      SELECT command_type
+      FROM engine_audit_events
+      WHERE tournament_id = $1::uuid
+      ORDER BY occurred_at, id
+    `, [fixture.tournamentId]);
+    expect(audits.rows.map((row) => row.command_type)).toEqual([
+      "tournament_draft_created",
+      "tournament_draft_setup_updated"
+    ]);
+  });
+
+  it("rolls back a failed full-draft replacement without losing setup", async () => {
+    const fixture = createFixture();
+    await setupRepository.createDraft(fixture.input);
+    const invalidTeams = fixture.input.teams.map((team, index) => index === 1
+      ? {
+          ...team,
+          name: fixture.input.teams[0].name,
+          normalizedName: fixture.input.teams[0].normalizedName
+        }
+      : team
+    );
+
+    await expect(setupRepository.replaceDraft({
+      tournamentId: fixture.tournamentId,
+      expectedRowVersion: 1,
+      pods: fixture.input.pods,
+      teams: invalidTeams,
+      updatedAt: "2027-01-01T01:00:00.000Z",
+      audit: audit(935, "invalid_tournament_draft_setup_updated")
+    })).rejects.toThrow();
+
+    const unchanged = await setupRepository.findById(fixture.tournamentId);
+    expect(unchanged?.tournament.rowVersion).toBe(1);
+    expect(unchanged?.teams.map((team) => team.name)).toEqual(
+      fixture.input.teams.map((team) => team.name)
+    );
+    const audits = await database.query<{ command_type: string }>(`
+      SELECT command_type
+      FROM engine_audit_events
+      WHERE tournament_id = $1::uuid
+    `, [fixture.tournamentId]);
+    expect(audits.rows).toEqual([{ command_type: "tournament_draft_created" }]);
+  });
+
+  it("publishes all 48 main-preset matches from server state", async () => {
+    const fixture = createMainFixture();
+    await setupRepository.createDraft(fixture.input);
+    const published = await setupRepository.publishSetup({
+      tournamentId: fixture.tournamentId,
+      expectedRowVersion: 1,
+      expectedPreviewDigest: fixture.previewDigest,
+      visibility: "private",
+      publishedAt: "2027-01-02T00:00:00.000Z",
+      audit: audit(933, "tournament_setup_published")
+    });
+
+    expect(published.matchCount).toBe(48);
+    const matches = await database.query<{ count: string }>(`
+      SELECT count(*)::text AS count
+      FROM engine_matches
+      WHERE tournament_id = $1::uuid
+    `, [fixture.tournamentId]);
+    expect(matches.rows[0]?.count).toBe("48");
   });
 
   it("replaces a roster slot without rewriting historical membership identity", async () => {
@@ -451,7 +651,8 @@ postgresDescribe("canonical tournament engine PostgreSQL persistence", () => {
     await setupRepository.publishSetup({
       tournamentId: fixture.tournamentId,
       expectedRowVersion: 1,
-      schedule: fixture.schedule,
+      expectedPreviewDigest: previewDigest(fixture),
+      visibility: "public",
       publishedAt: "2027-01-02T00:00:00.000Z",
       audit: audit(900, "tournament_setup_published")
     });
@@ -529,7 +730,7 @@ function createFixture() {
     createdAt: "2027-01-01T00:00:00.000Z",
     audit: audit(899, "tournament_draft_created")
   };
-  const schedule = generatePodRoundRobinSchedule(configuration, {
+  const setup = {
     tournamentId,
     teams: teams.map((team) => ({
       id: team.id,
@@ -544,7 +745,8 @@ function createFixture() {
         .filter((team) => team.podId === pod.id)
         .map((team) => ({ teamId: team.id, initialSeed: team.initialSeed }))
     }))
-  });
+  };
+  const schedule = generatePodRoundRobinSchedule(configuration, setup);
   return {
     input,
     schedule,
@@ -552,8 +754,90 @@ function createFixture() {
     podIds,
     teamIds,
     playerIds,
-    membershipIds
+    membershipIds,
+    setup
   };
+}
+
+function createMainFixture() {
+  const tournamentId = completeMainTournamentFixture.setup.tournamentId;
+  const configuration = completeMainTournamentFixture.configuration;
+  const pods = completeMainTournamentFixture.setup.pods.map((pod) => ({
+    id: pod.id,
+    publicKey: pod.id,
+    name: pod.name,
+    normalizedName: pod.name.toLowerCase(),
+    sequence: pod.sequence
+  }));
+  const teams = completeMainTournamentFixture.setup.teams.map(
+    (team, teamIndex) => {
+      const assignment = completeMainTournamentFixture.setup.pods
+        .flatMap((pod) => pod.teamAssignments.map((item) => ({ pod, item })))
+        .find(({ item }) => item.teamId === team.id);
+      if (assignment === undefined) {
+        throw new Error("Main fixture assignment is missing.");
+      }
+      return {
+        id: team.id,
+        publicKey: team.id,
+        name: team.name,
+        normalizedName: team.name.toLowerCase(),
+        sequence: teamIndex + 1,
+        podId: assignment.pod.id,
+        initialSeed: assignment.item.initialSeed,
+        players: team.playerIds.map((playerId, playerIndex) => {
+          const membershipId = stable(
+            4_000 + teamIndex * 2 + playerIndex,
+            "roster_membership"
+          );
+          return {
+            id: playerId,
+            publicKey: playerId,
+            displayName: `Player ${teamIndex + 1}-${playerIndex + 1}`,
+            membershipId,
+            membershipPublicKey: membershipId,
+            rosterSlot: playerIndex + 1
+          };
+        })
+      };
+    }
+  );
+  const input: CreateTournamentDraftInput = {
+    tournament: {
+      id: tournamentId,
+      publicKey: "tournament-2027",
+      gameType: "ruski",
+      year: 2027,
+      name: "Sanitized Main Tournament",
+      visibility: "private"
+    },
+    configuration,
+    pods,
+    teams,
+    createdAt: "2027-01-01T00:00:00.000Z",
+    audit: audit(934, "tournament_draft_created")
+  };
+  const previewDigest = createTournamentSetupPreview(
+    configuration,
+    completeMainTournamentFixture.setup,
+    1
+  ).digest;
+  if (previewDigest === null) {
+    throw new Error("Main fixture must produce a valid preview.");
+  }
+  return { tournamentId, input, previewDigest };
+}
+
+function previewDigest(fixture: ReturnType<typeof createFixture>): string {
+  const digest = createTournamentSetupPreview(
+    fixture.input.configuration,
+    fixture.setup,
+    1
+  ).digest;
+  if (digest === null) {
+    throw new Error("Fixture must produce a valid setup preview.");
+  }
+  return digest;
 }
 
 function firstRevision(
