@@ -90,14 +90,22 @@ Authenticated JSON setup routes live under `/api/admin/tournaments`. Setup
 publication accepts only the expected row version, server-issued preview
 digest, and visibility; the database transaction regenerates the schedule and
 atomically locks setup, creates scheduled matches, and writes its engine audit.
-The built-in 32-team preset generates 48 pod-play matches. Canonical workbook
-download remains unavailable until Phase 3.
+The built-in 32-team preset generates 48 pod-play matches. Published setups
+can generate and download canonical workbooks from
+`/api/admin/tournaments/:tournamentId/workbooks`; the private web application
+exposes the same workflow. Imports first create a 24-hour preview, compare
+stable per-sheet identities and semantic fingerprints, and require an explicit
+accepted/skipped partition before applying. Missing sheets are non-destructive,
+identical sheets are audited no-ops, and uploaded workbook bytes are never
+stored.
 
-Migration `0008` is additive. A previous application binary can run while its
-new tables and guards remain in place; do not drop administrator audit or
-tournament-engine history to roll back an application release. A database
-rollback uses a verified pre-migration backup and the documented restore
-rehearsal in `deploy/raspberry-pi/operations`, never a destructive down script.
+Migrations `0008` and `0009` are additive. A previous application binary can
+run while their new tables and guards remain in place; do not drop
+administrator audit, tournament-engine history, generated workbook artifacts,
+or workbook reconciliation records to roll back an application release. A
+database rollback uses a verified pre-migration backup and the documented
+restore rehearsal in `deploy/raspberry-pi/operations`, never a destructive down
+script.
 
 Health check:
 

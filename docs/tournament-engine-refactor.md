@@ -657,7 +657,11 @@ and fully audited.
 ### Phase 3: Workbook Generation And Reconciliation
 
 - Generate canonical workbooks and stable game metadata.
-- Parse new/corrected sheets into match revisions.
+- Parse new/corrected sheets into immutable, identity-rich
+  `WorkbookMatchRevisionCandidate` envelopes. These adapter records contain no
+  calculated score, statistics, or canonical scoring events and never become
+  public match authority. Phase 4 materializes accepted candidates into
+  canonical match revisions and events atomically.
 - Add fingerprinting, preview, idempotency, non-destructive omission, and audit.
 - Preserve the legacy importer separately.
 
