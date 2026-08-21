@@ -104,6 +104,184 @@ struct TournamentDetailControllerTests {
         #expect(columns.map(\.label) == ["Cups Made", "Custom Metric"])
         #expect(columns.map(\.valueType) == ["count", "number"])
     }
+
+    @Test func canonicalTournamentLoadsTheExactPinnedProjection() async {
+        let summary = controllerTournamentSummary(version: 7)
+        let request = CanonicalControllerTournamentRepository.DetailRequest(
+            tournamentId: summary.id,
+            projectionVersion: 7
+        )
+        let detail = controllerTournamentDetail(summary: summary)
+        let tournaments = CanonicalControllerTournamentRepository(
+            detailResults: [request: .success(detail)]
+        )
+        let controller = TournamentDetailController(
+            routeContext: PublicTournamentRouteContext(
+                tournamentId: summary.id,
+                projectionVersion: 7
+            ),
+            tournaments: tournaments,
+            games: StubGameRepository(),
+            logger: NoopAppLogger()
+        )
+
+        await controller.loadTournament()
+
+        #expect(controller.state == .canonicalLoaded(detail))
+        #expect(tournaments.discoveryRequestCount == 0)
+        #expect(tournaments.detailRequests == [request])
+    }
+
+    @Test func canonicalTournamentUnpinnedRouteDiscoversActiveVersion() async {
+        let summary = controllerTournamentSummary(version: 8)
+        let request = CanonicalControllerTournamentRepository.DetailRequest(
+            tournamentId: summary.id,
+            projectionVersion: 8
+        )
+        let tournaments = CanonicalControllerTournamentRepository(
+            discoveryResults: [.success([summary])],
+            detailResults: [
+                request: .success(controllerTournamentDetail(summary: summary))
+            ]
+        )
+        let controller = TournamentDetailController(
+            routeContext: PublicTournamentRouteContext(
+                tournamentId: summary.id,
+                projectionVersion: nil
+            ),
+            tournaments: tournaments,
+            games: StubGameRepository(),
+            logger: NoopAppLogger()
+        )
+
+        await controller.loadTournament()
+
+        #expect(tournaments.discoveryRequestCount == 1)
+        #expect(tournaments.detailRequests == [request])
+    }
+
+    @Test func canonicalTournamentRealtimeUsesNewerVersionAndRediscoversAbsentVersion() async {
+        let version7 = controllerTournamentSummary(version: 7)
+        let version8 = controllerTournamentSummary(version: 8)
+        let version9 = controllerTournamentSummary(version: 9)
+        let request7 = request(for: version7)
+        let request8 = request(for: version8)
+        let request9 = request(for: version9)
+        let tournaments = CanonicalControllerTournamentRepository(
+            discoveryResults: [.success([version9]), .success([version9])],
+            detailResults: [
+                request7: .success(controllerTournamentDetail(summary: version7)),
+                request8: .success(controllerTournamentDetail(summary: version8)),
+                request9: .success(controllerTournamentDetail(summary: version9))
+            ]
+        )
+        let realtime = StubRealtimeUpdateRepository()
+        let controller = TournamentDetailController(
+            routeContext: PublicTournamentRouteContext(
+                tournamentId: version7.id,
+                projectionVersion: 7
+            ),
+            tournaments: tournaments,
+            games: StubGameRepository(),
+            realtime: realtime,
+            logger: NoopAppLogger()
+        )
+        await controller.loadTournament()
+        let observation = Task { await controller.observeRealtimeUpdates() }
+        defer {
+            observation.cancel()
+            realtime.finish()
+        }
+        await waitUntil {
+            realtime.subscriptions == [.tournament(id: publicTournamentId)]
+        }
+
+        realtime.send(canonicalRealtimeUpdate(projectionVersion: 6))
+        realtime.send(canonicalRealtimeUpdate(projectionVersion: 7))
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        #expect(tournaments.detailRequests == [request7])
+
+        realtime.send(canonicalRealtimeUpdate(projectionVersion: 8))
+        await waitUntil { tournaments.detailRequests.contains(request8) }
+        #expect(tournaments.discoveryRequestCount == 0)
+
+        realtime.send(canonicalRealtimeUpdate(projectionVersion: nil))
+        await waitUntil { tournaments.discoveryRequestCount == 1 }
+        await waitUntil { tournaments.detailRequests.contains(request9) }
+
+        realtime.send(canonicalRealtimeUpdate(
+            type: .connectionReady,
+            tournamentId: "",
+            projectionVersion: nil
+        ))
+        await waitUntil { tournaments.discoveryRequestCount == 2 }
+
+        #expect(controller.state == .canonicalLoaded(
+            controllerTournamentDetail(summary: version9)
+        ))
+    }
+
+    @Test func canonicalTournamentGenerationAndSilentFailurePreserveNewestState() async {
+        let version7 = controllerTournamentSummary(version: 7)
+        let version8 = controllerTournamentSummary(version: 8)
+        let version9 = controllerTournamentSummary(version: 9)
+        let request7 = request(for: version7)
+        let request8 = request(for: version8)
+        let request9 = request(for: version9)
+        let tournaments = CanonicalControllerTournamentRepository(
+            detailResults: [
+                request7: .success(controllerTournamentDetail(summary: version7)),
+                request8: .success(controllerTournamentDetail(summary: version8)),
+                request9: .failure(AppError.networkUnavailable("Refresh failed."))
+            ],
+            detailDelays: [request7: 100_000_000]
+        )
+        let realtime = StubRealtimeUpdateRepository()
+        let controller = TournamentDetailController(
+            routeContext: PublicTournamentRouteContext(
+                tournamentId: publicTournamentId,
+                projectionVersion: 7
+            ),
+            tournaments: tournaments,
+            games: StubGameRepository(),
+            realtime: realtime,
+            logger: NoopAppLogger()
+        )
+
+        let oldLoad = Task { await controller.loadTournament() }
+        await waitUntil { tournaments.detailRequests == [request7] }
+        let observation = Task { await controller.observeRealtimeUpdates() }
+        defer {
+            observation.cancel()
+            realtime.finish()
+        }
+        await waitUntil {
+            realtime.subscriptions == [.tournament(id: publicTournamentId)]
+        }
+        realtime.send(canonicalRealtimeUpdate(projectionVersion: 8))
+        await waitUntil { tournaments.detailRequests.contains(request8) }
+        await oldLoad.value
+
+        #expect(controller.state == .canonicalLoaded(
+            controllerTournamentDetail(summary: version8)
+        ))
+
+        realtime.send(canonicalRealtimeUpdate(projectionVersion: 9))
+        await waitUntil { tournaments.detailRequests.contains(request9) }
+        try? await Task.sleep(nanoseconds: 20_000_000)
+        #expect(controller.state == .canonicalLoaded(
+            controllerTournamentDetail(summary: version8)
+        ))
+    }
+}
+
+private func request(
+    for summary: PublicTournamentSummary
+) -> CanonicalControllerTournamentRepository.DetailRequest {
+    CanonicalControllerTournamentRepository.DetailRequest(
+        tournamentId: summary.id,
+        projectionVersion: summary.projection.version
+    )
 }
 
 private extension RealtimeUpdate {

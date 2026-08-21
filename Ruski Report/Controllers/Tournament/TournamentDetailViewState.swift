@@ -6,6 +6,7 @@
 nonisolated enum TournamentDetailViewState: Equatable {
     case loading
     case loaded(TournamentDetailScreen)
+    case canonicalLoaded(PublicTournamentDetail)
     case failed(message: String)
 }
 
