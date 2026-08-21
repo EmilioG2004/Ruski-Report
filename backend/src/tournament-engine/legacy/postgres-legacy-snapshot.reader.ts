@@ -1,12 +1,14 @@
-import { QueryResultRow } from "pg";
+import { QueryResult, QueryResultRow } from "pg";
 
-import { PostgresDatabase } from "../../database/postgres-database";
 import { LegacySnapshotReader } from "./legacy-backfill.repository";
 import {
   LegacyBracketSource,
+  LegacyMatchEventSource,
   LegacyMatchParticipantSource,
   LegacyMatchScoreSource,
+  LegacyMatchStatisticSource,
   LegacyMatchStatus,
+  LegacyScorecardRowSource,
   LegacyTournamentSource
 } from "./legacy-backfill.types";
 
@@ -20,6 +22,7 @@ interface HeaderRow extends QueryResultRow {
   format: unknown;
   metadata: unknown;
   bracket: unknown | null;
+  statistics: unknown | null;
   published_at: Date | string;
 }
 
@@ -61,6 +64,9 @@ interface MatchRow extends QueryResultRow {
   participants: unknown;
   score: unknown;
   metadata: unknown;
+  box_score: unknown;
+  scorecard: unknown;
+  events: unknown;
   updated_at: Date | string;
 }
 
@@ -83,7 +89,7 @@ interface MatchIdentityRow extends QueryResultRow {
 }
 
 export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
-  constructor(private readonly database: PostgresDatabase) {}
+  constructor(private readonly database: LegacySnapshotExecutor) {}
 
   async readActiveSnapshot(
     legacyTournamentId: string
@@ -99,6 +105,7 @@ export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
                snapshot.format,
                snapshot.metadata,
                snapshot.bracket,
+               snapshot.statistics,
                snapshot.published_at
         FROM active_tournament_snapshots active
         JOIN tournament_snapshot_versions snapshot
@@ -173,7 +180,8 @@ export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
       ),
       this.database.query<MatchRow>(
         `SELECT match_id, sequence, status, pod_id, bracket_match_id,
-                participants, score, metadata, updated_at
+                participants, score, metadata, box_score, scorecard, events,
+                updated_at
          FROM matches
          WHERE tournament_id = $1 AND snapshot_version = $2
          ORDER BY sequence, match_id`,
@@ -230,6 +238,7 @@ export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
       status: header.status,
       format: readObject(header.format, "tournament format"),
       metadata: readObject(header.metadata, "tournament metadata"),
+      tournamentStatistics: readTournamentStatistics(header.statistics),
       teams: teamResult.rows.map((row) => {
         const seed = readOptionalObject(row.seed, "team seed");
         return {
@@ -256,17 +265,24 @@ export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
         legacyTeamIds: podTeams.get(row.pod_id) ?? [],
         legacyMatchIds: podMatches.get(row.pod_id) ?? []
       })),
-      matches: matchResult.rows.map((row) => ({
-        legacyMatchId: row.match_id,
-        sequence: row.sequence,
-        status: readMatchStatus(row.status),
-        legacyPodId: row.pod_id ?? undefined,
-        legacyBracketMatchId: row.bracket_match_id ?? undefined,
-        participants: readParticipants(row.participants),
-        score: readScore(row.score),
-        detailAvailability: readDetailAvailability(row.metadata),
-        updatedAt: toISOString(row.updated_at)
-      })),
+      matches: matchResult.rows.map((row) => {
+        const participants = readParticipants(row.participants);
+        const scorecardRows = readScorecardRows(row.scorecard);
+        return {
+          legacyMatchId: row.match_id,
+          sequence: row.sequence,
+          status: readMatchStatus(row.status),
+          legacyPodId: row.pod_id ?? undefined,
+          legacyBracketMatchId: row.bracket_match_id ?? undefined,
+          participants,
+          score: readScore(row.score),
+          events: readEvents(row.events, participants, scorecardRows),
+          statistics: readStatistics(row.box_score),
+          scorecardRows,
+          detailAvailability: readDetailAvailability(row.metadata),
+          updatedAt: toISOString(row.updated_at)
+        };
+      }),
       standings: standingResult.rows.map((row) => {
         const record = readObject(row.record, "standing record");
         return {
@@ -289,6 +305,280 @@ export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
         reportIds: [...row.report_ids].sort()
       }))
     };
+  }
+}
+
+interface LegacySnapshotExecutor {
+  query<Row extends QueryResultRow = QueryResultRow>(
+    text: string,
+    values?: readonly unknown[]
+  ): Promise<QueryResult<Row>>;
+}
+
+function readEvents(
+  value: unknown,
+  participants: readonly LegacyMatchParticipantSource[],
+  scorecardRows: readonly LegacyScorecardRowSource[]
+): LegacyMatchEventSource[] {
+  return readArray(value, "match events").map((item) => {
+    const event = readObject(item, "match event");
+    const metadata = readOptionalObject(event.metadata, "match event metadata") ?? {};
+    const type = readLegacyEventType(event.type);
+    const legacyTeamId = readString(event, "teamId");
+    const legacyEventId = readString(event, "id");
+    const attribution = resolveLegacyEventPlayer({
+      legacyEventId,
+      type,
+      shooterName: readOptionalString(metadata, "shooterName"),
+      sourcePlayerId: readOptionalString(event, "playerId"),
+      legacyTeamId,
+      participants,
+      scorecardRows
+    });
+    return {
+      legacyEventId,
+      sequence: readInteger(event, "sequence"),
+      type,
+      legacyTeamId,
+      legacyPlayerId: attribution.playerId,
+      legacyScorecardRowId: attribution.scorecardRowId,
+      attributionMethod: attribution.method,
+      occurredAt: readOptionalTimestamp(event, "occurredAt"),
+      phase: readOptionalString(event, "phaseId"),
+      turnNumber: readOptionalInteger(metadata, "turnNumber"),
+      teamTurnOrder: readOptionalInteger(metadata, "teamTurnOrder"),
+      shotInTeamTurn: readOptionalInteger(metadata, "shotInTeamTurn")
+    };
+  });
+}
+
+export function resolveLegacyEventPlayer(input: {
+  legacyEventId: string;
+  type: LegacyMatchEventSource["type"];
+  shooterName?: string;
+  sourcePlayerId?: string;
+  legacyTeamId: string;
+  participants: readonly LegacyMatchParticipantSource[];
+  scorecardRows: readonly LegacyScorecardRowSource[];
+}): {
+  playerId: string;
+  scorecardRowId?: string;
+  method: LegacyMatchEventSource["attributionMethod"];
+} {
+  const participant = input.participants.find((candidate) =>
+    candidate.legacyTeamId === input.legacyTeamId
+  );
+  if (participant === undefined) {
+    throw new Error("Legacy event team is outside the frozen participants.");
+  }
+  const scorecardRow = input.scorecardRows.find((row) =>
+    row.legacyEventIds.includes(input.legacyEventId)
+  );
+  if (scorecardRow !== undefined) {
+    validateScorecardEvidence(input, scorecardRow);
+  }
+  if (input.sourcePlayerId !== undefined) {
+    requireFrozenPlayer(participant, input.sourcePlayerId);
+    if (
+      scorecardRow?.legacyPlayerId !== undefined &&
+      scorecardRow.legacyPlayerId !== input.sourcePlayerId
+    ) {
+      throw new Error("Legacy event and scorecard player identities differ.");
+    }
+    return {
+      playerId: input.sourcePlayerId,
+      scorecardRowId: scorecardRow?.legacyScorecardRowId,
+      method: "source_event_player_id"
+    };
+  }
+  if (scorecardRow === undefined) {
+    throw new Error("Legacy missing-player event lacks scorecard evidence.");
+  }
+  if (scorecardRow.legacyPlayerId !== undefined) {
+    requireFrozenPlayer(participant, scorecardRow.legacyPlayerId);
+    return {
+      playerId: scorecardRow.legacyPlayerId,
+      scorecardRowId: scorecardRow.legacyScorecardRowId,
+      method: "scorecard_player_id"
+    };
+  }
+  const alias = normalizeAlias(input.shooterName ?? "");
+  const exception = legacy2026PlayerAliasExceptions.get(
+    `${input.legacyTeamId}|${alias}`
+  );
+  if (exception !== undefined) {
+    requireFrozenPlayer(participant, exception);
+    return {
+      playerId: exception,
+      scorecardRowId: scorecardRow.legacyScorecardRowId,
+      method: "legacy_2026_explicit_alias"
+    };
+  }
+  const candidates = participant.legacyPlayerIds.filter((playerId) =>
+    stablePlayerKeyAliases(playerId).has(alias)
+  );
+  if (candidates.length !== 1) {
+    throw new Error("Legacy event player alias is ambiguous or unresolved.");
+  }
+  return {
+    playerId: candidates[0] as string,
+    scorecardRowId: scorecardRow.legacyScorecardRowId,
+    method: "stable_participant_key_alias"
+  };
+}
+
+function normalizeAlias(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase("en-US")
+    .replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function stablePlayerKeyAliases(playerId: string): Set<string> {
+  const tokens = playerId.replace(/^player-/, "").split("-").filter(Boolean);
+  const aliases = new Set<string>();
+  for (let start = 0; start < tokens.length; start += 1) {
+    for (let end = start + 1; end <= tokens.length; end += 1) {
+      aliases.add(tokens.slice(start, end).join(" "));
+    }
+  }
+  return aliases;
+}
+
+const legacy2026PlayerAliasExceptions = new Map<string, string>([
+  ["team-wigs-boggs|wiggs", "player-jack-wigmore"]
+]);
+
+function requireFrozenPlayer(
+  participant: LegacyMatchParticipantSource,
+  playerId: string
+): void {
+  if (!participant.legacyPlayerIds.includes(playerId)) {
+    throw new Error("Legacy event player is outside the frozen participant team.");
+  }
+}
+
+function validateScorecardEvidence(
+  input: Parameters<typeof resolveLegacyEventPlayer>[0],
+  row: LegacyScorecardRowSource
+): void {
+  const shooter = row.values.shooter;
+  if (
+    row.legacyTeamId !== input.legacyTeamId ||
+    typeof shooter !== "string" || shooter !== input.shooterName ||
+    row.values[scorecardEventKey(input.type)] !== true
+  ) {
+    throw new Error("Legacy event and scorecard chronology differ.");
+  }
+}
+
+function scorecardEventKey(type: LegacyMatchEventSource["type"]): string {
+  return type === "splash-out" ? "splashOut" : type;
+}
+
+function readStatistics(value: unknown): LegacyMatchStatisticSource[] {
+  const boxScore = readObject(value, "match box score");
+  const rows = boxScore.rows === undefined
+    ? []
+    : readArray(boxScore.rows, "match box score rows");
+  return rows.flatMap((item) => {
+    const row = readObject(item, "match box score row");
+    const subject = readObject(row.subject, "match box score subject");
+    const subjectType = subject.type;
+    if (subjectType !== "team" && subjectType !== "player") {
+      return [];
+    }
+    return [{
+      subjectType,
+      legacyTeamId: readOptionalString(subject, "teamId"),
+      legacyPlayerId: readOptionalString(subject, "playerId"),
+      metricValues: readMetricValues(row.stats)
+    }];
+  });
+}
+
+function readTournamentStatistics(
+  value: unknown | null
+): LegacyTournamentSource["tournamentStatistics"] {
+  if (value === null || value === undefined) {
+    return [];
+  }
+  return readArray(value, "tournament statistics").map((item) => {
+    const table = readObject(item, "tournament statistic table");
+    const scope = table.scope;
+    const subjectType = table.subjectType;
+    if (scope !== "season" && scope !== "playoffs") {
+      throw new Error("Legacy tournament statistic scope is unsupported.");
+    }
+    if (subjectType !== "team" && subjectType !== "player") {
+      throw new Error("Legacy tournament statistic subject is unsupported.");
+    }
+    return {
+      legacyTableId: readString(table, "id"),
+      scope,
+      subjectType,
+      rows: readArray(table.rows, "tournament statistic rows").map((rowValue) => {
+        const row = readObject(rowValue, "tournament statistic row");
+        const subject = readObject(row.subject, "tournament statistic subject");
+        return {
+          rank: readInteger(row, "rank"),
+          legacyTeamId: readOptionalString(subject, "teamId"),
+          legacyPlayerId: readOptionalString(subject, "playerId"),
+          metricValues: readMetricValues(row.values)
+        };
+      })
+    };
+  });
+}
+
+function readScorecardRows(value: unknown): LegacyScorecardRowSource[] {
+  const scorecard = readObject(value, "match scorecard");
+  const rows = scorecard.rows === undefined
+    ? []
+    : readArray(scorecard.rows, "match scorecard rows");
+  return rows.map((item) => {
+    const row = readObject(item, "match scorecard row");
+    return {
+      legacyScorecardRowId: readString(row, "id"),
+      sequence: readInteger(row, "sequence"),
+      legacyTeamId: readOptionalString(row, "teamId"),
+      legacyPlayerId: readOptionalString(row, "playerId"),
+      legacyEventIds: readOptionalStringArray(row, "eventIds"),
+      values: readScorecardValues(row.values)
+    };
+  });
+}
+
+function readScorecardValues(
+  value: unknown
+): Record<string, boolean | number | string | null> {
+  const values = readObject(value, "scorecard values");
+  return Object.entries(values).reduce<
+    Record<string, boolean | number | string | null>
+  >((result, [key, item]) => {
+    if (
+      item !== null && typeof item !== "boolean" &&
+      typeof item !== "number" && typeof item !== "string"
+    ) {
+      throw new Error(`Legacy scorecard value '${key}' is unsupported.`);
+    }
+    result[key] = item;
+    return result;
+  }, {});
+}
+
+function readLegacyEventType(
+  value: unknown
+): "make" | "miss" | "splash-out" | "guy" | "tri" | "di" | "vom" {
+  switch (value) {
+  case "make":
+  case "miss":
+  case "splash-out":
+  case "guy":
+  case "tri":
+  case "di":
+  case "vom":
+    return value;
+  default:
+    throw new Error("Legacy match event type is unsupported.");
   }
 }
 
@@ -520,6 +810,21 @@ function readOptionalString(
     throw new Error(`Legacy field '${key}' is not a string.`);
   }
   return item;
+}
+
+function readOptionalTimestamp(
+  value: Record<string, unknown>,
+  key: string
+): string | undefined {
+  const item = readOptionalString(value, key);
+  if (item === undefined) {
+    return undefined;
+  }
+  const parsed = new Date(item);
+  if (Number.isNaN(parsed.valueOf())) {
+    throw new Error(`Legacy field '${key}' is not a timestamp.`);
+  }
+  return parsed.toISOString();
 }
 
 function readOptionalStringArray(
