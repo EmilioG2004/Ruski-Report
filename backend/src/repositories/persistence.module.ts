@@ -7,6 +7,8 @@ import {
   PostgresTransactionManager
 } from "../database";
 import {
+  CANONICAL_PROJECTION_ACTIVATION_LISTENER,
+  CanonicalProjectionActivationListener,
   PostgresCanonicalStatisticRepository,
   PostgresMatchRevisionRepository,
   PostgresMatchWriterRepository,
@@ -17,6 +19,11 @@ import {
   TournamentEngineTransactionManager
 } from "../tournament-engine/persistence";
 import { PostgresWorkbookReconciliationRepository } from "../tournament-engine/workbook";
+import {
+  createCanonicalProjectionActivationListener,
+  RealtimeModule,
+  RealtimeUpdatePublisher
+} from "../realtime";
 import {
   PostgresAccountRepository,
   PostgresAuthSessionRepository,
@@ -90,6 +97,14 @@ const tournamentEngineRepositoryTokens = [
 
 const tournamentEngineRepositoryProviders = [
   {
+    provide: CANONICAL_PROJECTION_ACTIVATION_LISTENER,
+    inject: [RealtimeUpdatePublisher],
+    useFactory: (
+      realtime: RealtimeUpdatePublisher
+    ): CanonicalProjectionActivationListener =>
+      createCanonicalProjectionActivationListener(realtime)
+  },
+  {
     provide: TournamentEngineTransactionManager,
     inject: [PostgresDatabase],
     useFactory: (database: PostgresDatabase) =>
@@ -97,19 +112,43 @@ const tournamentEngineRepositoryProviders = [
   },
   {
     provide: PostgresTournamentSetupRepository,
-    inject: [PostgresDatabase, TournamentEngineTransactionManager],
+    inject: [
+      PostgresDatabase,
+      TournamentEngineTransactionManager,
+      PostgresProjectionRepository,
+      CANONICAL_PROJECTION_ACTIVATION_LISTENER
+    ],
     useFactory: (
       database: PostgresDatabase,
-      transactions: TournamentEngineTransactionManager
-    ) => new PostgresTournamentSetupRepository(database, transactions)
+      transactions: TournamentEngineTransactionManager,
+      projections: PostgresProjectionRepository,
+      projectionListener: CanonicalProjectionActivationListener
+    ) => new PostgresTournamentSetupRepository(
+      database,
+      transactions,
+      projections,
+      projectionListener
+    )
   },
   {
     provide: PostgresRosterRepository,
-    inject: [PostgresDatabase, TournamentEngineTransactionManager],
+    inject: [
+      PostgresDatabase,
+      TournamentEngineTransactionManager,
+      PostgresProjectionRepository,
+      CANONICAL_PROJECTION_ACTIVATION_LISTENER
+    ],
     useFactory: (
       database: PostgresDatabase,
-      transactions: TournamentEngineTransactionManager
-    ) => new PostgresRosterRepository(database, transactions)
+      transactions: TournamentEngineTransactionManager,
+      projections: PostgresProjectionRepository,
+      projectionListener: CanonicalProjectionActivationListener
+    ) => new PostgresRosterRepository(
+      database,
+      transactions,
+      projections,
+      projectionListener
+    )
   },
   {
     provide: PostgresMatchWriterRepository,
@@ -143,11 +182,23 @@ const tournamentEngineRepositoryProviders = [
   },
   {
     provide: PostgresTournamentProgressionRepository,
-    inject: [PostgresDatabase, TournamentEngineTransactionManager],
+    inject: [
+      PostgresDatabase,
+      TournamentEngineTransactionManager,
+      PostgresProjectionRepository,
+      CANONICAL_PROJECTION_ACTIVATION_LISTENER
+    ],
     useFactory: (
       database: PostgresDatabase,
-      transactions: TournamentEngineTransactionManager
-    ) => new PostgresTournamentProgressionRepository(database, transactions)
+      transactions: TournamentEngineTransactionManager,
+      projections: PostgresProjectionRepository,
+      projectionListener: CanonicalProjectionActivationListener
+    ) => new PostgresTournamentProgressionRepository(
+      database,
+      transactions,
+      projections,
+      projectionListener
+    )
   },
   {
     provide: PostgresWorkbookReconciliationRepository,
@@ -157,7 +208,9 @@ const tournamentEngineRepositoryProviders = [
       PostgresMatchWriterRepository,
       PostgresMatchRevisionRepository,
       PostgresCanonicalStatisticRepository,
-      PostgresTournamentProgressionRepository
+      PostgresTournamentProgressionRepository,
+      PostgresProjectionRepository,
+      CANONICAL_PROJECTION_ACTIVATION_LISTENER
     ],
     useFactory: (
       database: PostgresDatabase,
@@ -165,19 +218,24 @@ const tournamentEngineRepositoryProviders = [
       writers: PostgresMatchWriterRepository,
       revisions: PostgresMatchRevisionRepository,
       statistics: PostgresCanonicalStatisticRepository,
-      progression: PostgresTournamentProgressionRepository
+      progression: PostgresTournamentProgressionRepository,
+      projections: PostgresProjectionRepository,
+      projectionListener: CanonicalProjectionActivationListener
     ) => new PostgresWorkbookReconciliationRepository(
       database,
       transactions,
       writers,
       revisions,
       statistics,
-      progression
+      progression,
+      projections,
+      projectionListener
     )
   }
 ];
 
 @Module({
+  imports: [RealtimeModule],
   providers: [
     {
       provide: DATABASE_CONFIG,

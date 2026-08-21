@@ -39,6 +39,15 @@ import {
   writeEngineAuditEvent,
   writeEngineJson
 } from "./postgres-engine-executor";
+import {
+  CanonicalProjectionActivationResult,
+  PostgresProjectionRepository
+} from "./postgres-projection.repository";
+import {
+  CanonicalProjectionActivationListener,
+  notifyCanonicalProjectionActivation,
+  refreshCanonicalProjectionInTransaction
+} from "./projection-refresh";
 
 interface TournamentLockRow {
   lifecycle: string;
@@ -120,7 +129,9 @@ implements TournamentSetupRepositoryContract {
 
   constructor(
     private readonly database: PostgresDatabase,
-    transactions?: TournamentEngineTransactionManager
+    transactions?: TournamentEngineTransactionManager,
+    private readonly projections?: PostgresProjectionRepository,
+    private readonly projectionListener?: CanonicalProjectionActivationListener
   ) {
     this.transactions = transactions ?? new TournamentEngineTransactionManager(database);
   }
@@ -164,12 +175,29 @@ implements TournamentSetupRepositoryContract {
     );
   }
 
-  publishSetup(
+  async publishSetup(
     input: PublishTournamentSetupInput
   ): Promise<PublishedTournamentSetupResult> {
-    return this.transactions.run((transaction) =>
-      this.publishSetupInTransaction(input, transaction)
-    );
+    let projection: CanonicalProjectionActivationResult | undefined;
+    const result = await this.transactions.run(async (transaction) => {
+      const published = await this.publishSetupInTransaction(input, transaction);
+      projection = await refreshCanonicalProjectionInTransaction(
+        this.projections,
+        {
+          tournamentId: input.tournamentId,
+          expectedTournamentRowVersion: published.rowVersion,
+          occurredAt: input.publishedAt,
+          sourceCommandType: input.audit.commandType,
+          actor: input.audit.actor,
+          sourceEventId: input.audit.eventId,
+          correlationId: input.audit.correlationId
+        },
+        transaction
+      );
+      return published;
+    });
+    notifyCanonicalProjectionActivation(this.projectionListener, projection);
+    return result;
   }
 
   async createDraftInTransaction(

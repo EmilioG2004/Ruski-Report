@@ -17,6 +17,15 @@ import {
   writeEngineAuditEvent,
   writeEngineJson
 } from "./postgres-engine-executor";
+import {
+  CanonicalProjectionActivationResult,
+  PostgresProjectionRepository
+} from "./postgres-projection.repository";
+import {
+  CanonicalProjectionActivationListener,
+  notifyCanonicalProjectionActivation,
+  refreshCanonicalProjectionInTransaction
+} from "./projection-refresh";
 
 interface LockedTournamentRow {
   lifecycle: string;
@@ -33,17 +42,39 @@ export class PostgresRosterRepository implements RosterRepositoryContract {
 
   constructor(
     private readonly database: PostgresDatabase,
-    transactions?: TournamentEngineTransactionManager
+    transactions?: TournamentEngineTransactionManager,
+    private readonly projections?: PostgresProjectionRepository,
+    private readonly projectionListener?: CanonicalProjectionActivationListener
   ) {
     this.transactions = transactions ?? new TournamentEngineTransactionManager(database);
   }
 
-  replacePlayer(
+  async replacePlayer(
     input: ReplaceRosterPlayerInput
   ): Promise<RosterReplacementResult> {
-    return this.transactions.run((transaction) =>
-      this.replacePlayerInTransaction(input, transaction)
-    );
+    let projection: CanonicalProjectionActivationResult | undefined;
+    const result = await this.transactions.run(async (transaction) => {
+      const replacement = await this.replacePlayerInTransaction(
+        input,
+        transaction
+      );
+      projection = await refreshCanonicalProjectionInTransaction(
+        this.projections,
+        {
+          tournamentId: input.tournamentId,
+          expectedTournamentRowVersion: replacement.rowVersion,
+          occurredAt: input.effectiveAt,
+          sourceCommandType: input.audit.commandType,
+          actor: input.audit.actor,
+          sourceEventId: input.audit.eventId,
+          correlationId: input.audit.correlationId
+        },
+        transaction
+      );
+      return replacement;
+    });
+    notifyCanonicalProjectionActivation(this.projectionListener, projection);
+    return result;
   }
 
   async replacePlayerInTransaction(
