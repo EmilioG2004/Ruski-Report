@@ -12,7 +12,63 @@ nonisolated struct RealtimeUpdate: Decodable, Equatable {
     let matchId: String?
     let occurredAt: String
     let version: Int?
+    let projectionVersion: Int64?
     let metadata: [String: JSONValue]?
+
+    init(
+        id: String,
+        type: RealtimeUpdateType,
+        tournamentId: String?,
+        matchId: String?,
+        occurredAt: String,
+        version: Int?,
+        projectionVersion: Int64? = nil,
+        metadata: [String: JSONValue]?
+    ) {
+        self.id = id
+        self.type = type
+        self.tournamentId = tournamentId
+        self.matchId = matchId
+        self.occurredAt = occurredAt
+        self.version = version
+        self.projectionVersion = projectionVersion
+        self.metadata = metadata
+    }
+
+    func projectionComparison(
+        to current: PublicProjectionReference
+    ) -> RealtimeProjectionComparison {
+        guard tournamentId == nil || tournamentId == current.tournamentId else {
+            return .differentTournament
+        }
+        guard let projectionVersion else {
+            return .absent
+        }
+        if projectionVersion < current.version {
+            return .stale
+        }
+        if projectionVersion == current.version {
+            return .current
+        }
+        return .newer
+    }
+
+    func shouldRefresh(after current: PublicProjectionReference) -> Bool {
+        switch projectionComparison(to: current) {
+        case .absent, .newer:
+            true
+        case .stale, .current, .differentTournament:
+            false
+        }
+    }
+}
+
+nonisolated enum RealtimeProjectionComparison: Equatable {
+    case absent
+    case stale
+    case current
+    case newer
+    case differentTournament
 }
 
 nonisolated enum RealtimeUpdateType: Equatable {
