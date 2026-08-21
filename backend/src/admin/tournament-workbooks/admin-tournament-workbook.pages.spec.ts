@@ -63,6 +63,8 @@ describe("administrator workbook pages", () => {
           matchLabel: "Sanitized Team 1 vs Sanitized Team 2",
           proposedStatus: "final",
           proposedScoreAvailability: "complete",
+          currentImpact: null,
+          proposedImpact: SCORING_IMPACT,
           correction: true,
           issues: []
         }, {
@@ -74,6 +76,8 @@ describe("administrator workbook pages", () => {
           matchLabel: null,
           proposedStatus: null,
           proposedScoreAvailability: null,
+          currentImpact: null,
+          proposedImpact: null,
           correction: false,
           issues: []
         }],
@@ -105,6 +109,15 @@ describe("administrator workbook pages", () => {
           matchLabel: "Sanitized Team 1 vs Sanitized Team 2",
           proposedStatus: "final",
           proposedScoreAvailability: "complete",
+          currentImpact: {
+            revisionId: uuid(94),
+            teams: [
+              { sideNumber: 1, teamId: uuid(20), score: 1, result: "loss" },
+              { sideNumber: 2, teamId: uuid(21), score: 2, result: "win" }
+            ],
+            winnerTeamId: uuid(21)
+          },
+          proposedImpact: SCORING_IMPACT,
           correction: true,
           issues: []
         }]
@@ -112,6 +125,9 @@ describe("administrator workbook pages", () => {
     });
     expect(correctionHtml).toContain(`correctionReasons.${correctionId}`);
     expect(correctionHtml).toContain("Apply selected revisions");
+    expect(correctionHtml).toContain("Current 1–2 → proposed 3–1");
+    expect(correctionHtml).toContain("2/4 shots · 4 cups");
+    expect(correctionHtml).toContain("winner side 1");
 
     const noOpHtml = renderTournamentWorkbookPreviewPage({
       principal: PRINCIPAL,
@@ -135,12 +151,59 @@ describe("administrator workbook pages", () => {
         skippedCount: 1,
         unchangedCount: 3,
         missingNonDestructiveCount: 4,
+        materializedRevisions: [{
+          matchId: uuid(30),
+          candidateId: uuid(31),
+          revisionId: uuid(32),
+          matchStatisticRunId: uuid(33),
+          matchRowVersion: 3
+        }],
+        tournamentStatisticRunId: uuid(34),
+        tournamentStatisticRunDigest: "f".repeat(64),
         appliedAt: "2027-01-03T00:00:00.000Z"
       }
     });
     expect(html).toContain("2 accepted · 1 skipped · 3 unchanged");
+    expect(html).toContain("1 canonical match revision materialized");
+    expect(html).toContain("tournament statistics materialized");
   });
 });
+
+const SCORING_IMPACT = {
+  teams: [
+    {
+      sideNumber: 1 as const,
+      teamId: uuid(20),
+      score: 3,
+      result: "win" as const,
+      totals: scoringTotals(3)
+    },
+    {
+      sideNumber: 2 as const,
+      teamId: uuid(21),
+      score: 1,
+      result: "loss" as const,
+      totals: scoringTotals(1)
+    }
+  ],
+  matchTotals: scoringTotals(4),
+  winnerTeamId: uuid(20)
+};
+
+function scoringTotals(cupsScored: number) {
+  return {
+    attempts: 4,
+    makes: 2,
+    misses: 2,
+    shootingPercentage: 0.5,
+    splashOuts: 1,
+    guys: 0,
+    tris: 0,
+    dis: 0,
+    voms: 0,
+    cupsScored
+  };
+}
 
 const PRINCIPAL = {
   administratorId: uuid(1),

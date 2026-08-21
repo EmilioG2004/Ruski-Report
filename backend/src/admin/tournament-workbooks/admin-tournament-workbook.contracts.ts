@@ -36,8 +36,46 @@ export interface AdminWorkbookImportObservationResponse {
     | "complete"
     | "unrecorded"
     | null;
+  currentImpact: AdminWorkbookCurrentScoringImpact | null;
+  proposedImpact: AdminWorkbookProposedScoringImpact | null;
   correction: boolean;
   issues: readonly AdminWorkbookValidationIssue[];
+}
+
+export interface AdminWorkbookScoringTotals {
+  attempts: number;
+  makes: number;
+  misses: number;
+  shootingPercentage: number | null;
+  splashOuts: number;
+  guys: number;
+  tris: number;
+  dis: number;
+  voms: number;
+  cupsScored: number;
+}
+
+export interface AdminWorkbookCurrentScoringImpact {
+  revisionId: string;
+  teams: readonly {
+    sideNumber: 1 | 2;
+    teamId: string;
+    score: number | null;
+    result: "pending" | "win" | "loss" | "tie" | "cancelled" | "forfeited";
+  }[];
+  winnerTeamId: string | null;
+}
+
+export interface AdminWorkbookProposedScoringImpact {
+  teams: readonly {
+    sideNumber: 1 | 2;
+    teamId: string;
+    score: number | null;
+    result: "pending" | "win" | "loss" | "tie" | "cancelled" | "forfeited";
+    totals: AdminWorkbookScoringTotals;
+  }[];
+  matchTotals: AdminWorkbookScoringTotals;
+  winnerTeamId: string | null;
 }
 
 export interface AdminWorkbookAssignableMatchResponse {
@@ -90,6 +128,15 @@ export interface AdminTournamentWorkbookImportResultResponse {
   skippedCount: number;
   unchangedCount: number;
   missingNonDestructiveCount: number;
+  materializedRevisions: readonly {
+    matchId: string;
+    candidateId: string;
+    revisionId: string;
+    matchStatisticRunId: string;
+    matchRowVersion: number;
+  }[];
+  tournamentStatisticRunId: string | null;
+  tournamentStatisticRunDigest: string | null;
   appliedAt: string;
 }
 

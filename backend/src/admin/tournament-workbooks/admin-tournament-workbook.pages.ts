@@ -103,6 +103,7 @@ export function renderTournamentWorkbookResultPage(input: {
     <section class="panel"><p class="eyebrow">${escapeHtml(input.result.status)}</p>
       <h1>Workbook reconciliation complete</h1>
       <p>${input.result.acceptedCount} accepted · ${input.result.skippedCount} skipped · ${input.result.unchangedCount} unchanged · ${input.result.missingNonDestructiveCount} missing without deletion</p>
+      <p>${input.result.materializedRevisions.length} canonical match revision${input.result.materializedRevisions.length === 1 ? "" : "s"} materialized · ${input.result.tournamentStatisticRunId === null ? "no tournament statistic run" : "tournament statistics materialized"}</p>
     </section>`
   });
 }
@@ -134,13 +135,51 @@ function renderObservationTable(
   preview: AdminTournamentWorkbookImportPreviewResponse
 ): string {
   return `<div class="table-scroll"><table><caption>Recognized scorecards</caption>
-    <thead><tr><th>Sheet</th><th>Match</th><th>Decision</th><th>Status</th></tr></thead>
+    <thead><tr><th>Sheet</th><th>Match</th><th>Decision</th><th>Status</th><th>Scoring impact</th></tr></thead>
     <tbody>${preview.observations.map((observation) => `<tr>
       <td>${escapeHtml(observation.label)}</td>
       <td>${escapeHtml(observation.matchLabel ?? observation.matchId ?? "Assignment required")}</td>
       <td>${escapeHtml(observation.classification)}</td>
       <td>${escapeHtml(observation.proposedStatus ?? "No change")}</td>
+      <td>${renderScoringImpact(observation)}</td>
     </tr>`).join("")}</tbody></table></div>`;
+}
+
+function renderScoringImpact(
+  observation: AdminTournamentWorkbookImportPreviewResponse["observations"][number]
+): string {
+  const current = observation.currentImpact === null
+    ? null
+    : scoreLine(observation.currentImpact.teams);
+  const proposed = observation.proposedImpact === null
+    ? null
+    : scoreLine(observation.proposedImpact.teams);
+  if (proposed === null) {
+    return escapeHtml(current === null ? "No scoring change" : `Current ${current}`);
+  }
+  const totals = observation.proposedImpact?.matchTotals;
+  const statisticImpact = totals === undefined
+    ? ""
+    : ` · ${totals.makes}/${totals.attempts} shots · ${totals.cupsScored} cups`;
+  const winnerSide = observation.proposedImpact?.teams.find((team) =>
+    team.teamId === observation.proposedImpact?.winnerTeamId
+  )?.sideNumber;
+  const winnerImpact = winnerSide === undefined
+    ? " · winner pending"
+    : ` · winner side ${winnerSide}`;
+  const comparison = current === null
+    ? `Proposed ${proposed}`
+    : `Current ${current} → proposed ${proposed}`;
+  return escapeHtml(`${comparison}${statisticImpact}${winnerImpact}`);
+}
+
+function scoreLine(
+  teams: readonly { sideNumber: 1 | 2; score: number | null }[]
+): string {
+  return [...teams]
+    .sort((left, right) => left.sideNumber - right.sideNumber)
+    .map((team) => team.score === null ? "unavailable" : String(team.score))
+    .join("–");
 }
 
 function renderAssignmentForm(
