@@ -33,6 +33,45 @@ final class PublicHomeAndMatchUITests: PreviewAppUITestCase {
     }
 
     @MainActor
+    func testOneDetailFailureDoesNotHideOtherActiveTournaments() throws {
+        let app = launchPreviewApp(scenario: "public-partial-detail")
+        let scroll = app.scrollViews.firstMatch
+        let summer = app.buttons[
+            "home.public.tournament.summer-classic-2027"
+        ]
+        let fall = app.buttons[
+            "home.public.tournament.fall-invitational-2027"
+        ]
+
+        assertExists(summer)
+        scrollUntilExists(fall, in: scroll, attempts: 12)
+        assertExists(
+            app.descendants(matching: .any)[
+                "home.public.tournament.fall-invitational-2027.unavailable"
+            ]
+        )
+    }
+
+    @MainActor
+    func testCanonicalOfflineAndRecoveryStatesRemainActionable() throws {
+        let offline = launchPreviewApp(scenario: "public-offline")
+        assertExists(offline.descendants(matching: .any)["home.error"])
+        offline.terminate()
+
+        let recovering = launchPreviewApp(scenario: "public-recovering")
+        assertExists(recovering.descendants(matching: .any)["home.loading"])
+        assertExists(
+            recovering.descendants(matching: .any)["home.error"],
+            timeout: 6
+        )
+        recovering.buttons["Retry"].tap()
+        assertExists(
+            recovering.descendants(matching: .any)["home.public.loaded"],
+            timeout: 6
+        )
+    }
+
+    @MainActor
     func testEveryMatchResolutionKeepsStatusAndScoreAvailabilitySeparate() throws {
         let app = launchPreviewApp(scenario: "public-states")
         openPublicTournament(in: app)
@@ -93,6 +132,45 @@ final class PublicHomeAndMatchUITests: PreviewAppUITestCase {
         assertExists(players)
         XCTAssertTrue(players.label.contains("Alex Original"))
         XCTAssertFalse(players.label.contains("Riley Replacement"))
+    }
+
+    @MainActor
+    func testEveryStatusAndAvailabilityOpensPinnedMatchDetail() throws {
+        let app = launchPreviewApp(scenario: "public-states")
+        openPublicTournament(in: app)
+
+        let expected = [
+            ("public-live-partial", "in_progress", "partial"),
+            ("public-scheduled-unknown", "scheduled", "not_started"),
+            ("public-scheduled-known", "scheduled", "not_started"),
+            ("public-postponed", "postponed", "not_started"),
+            ("public-final-complete", "final", "complete"),
+            ("public-final-unrecorded", "final", "unrecorded"),
+            ("public-forfeited", "forfeited", "not_applicable"),
+            ("public-cancelled", "cancelled", "not_applicable")
+        ]
+
+        for (matchID, status, availability) in expected {
+            let scroll = app.scrollViews.firstMatch
+            let match = app.buttons["tournament.public.match.\(matchID)"]
+            scrollUntilHittable(match, in: scroll, attempts: 18)
+            match.tap()
+
+            assertExists(app.descendants(matching: .any)["match.public.screen"])
+            assertExists(
+                app.descendants(matching: .any)["match.public.status.\(status)"]
+            )
+            assertExists(
+                app.descendants(matching: .any)[
+                    "match.public.availability.\(availability)"
+                ]
+            )
+
+            app.navigationBars["Game"].buttons.firstMatch.tap()
+            assertExists(
+                app.descendants(matching: .any)["tournament.public.detail"]
+            )
+        }
     }
 
     @MainActor

@@ -83,5 +83,10 @@ final class PublicTournamentStatesUITests: PreviewAppUITestCase {
                 "tournament.public.bracket.slot.waiting"
             ]
         )
+        assertExists(
+            app.descendants(matching: .any)[
+                "tournament.public.bracket.state.corrected"
+            ]
+        )
     }
 }
