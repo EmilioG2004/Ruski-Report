@@ -17,6 +17,7 @@ import {
 
 export interface PublishTournamentUpdatedInput {
   tournamentId: TournamentId;
+  projectionVersion?: number;
   version?: number;
   occurredAt?: ISODateTimeString;
   metadata?: Metadata;
@@ -25,6 +26,7 @@ export interface PublishTournamentUpdatedInput {
 export interface PublishMatchUpdatedInput {
   tournamentId: TournamentId;
   matchId: MatchId;
+  projectionVersion?: number;
   version?: number;
   occurredAt?: ISODateTimeString;
   metadata?: Metadata;
@@ -33,6 +35,7 @@ export interface PublishMatchUpdatedInput {
 export interface PublishCommentsUpdatedInput {
   matchId: MatchId;
   tournamentId?: TournamentId;
+  projectionVersion?: number;
   version?: number;
   occurredAt?: ISODateTimeString;
   metadata?: Metadata;
@@ -48,21 +51,29 @@ export class RealtimeUpdatePublisher {
   publishTournamentUpdated(
     input: PublishTournamentUpdatedInput
   ): LiveUpdateEvent {
+    const version = input.version ?? input.projectionVersion;
     return this.publish({
       type: "tournament.updated",
       tournamentId: input.tournamentId,
-      version: input.version,
+      ...(input.projectionVersion === undefined
+        ? {}
+        : { projectionVersion: input.projectionVersion }),
+      version,
       occurredAt: input.occurredAt,
       metadata: input.metadata
     });
   }
 
   publishMatchUpdated(input: PublishMatchUpdatedInput): LiveUpdateEvent {
+    const version = input.version ?? input.projectionVersion;
     return this.publish({
       type: "match.updated",
       tournamentId: input.tournamentId,
       matchId: input.matchId,
-      version: input.version,
+      ...(input.projectionVersion === undefined
+        ? {}
+        : { projectionVersion: input.projectionVersion }),
+      version,
       occurredAt: input.occurredAt,
       metadata: input.metadata
     });
@@ -71,11 +82,15 @@ export class RealtimeUpdatePublisher {
   publishCommentsUpdated(
     input: PublishCommentsUpdatedInput
   ): LiveUpdateEvent {
+    const version = input.version ?? input.projectionVersion;
     return this.publish({
       type: "comments.updated",
       tournamentId: input.tournamentId,
       matchId: input.matchId,
-      version: input.version,
+      ...(input.projectionVersion === undefined
+        ? {}
+        : { projectionVersion: input.projectionVersion }),
+      version,
       occurredAt: input.occurredAt,
       metadata: input.metadata
     });
