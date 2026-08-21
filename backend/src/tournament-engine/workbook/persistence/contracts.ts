@@ -7,6 +7,8 @@ import {
   TournamentId,
   TournamentLifecycle
 } from "../../domain";
+import type { CanonicalWorkbookScorecardSource } from "../generation";
+import type { ReplacementPlayoffMatchInput } from "../../persistence/progression-contracts";
 
 export type WorkbookId = string;
 export type WorkbookSheetId = string;
@@ -49,10 +51,8 @@ export interface WorkbookGenerationSourceMatchTeamRecord {
   players: readonly WorkbookGenerationSourcePlayerRecord[];
 }
 
-export interface WorkbookGenerationSourceMatchRecord {
+interface WorkbookGenerationSourceMatchRecordBase {
   matchId: string;
-  stage: "pod_play" | "playoffs";
-  podId: string | null;
   sequence: number;
   rowVersion: number;
   status: MatchStatus;
@@ -62,9 +62,6 @@ export interface WorkbookGenerationSourceMatchRecord {
     WorkbookGenerationSourceMatchTeamRecord,
     WorkbookGenerationSourceMatchTeamRecord
   ];
-  sequenceInPod: number;
-  roundNumber: number;
-  gameNumberForPair: number;
   activeScoringPreview: {
     revisionId: string;
     teams: readonly [
@@ -83,6 +80,7 @@ export interface WorkbookGenerationSourceMatchRecord {
     ];
     winnerTeamId: string | null;
   } | null;
+  activeScorecardSource: CanonicalWorkbookScorecardSource | null;
   workbookState: {
     rowVersion: number;
     sourceRevisionNumber: number;
@@ -92,6 +90,26 @@ export interface WorkbookGenerationSourceMatchRecord {
     proposedStatus: MatchStatus;
   } | null;
 }
+
+export type WorkbookGenerationSourceMatchRecord =
+  | WorkbookGenerationSourceMatchRecordBase & {
+      stage: "pod_play";
+      podId: string;
+      bracketMatchId: null;
+      sequenceInPod: number;
+      roundNumber: number;
+      gameNumberForPair: number;
+      sequenceInRound: null;
+    }
+  | WorkbookGenerationSourceMatchRecordBase & {
+      stage: "playoffs";
+      podId: null;
+      bracketMatchId: string;
+      sequenceInPod: null;
+      roundNumber: number;
+      gameNumberForPair: null;
+      sequenceInRound: number;
+    };
 
 export interface WorkbookGenerationSourceRecord {
   nextGenerationRevision: number;
@@ -364,6 +382,18 @@ export interface ConfirmWorkbookImportInput {
   acceptedObservationIds: readonly WorkbookImportObservationId[];
   skippedObservationIds: readonly WorkbookImportObservationId[];
   correctionReasons?: Readonly<Record<WorkbookImportObservationId, string>>;
+  playoffCorrectionCascades?: Readonly<Record<
+    WorkbookImportObservationId,
+    {
+      previousResolutionId: string;
+      correctedResolutionId: string;
+      correctedAdvancementId: string;
+      correctedBracketMatchId: string;
+      correctedWinnerTeamId: string;
+      confirmationDigest: string;
+      replacements: readonly ReplacementPlayoffMatchInput[];
+    }
+  >>;
   confirmedByAdminId: string;
   audit: WorkbookAuditIdentity;
 }
@@ -383,6 +413,7 @@ export interface WorkbookImportConfirmationResult {
     matchStatisticRunId: string;
     matchRowVersion: number;
   }[];
+  replacementMatchIds: readonly string[];
   tournamentStatisticRunId: string | null;
   tournamentStatisticRunDigest: string | null;
   completedAt: string;

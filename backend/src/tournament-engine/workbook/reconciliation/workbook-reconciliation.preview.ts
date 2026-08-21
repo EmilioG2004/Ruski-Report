@@ -356,13 +356,10 @@ function reconcileBoundSheet(
     match.canonicalStatus === "final" ||
     match.sourceState?.proposedStatus === "final";
   if (correction && match.stage === "playoffs") {
-    return observation(sheet, "invalid", [
-      ...issues,
-      problem(
-        "PLAYOFF_CORRECTION_DEFERRED",
-        "Playoff corrections require the dependent-result analysis introduced in Phase 5."
-      )
-    ], observationBase);
+    issues.push(warning(
+      "PLAYOFF_CORRECTION_DEPENDENCY_REVIEW_REQUIRED",
+      "Confirm the downstream bracket impact before applying this playoff correction."
+    ));
   }
   const participantDigest = createWorkbookParticipantDigest(match.participants);
   const sourceRevisionNumber = (match.sourceState?.sourceRevisionNumber ?? 0) + 1;
