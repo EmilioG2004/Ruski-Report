@@ -12,6 +12,8 @@ import {
   CanonicalScoringBatchPersistenceInput,
   CanonicalScoringBatchPersistenceResult,
   CanonicalScoringMaterializationInput,
+  CanonicalRevisionStatisticRefreshInput,
+  CanonicalRevisionStatisticRefreshResult,
   CanonicalStatisticPersistenceContract
 } from "./canonical-scoring-contracts";
 import { EnginePersistenceInvariantError } from "./errors";
@@ -72,8 +74,56 @@ implements CanonicalStatisticPersistenceContract {
     transaction: TransactionContext
   ): Promise<CanonicalScoringBatchPersistenceResult> {
     validateInput(input);
-    const executor = engineExecutor(this.database, transaction);
     const ordered = [...input.materializations].sort((left, right) =>
+      left.matchId.localeCompare(right.matchId)
+    );
+    const refreshed = await this.refreshActiveRevisionsInTransaction({
+      tournamentId: input.tournamentId,
+      rulesVersion: input.rulesVersion,
+      calculatedAt: input.calculatedAt,
+      revisions: ordered.map((item) => ({
+        matchId: item.matchId,
+        revisionId: item.revisionId
+      }))
+    }, transaction, true);
+    const executor = engineExecutor(this.database, transaction);
+    const runByRevisionId = new Map(
+      refreshed.matches.map((match) => [
+        match.revisionId,
+        match.matchStatisticRunId
+      ])
+    );
+    const materialized = [];
+    for (const item of ordered) {
+      const runId = runByRevisionId.get(item.revisionId);
+      if (runId === undefined) {
+        throw new EnginePersistenceInvariantError(
+          "Canonical statistic refresh omitted a selected revision."
+        );
+      }
+      await this.insertMaterialization(executor, input, item, runId);
+      materialized.push({
+        matchId: item.matchId,
+        revisionId: item.revisionId,
+        candidateId: item.candidateId,
+        matchStatisticRunId: runId
+      });
+    }
+    return {
+      materialized,
+      tournamentStatisticRunId: refreshed.tournamentStatisticRunId,
+      tournamentStatisticRunDigest: refreshed.tournamentStatisticRunDigest
+    };
+  }
+
+  async refreshActiveRevisionsInTransaction(
+    input: CanonicalRevisionStatisticRefreshInput,
+    transaction: TransactionContext,
+    allowRevisionHistoryForSameMatch = false
+  ): Promise<CanonicalRevisionStatisticRefreshResult> {
+    validateRefreshInput(input, allowRevisionHistoryForSameMatch);
+    const executor = engineExecutor(this.database, transaction);
+    const ordered = [...input.revisions].sort((left, right) =>
       left.matchId.localeCompare(right.matchId)
     );
     const selectedRevisions = await this.readRevisions(
@@ -85,7 +135,7 @@ implements CanonicalStatisticPersistenceContract {
     const selectedById = new Map(
       selectedRevisions.map((revision) => [revision.revisionId, revision])
     );
-    const materialized = [];
+    const matches = [];
 
     for (const item of ordered) {
       const revision = selectedById.get(item.revisionId);
@@ -113,16 +163,9 @@ implements CanonicalStatisticPersistenceContract {
         createdAt: input.calculatedAt,
         values: calculation.values
       });
-      await this.insertMaterialization(
-        executor,
-        input,
-        item,
-        runId
-      );
-      materialized.push({
+      matches.push({
         matchId: item.matchId,
         revisionId: item.revisionId,
-        candidateId: item.candidateId,
         matchStatisticRunId: runId
       });
     }
@@ -165,7 +208,7 @@ implements CanonicalStatisticPersistenceContract {
       [input.tournamentId, tournamentRunId, input.rulesVersion, input.calculatedAt]
     );
     return {
-      materialized,
+      matches,
       tournamentStatisticRunId: tournamentRunId,
       tournamentStatisticRunDigest: aggregate.inputDigest
     };
@@ -513,6 +556,30 @@ function validateInput(input: CanonicalScoringBatchPersistenceInput): void {
     }
     revisions.add(item.revisionId);
     candidates.add(item.candidateId);
+  }
+}
+
+function validateRefreshInput(
+  input: CanonicalRevisionStatisticRefreshInput,
+  allowRevisionHistoryForSameMatch = false
+): void {
+  if (!Number.isSafeInteger(input.rulesVersion) || input.rulesVersion <= 0 ||
+      !validTimestamp(input.calculatedAt) || input.revisions.length === 0) {
+    throw new EnginePersistenceInvariantError(
+      "Canonical statistic refresh input is incomplete."
+    );
+  }
+  const matches = new Set<string>();
+  const revisions = new Set<string>();
+  for (const revision of input.revisions) {
+    if ((!allowRevisionHistoryForSameMatch && matches.has(revision.matchId)) ||
+        revisions.has(revision.revisionId)) {
+      throw new EnginePersistenceInvariantError(
+        "Canonical statistic refresh revisions must be unique per match."
+      );
+    }
+    matches.add(revision.matchId);
+    revisions.add(revision.revisionId);
   }
 }
 

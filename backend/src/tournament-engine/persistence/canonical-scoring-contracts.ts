@@ -31,10 +31,34 @@ export interface CanonicalScoringBatchPersistenceResult {
   readonly tournamentStatisticRunDigest: string;
 }
 
+export interface CanonicalRevisionStatisticRefreshInput {
+  readonly tournamentId: string;
+  readonly rulesVersion: number;
+  readonly calculatedAt: string;
+  readonly revisions: readonly {
+    readonly matchId: string;
+    readonly revisionId: string;
+  }[];
+}
+
+export interface CanonicalRevisionStatisticRefreshResult {
+  readonly matches: readonly {
+    readonly matchId: string;
+    readonly revisionId: string;
+    readonly matchStatisticRunId: string;
+  }[];
+  readonly tournamentStatisticRunId: string;
+  readonly tournamentStatisticRunDigest: string;
+}
+
 export interface CanonicalStatisticPersistenceContract {
   persistMaterializedBatchInTransaction(
     input: CanonicalScoringBatchPersistenceInput,
     transaction: TransactionContext
   ): Promise<CanonicalScoringBatchPersistenceResult>;
-}
 
+  refreshActiveRevisionsInTransaction(
+    input: CanonicalRevisionStatisticRefreshInput,
+    transaction: TransactionContext
+  ): Promise<CanonicalRevisionStatisticRefreshResult>;
+}

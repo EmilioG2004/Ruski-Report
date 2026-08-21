@@ -40,7 +40,7 @@ postgresDescribe("populated tournament-engine migration rehearsal", () => {
     const applied = await new MigrationRunner(database, config).migrate();
     const legacyDigestAfter = await digestLegacyTables(database, legacyTables);
 
-    expect(applied).toEqual([7, 8, 9, 10]);
+    expect(applied).toEqual([7, 8, 9, 10, 11]);
     expect(legacyDigestAfter).toBe(legacyDigestBefore);
     expect(await new MigrationRunner(database, config).migrate()).toEqual([]);
 

@@ -98,6 +98,29 @@ postgresDescribe("canonical statistic PostgreSQL persistence", () => {
     expect(materializations.rows[0]?.count).toBe("2");
   });
 
+  it("refreshes canonical revision statistics without workbook provenance", async () => {
+    const result = await transactions.runInTransaction((transaction) =>
+      repository.refreshActiveRevisionsInTransaction({
+        tournamentId: fixture.tournamentId,
+        rulesVersion: 1,
+        calculatedAt: fixture.now,
+        revisions: fixture.matchIds.map((matchId, index) => ({
+          matchId,
+          revisionId: fixture.revisionIds[index]
+        }))
+      }, transaction)
+    );
+
+    expect(result.matches).toHaveLength(2);
+    expect(result.tournamentStatisticRunDigest).toMatch(/^[a-f0-9]{64}$/);
+    const materializations = await database.query<{ count: string }>(`
+      SELECT count(*)::text AS count
+      FROM engine_workbook_candidate_materializations
+      WHERE tournament_id = $1::uuid
+    `, [fixture.tournamentId]);
+    expect(materializations.rows[0]?.count).toBe("0");
+  });
+
   it("binds activation time to immutable run order and rejects pointer rollback", async () => {
     const first = await persistFixture(repository, transactions, fixture);
     const nextRunId = uuid(150);
