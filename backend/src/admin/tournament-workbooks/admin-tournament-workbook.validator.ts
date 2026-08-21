@@ -65,6 +65,7 @@ export function parseWorkbookApplyRequest(
   acceptedObservationIds: readonly string[];
   skippedObservationIds: readonly string[];
   correctionReasons: Readonly<Record<string, string>>;
+  cascadeConfirmationDigests: Readonly<Record<string, string>>;
 } {
   const previewDigest = requiredDigest(request?.previewDigest);
   const acceptedObservationIds = stableUuidList(
@@ -83,11 +84,15 @@ export function parseWorkbookApplyRequest(
     );
   }
   const correctionReasons = parseCorrectionReasons(request?.correctionReasons);
+  const cascadeConfirmationDigests = parseDigestMap(
+    request?.cascadeConfirmationDigests
+  );
   return {
     previewDigest,
     acceptedObservationIds,
     skippedObservationIds,
-    correctionReasons
+    correctionReasons,
+    cascadeConfirmationDigests
   };
 }
 
@@ -126,8 +131,41 @@ export function parseWorkbookApplyForm(
           ? [[name.slice("correctionReasons.".length), value]]
           : []
       )
+    ),
+    cascadeConfirmationDigests: Object.fromEntries(
+      Object.entries(form).flatMap(([name, value]) =>
+        name.startsWith("cascadeConfirmationDigests.")
+          ? acceptedSet.has(name.slice("cascadeConfirmationDigests.".length))
+            ? [[name.slice("cascadeConfirmationDigests.".length), value]]
+            : []
+          : []
+      )
     )
   };
+}
+
+function parseDigestMap(value: unknown): Readonly<Record<string, string>> {
+  if (value === undefined) return {};
+  if (!isObject(value) || Object.keys(value).length > 260) {
+    throw badRequest(
+      "WORKBOOK_CASCADE_CONFIRMATIONS_INVALID",
+      "Workbook cascade confirmations are invalid.",
+      "cascadeConfirmationDigests"
+    );
+  }
+  const digests: Record<string, string> = {};
+  for (const [observationId, valueDigest] of Object.entries(value)) {
+    if (!isStableUuid(observationId) || typeof valueDigest !== "string" ||
+        !/^[a-f0-9]{64}$/u.test(valueDigest)) {
+      throw badRequest(
+        "WORKBOOK_CASCADE_CONFIRMATION_INVALID",
+        "Workbook cascade confirmation is invalid.",
+        `cascadeConfirmationDigests.${observationId}`
+      );
+    }
+    digests[observationId] = valueDigest;
+  }
+  return digests;
 }
 
 function parseCorrectionReasons(value: unknown): Readonly<Record<string, string>> {

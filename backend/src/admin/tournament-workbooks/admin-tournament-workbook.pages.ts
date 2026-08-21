@@ -27,6 +27,7 @@ export function renderTournamentWorkbookPage(input: {
     principal: input.principal,
     csrfToken: input.csrfToken,
     content: `<p><a href="${ADMIN_WEB_ROOT}/tournaments/${tournamentId}/setup">← Tournament setup</a></p>
+    <p><a href="${ADMIN_WEB_ROOT}/tournaments/${tournamentId}/progression">Tournament progression →</a></p>
     <section class="panel">
       <p class="eyebrow">Canonical workbook</p>
       <h1>${escapeHtml(input.detail.tournament.name)}</h1>
@@ -170,7 +171,13 @@ function renderScoringImpact(
   const comparison = current === null
     ? `Proposed ${proposed}`
     : `Current ${current} → proposed ${proposed}`;
-  return escapeHtml(`${comparison}${statisticImpact}${winnerImpact}`);
+  const cascade = observation.playoffCorrectionImpact;
+  const cascadeImpact = cascade === null || !cascade.requiresCascade
+    ? ""
+    : ` · protected cascade: ${cascade.replacementCount} replacement match${cascade.replacementCount === 1 ? "" : "es"}`;
+  return escapeHtml(
+    `${comparison}${statisticImpact}${winnerImpact}${cascadeImpact}`
+  );
 }
 
 function scoreLine(
@@ -221,6 +228,13 @@ function renderApplyForm(
       <label><input type="checkbox" name="acceptedObservationIds" value="${escapeAttribute(observation.id)}" checked> Apply this scorecard</label>
       ${observation.correction ? `<div class="field"><label for="reason-${escapeAttribute(observation.id)}">Correction reason</label>
         <input id="reason-${escapeAttribute(observation.id)}" name="correctionReasons.${escapeAttribute(observation.id)}" maxlength="500" required></div>` : ""}
+      ${observation.playoffCorrectionImpact?.requiresCascade === true
+        ? `<input type="hidden" name="cascadeConfirmationDigests.${escapeAttribute(observation.id)}" value="${escapeAttribute(observation.playoffCorrectionImpact.confirmationDigest)}">
+        <p class="notice"><strong>Protected playoff cascade:</strong> this winner correction replaces ${observation.playoffCorrectionImpact.replacementCount} started dependent match${observation.playoffCorrectionImpact.replacementCount === 1 ? "" : "es"} atomically. Review the progression page before applying.</p>`
+        + `<ul>${observation.playoffCorrectionImpact.actions.map((action) =>
+          `<li>${escapeHtml(action.action)} · bracket ${escapeHtml(action.bracketMatchId)} · prior match ${escapeHtml(action.previousMatchId ?? "none")} · replacement ${escapeHtml(action.replacementMatchId ?? "pending")}</li>`
+        ).join("")}</ul>`
+        : ""}
     </fieldset>`).join("")}
     <p class="notice">${proposals.length === 0
       ? "This identical import changes no match source state and records an audited no-op."

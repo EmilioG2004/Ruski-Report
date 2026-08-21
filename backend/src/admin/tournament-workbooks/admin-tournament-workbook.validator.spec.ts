@@ -43,13 +43,16 @@ describe("administrator workbook request validation", () => {
     const request = parseWorkbookApplyForm({
       previewDigest: "b".repeat(64),
       acceptedObservationIds: observationOne,
-      [`correctionReasons.${observationOne}`]: "  corrected   final score  "
+      [`correctionReasons.${observationOne}`]: "  corrected   final score  ",
+      [`cascadeConfirmationDigests.${observationOne}`]: "d".repeat(64),
+      [`cascadeConfirmationDigests.${observationTwo}`]: "e".repeat(64)
     }, [observationOne, observationTwo]);
     expect(parseWorkbookApplyRequest(request)).toEqual({
       previewDigest: "b".repeat(64),
       acceptedObservationIds: [observationOne],
       skippedObservationIds: [observationTwo],
-      correctionReasons: { [observationOne]: "corrected final score" }
+      correctionReasons: { [observationOne]: "corrected final score" },
+      cascadeConfirmationDigests: { [observationOne]: "d".repeat(64) }
     });
   });
 

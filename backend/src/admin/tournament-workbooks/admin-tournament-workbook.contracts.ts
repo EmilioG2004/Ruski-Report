@@ -39,6 +39,18 @@ export interface AdminWorkbookImportObservationResponse {
   currentImpact: AdminWorkbookCurrentScoringImpact | null;
   proposedImpact: AdminWorkbookProposedScoringImpact | null;
   correction: boolean;
+  playoffCorrectionImpact: {
+    confirmationDigest: string;
+    requiresCascade: boolean;
+    actionCount: number;
+    replacementCount: number;
+    actions: readonly {
+      bracketMatchId: string;
+      action: string;
+      previousMatchId: string | null;
+      replacementMatchId: string | null;
+    }[];
+  } | null;
   issues: readonly AdminWorkbookValidationIssue[];
 }
 
@@ -118,6 +130,7 @@ export interface ApplyAdminWorkbookImportRequest {
   acceptedObservationIds?: unknown;
   skippedObservationIds?: unknown;
   correctionReasons?: unknown;
+  cascadeConfirmationDigests?: unknown;
 }
 
 export interface AdminTournamentWorkbookImportResultResponse {
@@ -135,6 +148,7 @@ export interface AdminTournamentWorkbookImportResultResponse {
     matchStatisticRunId: string;
     matchRowVersion: number;
   }[];
+  replacementMatchIds: readonly string[];
   tournamentStatisticRunId: string | null;
   tournamentStatisticRunDigest: string | null;
   appliedAt: string;

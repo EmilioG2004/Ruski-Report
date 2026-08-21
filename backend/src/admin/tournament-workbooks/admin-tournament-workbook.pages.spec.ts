@@ -66,6 +66,7 @@ describe("administrator workbook pages", () => {
           currentImpact: null,
           proposedImpact: SCORING_IMPACT,
           correction: true,
+          playoffCorrectionImpact: null,
           issues: []
         }, {
           id: unresolvedId,
@@ -79,6 +80,7 @@ describe("administrator workbook pages", () => {
           currentImpact: null,
           proposedImpact: null,
           correction: false,
+          playoffCorrectionImpact: null,
           issues: []
         }],
         assignableMatches: [{ id: uuid(31), label: "Match 31" }],
@@ -119,6 +121,18 @@ describe("administrator workbook pages", () => {
           },
           proposedImpact: SCORING_IMPACT,
           correction: true,
+          playoffCorrectionImpact: {
+            confirmationDigest: "d".repeat(64),
+            requiresCascade: true,
+            actionCount: 2,
+            replacementCount: 1,
+            actions: [{
+              bracketMatchId: uuid(95),
+              action: "replace_started_match",
+              previousMatchId: uuid(96),
+              replacementMatchId: uuid(97)
+            }]
+          },
           issues: []
         }]
       })
@@ -128,6 +142,11 @@ describe("administrator workbook pages", () => {
     expect(correctionHtml).toContain("Current 1–2 → proposed 3–1");
     expect(correctionHtml).toContain("2/4 shots · 4 cups");
     expect(correctionHtml).toContain("winner side 1");
+    expect(correctionHtml).toContain("protected cascade: 1 replacement match");
+    expect(correctionHtml).toContain(`cascadeConfirmationDigests.${correctionId}`);
+    expect(correctionHtml).toContain(`value="${"d".repeat(64)}"`);
+    expect(correctionHtml).toContain("replace_started_match");
+    expect(correctionHtml).toContain(uuid(97));
 
     const noOpHtml = renderTournamentWorkbookPreviewPage({
       principal: PRINCIPAL,
@@ -158,6 +177,7 @@ describe("administrator workbook pages", () => {
           matchStatisticRunId: uuid(33),
           matchRowVersion: 3
         }],
+        replacementMatchIds: [],
         tournamentStatisticRunId: uuid(34),
         tournamentStatisticRunDigest: "f".repeat(64),
         appliedAt: "2027-01-03T00:00:00.000Z"
