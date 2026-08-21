@@ -12,7 +12,7 @@ struct MatchDetailView: View {
     @StateObject private var controller: MatchDetailController
     @State private var selectedPanel: MatchDetailPanel = .overview
 
-    private let routeContext: MatchRouteContext
+    private let legacyRouteContext: MatchRouteContext?
     private let comments: any CommentRepository
     private let commentReports: any CommentReportingRepository
     private let userBlocking: UserBlockingStore
@@ -31,7 +31,7 @@ struct MatchDetailView: View {
         realtime: any RealtimeUpdateRepository,
         logger: any AppLogger
     ) {
-        self.routeContext = routeContext
+        self.legacyRouteContext = routeContext
         self.comments = comments
         self.commentReports = commentReports
         self.userBlocking = userBlocking
@@ -50,6 +50,37 @@ struct MatchDetailView: View {
         )
     }
 
+    init(
+        routeContext: PublicMatchRouteContext,
+        matches: any MatchRepository,
+        tournaments: any TournamentRepository,
+        games: any GameRepository,
+        comments: any CommentRepository,
+        commentReports: any CommentReportingRepository,
+        userBlocking: UserBlockingStore,
+        session: AccountSessionStore,
+        realtime: any RealtimeUpdateRepository,
+        logger: any AppLogger
+    ) {
+        self.legacyRouteContext = nil
+        self.comments = comments
+        self.commentReports = commentReports
+        self.userBlocking = userBlocking
+        self.session = session
+        self.realtime = realtime
+        self.logger = logger
+        _controller = StateObject(
+            wrappedValue: MatchDetailController(
+                routeContext: routeContext,
+                matches: matches,
+                tournaments: tournaments,
+                games: games,
+                realtime: realtime,
+                logger: logger
+            )
+        )
+    }
+
     var body: some View {
         Group {
             switch controller.state {
@@ -60,7 +91,13 @@ struct MatchDetailView: View {
                 )
                     .accessibilityIdentifier("match.loading")
             case .loaded(let screen):
-                detailContent(screen)
+                if let legacyRouteContext {
+                    detailContent(screen, routeContext: legacyRouteContext)
+                } else {
+                    errorContent("This legacy game route is unavailable.")
+                }
+            case .canonicalLoaded(let detail):
+                canonicalDetailContent(detail)
             case .failed(let message):
                 errorContent(message)
             }
@@ -77,7 +114,62 @@ struct MatchDetailView: View {
         }
     }
 
-    private func detailContent(_ screen: MatchDetailScreen) -> some View {
+    private func canonicalDetailContent(_ detail: PublicMatchDetail) -> some View {
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                PublicMatchDetailHeaderView(
+                    detail: detail,
+                    availableHeight: proxy.size.height,
+                    selection: $selectedPanel
+                )
+
+                Divider()
+
+                canonicalPanelContent(detail)
+                    .id(selectedPanel)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .animation(
+                        AppVisualTokens.selectionAnimation,
+                        value: selectedPanel
+                    )
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("match.public.screen")
+    }
+
+    @ViewBuilder
+    private func canonicalPanelContent(_ detail: PublicMatchDetail) -> some View {
+        switch selectedPanel {
+        case .overview:
+            MatchPanelScrollView {
+                PublicMatchOverviewPanel(detail: detail)
+            }
+        case .plays:
+            MatchPanelScrollView {
+                PublicMatchEventLogView(detail: detail)
+            }
+        case .scorecard:
+            MatchPanelScrollView {
+                PublicMatchScorecardView(detail: detail)
+            }
+        case .chat:
+            MatchCommentsView(
+                matchId: detail.id,
+                comments: comments,
+                commentReports: commentReports,
+                userBlocking: userBlocking,
+                session: session,
+                realtime: realtime,
+                logger: logger
+            )
+        }
+    }
+
+    private func detailContent(
+        _ screen: MatchDetailScreen,
+        routeContext: MatchRouteContext
+    ) -> some View {
         GeometryReader { proxy in
             VStack(spacing: 0) {
                 MatchDetailHeaderView(
@@ -89,7 +181,7 @@ struct MatchDetailView: View {
 
                 Divider()
 
-                panelContent(screen)
+                panelContent(screen, routeContext: routeContext)
                     .id(selectedPanel)
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
                     .animation(
@@ -103,7 +195,10 @@ struct MatchDetailView: View {
     }
 
     @ViewBuilder
-    private func panelContent(_ screen: MatchDetailScreen) -> some View {
+    private func panelContent(
+        _ screen: MatchDetailScreen,
+        routeContext: MatchRouteContext
+    ) -> some View {
         switch selectedPanel {
         case .overview:
             MatchPanelScrollView {
