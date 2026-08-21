@@ -11,6 +11,7 @@ import SwiftUI
 struct PublicTournamentDetailContentView: View {
     let detail: PublicTournamentDetail
     @Binding var selectedSection: TournamentDetailSection
+    var discoveryScope: PublicTournamentDiscoveryScope = .active
 
     var body: some View {
         ScrollView {
@@ -38,9 +39,15 @@ struct PublicTournamentDetailContentView: View {
         case .pods:
             PublicTournamentPodsView(detail: detail)
         case .matches:
-            PublicTournamentMatchesView(detail: detail)
+            PublicTournamentMatchesView(
+                detail: detail,
+                discoveryScope: discoveryScope
+            )
         case .bracket:
-            PublicTournamentBracketView(detail: detail)
+            PublicTournamentBracketView(
+                detail: detail,
+                discoveryScope: discoveryScope
+            )
         case .stats:
             PublicTournamentStatisticsView(detail: detail)
         }
@@ -319,6 +326,7 @@ private struct PublicStandingRowView: View {
 
 private struct PublicTournamentMatchesView: View {
     let detail: PublicTournamentDetail
+    let discoveryScope: PublicTournamentDiscoveryScope
 
     @EnvironmentObject private var navigation: AppNavigationController
 
@@ -340,7 +348,10 @@ private struct PublicTournamentMatchesView: View {
                                     match: match,
                                     accessibilityIdentifier: "tournament.public.match.\(match.id)"
                                 ) {
-                                    navigation.showMatch(match)
+                                    navigation.showMatch(
+                                        match,
+                                        discoveryScope: discoveryScope
+                                    )
                                 }
                             }
                         }
@@ -383,6 +394,7 @@ private enum PublicMatchGroup: String, CaseIterable, Identifiable {
 
 private struct PublicTournamentBracketView: View {
     let detail: PublicTournamentDetail
+    let discoveryScope: PublicTournamentDiscoveryScope
 
     @EnvironmentObject private var navigation: AppNavigationController
 
@@ -407,7 +419,10 @@ private struct PublicTournamentBracketView: View {
                                         summary: summary(for: match)
                                     ) {
                                         guard let summary = summary(for: match) else { return }
-                                        navigation.showMatch(summary)
+                                        navigation.showMatch(
+                                            summary,
+                                            discoveryScope: discoveryScope
+                                        )
                                     }
                                 }
                             }
@@ -489,6 +504,16 @@ private struct PublicBracketMatchCard: View {
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.appBrand)
                     .accessibilityIdentifier("tournament.public.bracket.state.automatic")
+            }
+
+            if match.status == .corrected {
+                Label(
+                    "Corrected official result",
+                    systemImage: "arrow.triangle.2.circlepath"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(Color.appBrand)
+                .accessibilityIdentifier("tournament.public.bracket.state.corrected")
             }
         }
     }

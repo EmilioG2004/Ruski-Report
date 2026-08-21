@@ -216,6 +216,9 @@ struct PublicMatchOverviewPanel: View {
                         value: detail.summary.scoreAvailability.displayName,
                         systemImage: "number"
                     )
+                    .accessibilityIdentifier(
+                        "match.public.availability.\(detail.summary.scoreAvailability.rawValue)"
+                    )
                     AppMetricTile(
                         title: "Plays",
                         value: "\(detail.events.count)",
