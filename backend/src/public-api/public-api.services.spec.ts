@@ -534,6 +534,7 @@ function createCommentsService(
 function emptyPublicProjections(): jest.Mocked<PublicProjectionReadRepository> {
   return {
     listActiveTournaments: jest.fn().mockResolvedValue([]),
+    listHistoricalTournaments: jest.fn().mockResolvedValue([]),
     hasPublicTournament: jest.fn().mockResolvedValue(false),
     findTournament: jest.fn().mockResolvedValue(null),
     findTournamentMatches: jest.fn().mockResolvedValue(null),

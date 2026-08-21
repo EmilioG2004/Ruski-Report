@@ -18,6 +18,11 @@ export class PublicV2Controller {
     return this.service.listActiveTournaments();
   }
 
+  @Get("tournaments/history")
+  listHistoricalTournaments(): Promise<CanonicalTournamentDiscoveryEnvelope> {
+    return this.service.listHistoricalTournaments();
+  }
+
   @Get("tournaments/:tournamentId/matches")
   getTournamentMatches(
     @Param("tournamentId") tournamentId: string,

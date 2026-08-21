@@ -26,6 +26,26 @@ describe("PublicV2Service", () => {
       .resolves.toEqual({ contractVersion: 2, tournaments: [] });
   });
 
+  it("returns completed and archived tournaments through separate history discovery", async () => {
+    const historical = discoveryItem({
+      ...createTournament(),
+      lifecycle: "completed"
+    });
+    const repository = repositoryStub();
+    repository.listHistoricalTournaments.mockResolvedValue([historical]);
+
+    await expect(new PublicV2Service(repository).listHistoricalTournaments())
+      .resolves.toEqual({ contractVersion: 2, tournaments: [historical] });
+  });
+
+  it("rejects an active tournament leaked into history discovery", async () => {
+    const repository = repositoryStub();
+    repository.listHistoricalTournaments.mockResolvedValue([discoveryItem()]);
+
+    await expect(new PublicV2Service(repository).listHistoricalTournaments())
+      .rejects.toMatchObject({ code: "INTERNAL_ERROR", statusCode: 500 });
+  });
+
   it("preserves the materialized order for two active same-year tournaments", async () => {
     const newer = discoveryItem();
     const older = discoveryItem(
@@ -211,6 +231,7 @@ describe("PublicV2Service", () => {
 function repositoryStub(): jest.Mocked<PublicProjectionReadRepository> {
   return {
     listActiveTournaments: jest.fn().mockResolvedValue([]),
+    listHistoricalTournaments: jest.fn().mockResolvedValue([]),
     hasPublicTournament: jest.fn().mockResolvedValue(false),
     findTournament: jest.fn().mockResolvedValue(null),
     findTournamentMatches: jest.fn().mockResolvedValue(null),

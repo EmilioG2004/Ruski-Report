@@ -18,12 +18,20 @@ describe("PublicV2Controller", () => {
       contractVersion: 2,
       tournaments: []
     });
+    service.listHistoricalTournaments.mockResolvedValue({
+      contractVersion: 2,
+      tournaments: []
+    });
     service.getTournament.mockResolvedValue(tournament);
     service.getTournamentMatches.mockResolvedValue(matches);
     service.getMatch.mockResolvedValue(match);
     const controller = new PublicV2Controller(service);
 
     await expect(controller.listActiveTournaments()).resolves.toEqual({
+      contractVersion: 2,
+      tournaments: []
+    });
+    await expect(controller.listHistoricalTournaments()).resolves.toEqual({
       contractVersion: 2,
       tournaments: []
     });
@@ -74,6 +82,7 @@ describe("PublicV2Controller", () => {
 function serviceStub(): jest.Mocked<PublicV2Service> {
   return {
     listActiveTournaments: jest.fn(),
+    listHistoricalTournaments: jest.fn(),
     getTournament: jest.fn(),
     getTournamentMatches: jest.fn(),
     getMatch: jest.fn()

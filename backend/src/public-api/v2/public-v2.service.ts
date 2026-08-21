@@ -35,6 +35,10 @@ const SCORE_AVAILABILITIES = new Set<PublicScoreAvailability>([
   "unrecorded",
   "not_applicable"
 ]);
+const ACTIVE_TOURNAMENT_LIFECYCLES = new Set([
+  "setup_published", "pod_play", "seeding_review", "playoffs"
+]);
+const HISTORICAL_TOURNAMENT_LIFECYCLES = new Set(["completed", "archived"]);
 
 @Injectable()
 export class PublicV2Service {
@@ -45,11 +49,26 @@ export class PublicV2Service {
 
   async listActiveTournaments(): Promise<CanonicalTournamentDiscoveryEnvelope> {
     const tournaments = await this.repository.listActiveTournaments();
+    return this.discoveryEnvelope(tournaments, ACTIVE_TOURNAMENT_LIFECYCLES);
+  }
+
+  async listHistoricalTournaments(): Promise<CanonicalTournamentDiscoveryEnvelope> {
+    const tournaments = await this.repository.listHistoricalTournaments();
+    return this.discoveryEnvelope(tournaments, HISTORICAL_TOURNAMENT_LIFECYCLES);
+  }
+
+  private discoveryEnvelope(
+    tournaments: Awaited<ReturnType<
+      PublicProjectionReadRepository["listActiveTournaments"]
+    >>,
+    allowedLifecycles: ReadonlySet<string>
+  ): CanonicalTournamentDiscoveryEnvelope {
     for (const item of tournaments) {
       assertProjection(item.projection);
       if (
         !isRecord(item.tournament) ||
-        item.tournament.id !== item.projection.tournamentId
+        item.tournament.id !== item.projection.tournamentId ||
+        !allowedLifecycles.has(item.tournament.lifecycle)
       ) {
         throw invalidMaterializedProjection();
       }
