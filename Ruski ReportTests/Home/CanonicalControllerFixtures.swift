@@ -5,9 +5,8 @@
 
 @testable import Ruski_Report
 
-@MainActor
 final class CanonicalControllerTournamentRepository: TournamentRepository {
-    nonisolated struct DetailRequest: Hashable {
+    struct DetailRequest: Hashable {
         let tournamentId: String
         let projectionVersion: Int64
     }
@@ -87,9 +86,8 @@ final class CanonicalControllerTournamentRepository: TournamentRepository {
     }
 }
 
-@MainActor
 final class CanonicalControllerMatchRepository: MatchRepository {
-    nonisolated struct Request: Hashable {
+    struct Request: Hashable {
         let matchId: String
         let tournamentId: String
         let projectionVersion: Int64

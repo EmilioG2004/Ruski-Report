@@ -3,6 +3,7 @@
 //  Ruski ReportTests
 //
 
+import SwiftUI
 import Testing
 @testable import Ruski_Report
 

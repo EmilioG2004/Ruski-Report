@@ -41,10 +41,16 @@ struct PublicDTOTests {
         }
         """#.utf8)
         let boxScore = try JSONDecoder().decode(PublicBoxScoreDTO.self, from: data)
+        let row = try #require(boxScore.rows.first)
+        let rowValueIndex = try #require(
+            row.values.index(forKey: "shootingPercentage")
+        )
+        let totalsValueIndex = try #require(
+            boxScore.totals.index(forKey: "shootingPercentage")
+        )
 
-        #expect(boxScore.rows.first?.values.keys.contains("shootingPercentage") == true)
-        #expect(boxScore.rows.first?.values["shootingPercentage"] == nil)
-        #expect(boxScore.totals.keys.contains("shootingPercentage"))
+        #expect(row.values[rowValueIndex].value == nil)
+        #expect(boxScore.totals[totalsValueIndex].value == nil)
     }
 
     @Test func missingRequiredProjectionFieldFailsDecoding() {

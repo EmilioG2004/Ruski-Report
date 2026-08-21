@@ -100,6 +100,7 @@ struct PublicMatchDetailHeaderView: View {
                 style: .continuous
             )
         )
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("match.public.detail")
     }
 

@@ -184,6 +184,11 @@ private struct PublicTournamentCardView: View {
         .buttonStyle(.plain)
         .contentShape(Rectangle())
         .accessibilityIdentifier("home.public.tournament.\(tournament.id)")
+        .accessibilityLabel(
+            "\(tournament.name), \(tournament.year), " +
+                "\(tournament.lifecycle.displayName), " +
+                "projection \(tournament.projection.version)"
+        )
         .accessibilityHint("Opens this tournament at projection \(tournament.projection.version)")
     }
 

@@ -106,7 +106,6 @@ private struct PublicTournamentHeaderView: View {
                 style: .continuous
             )
         )
-        .accessibilityIdentifier("tournament.public.header")
     }
 
     private var lifecycleLabel: some View {
@@ -208,7 +207,6 @@ private struct PublicTournamentPodsView: View {
                     PublicPodStandingsCard(pod: pod)
                 }
             }
-            .accessibilityIdentifier("tournament.public.pods")
         }
     }
 }
@@ -247,6 +245,7 @@ private struct PublicPodStandingsCard: View {
                 }
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tournament.public.pod.\(pod.id)")
         .accessibilityValue(pod.standingState.displayName)
     }
@@ -358,7 +357,6 @@ private struct PublicTournamentMatchesView: View {
                     }
                 }
             }
-            .accessibilityIdentifier("tournament.public.matches")
         }
     }
 }
@@ -431,6 +429,7 @@ private struct PublicTournamentBracketView: View {
                     }
                     .padding(.bottom, AppLayout.smallSpacing)
                 }
+                .accessibilityElement(children: .contain)
                 .accessibilityIdentifier("tournament.public.bracket")
             }
         } else {
@@ -462,6 +461,7 @@ private struct PublicBracketMatchCard: View {
                     .buttonStyle(.plain)
             }
         }
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("tournament.public.bracket.match.\(match.id)")
         .accessibilityValue(displayState.label)
     }

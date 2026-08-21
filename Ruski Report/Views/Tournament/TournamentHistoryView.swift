@@ -69,7 +69,6 @@ struct TournamentHistoryView: View {
                 ForEach(tournaments) { tournament in
                     historyCard(tournament)
                 }
-                .accessibilityIdentifier("history.loaded")
             }
         case .failed(let message):
             AppErrorStateView(
