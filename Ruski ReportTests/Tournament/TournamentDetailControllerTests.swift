@@ -160,6 +160,47 @@ struct TournamentDetailControllerTests {
         #expect(tournaments.detailRequests == [request])
     }
 
+    @Test func canonicalHistoryRouteRediscoversHistoryVersion() async {
+        let active = controllerTournamentSummary(version: 8)
+        let summary = PublicTournamentSummary(
+            id: active.id,
+            gameType: active.gameType,
+            year: 2026,
+            name: "Completed Tournament",
+            lifecycle: .completed,
+            projection: active.projection
+        )
+        let request = CanonicalControllerTournamentRepository.DetailRequest(
+            tournamentId: summary.id,
+            projectionVersion: 8
+        )
+        let tournaments = CanonicalControllerTournamentRepository(
+            discoveryResults: [.failure(
+                AppError.unsupported("Active discovery must not be used.")
+            )],
+            historyResults: [.success([summary])],
+            detailResults: [
+                request: .success(controllerTournamentDetail(summary: summary))
+            ]
+        )
+        let controller = TournamentDetailController(
+            routeContext: PublicTournamentRouteContext(
+                tournamentId: summary.id,
+                projectionVersion: nil,
+                discoveryScope: .history
+            ),
+            tournaments: tournaments,
+            games: StubGameRepository(),
+            logger: NoopAppLogger()
+        )
+
+        await controller.loadTournament()
+
+        #expect(tournaments.historyRequestCount == 1)
+        #expect(tournaments.discoveryRequestCount == 0)
+        #expect(tournaments.detailRequests == [request])
+    }
+
     @Test func canonicalTournamentRealtimeUsesNewerVersionAndRediscoversAbsentVersion() async {
         let version7 = controllerTournamentSummary(version: 7)
         let version8 = controllerTournamentSummary(version: 8)

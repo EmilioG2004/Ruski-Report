@@ -11,6 +11,7 @@ import SwiftUI
 struct TournamentDetailView: View {
     @StateObject private var controller: TournamentDetailController
     @State private var selectedSection: TournamentDetailSection = .matches
+    private let canonicalDiscoveryScope: PublicTournamentDiscoveryScope
 
     init(
         tournamentId: TournamentPreview.ID,
@@ -19,6 +20,7 @@ struct TournamentDetailView: View {
         realtime: any RealtimeUpdateRepository,
         logger: any AppLogger
     ) {
+        canonicalDiscoveryScope = .active
         _controller = StateObject(
             wrappedValue: TournamentDetailController(
                 tournamentId: tournamentId,
@@ -37,6 +39,7 @@ struct TournamentDetailView: View {
         realtime: any RealtimeUpdateRepository,
         logger: any AppLogger
     ) {
+        canonicalDiscoveryScope = routeContext.discoveryScope
         _controller = StateObject(
             wrappedValue: TournamentDetailController(
                 routeContext: routeContext,
@@ -62,7 +65,8 @@ struct TournamentDetailView: View {
             case .canonicalLoaded(let detail):
                 PublicTournamentDetailContentView(
                     detail: detail,
-                    selectedSection: $selectedSection
+                    selectedSection: $selectedSection,
+                    discoveryScope: canonicalDiscoveryScope
                 )
             case .failed(let message):
                 errorContent(message)
