@@ -47,6 +47,15 @@ import { PostgresCanonicalStatisticRepository } from "./postgres-canonical-stati
 import { PostgresMatchRevisionRepository } from "./postgres-match-revision.repository";
 import { PostgresMatchWriterRepository } from "./postgres-match-writer.repository";
 import {
+  CanonicalProjectionActivationResult,
+  PostgresProjectionRepository
+} from "./postgres-projection.repository";
+import {
+  CanonicalProjectionActivationListener,
+  notifyCanonicalProjectionActivation,
+  refreshCanonicalProjectionInTransaction
+} from "./projection-refresh";
+import {
   ActivateGlobalSeedsInput,
   ActivatePodStandingsInput,
   ActivatePodStandingsResult,
@@ -790,7 +799,9 @@ implements TournamentProgressionRepositoryContract {
 
   constructor(
     private readonly database: PostgresDatabase,
-    transactions?: TournamentEngineTransactionManager
+    transactions?: TournamentEngineTransactionManager,
+    private readonly projections?: PostgresProjectionRepository,
+    private readonly projectionListener?: CanonicalProjectionActivationListener
   ) {
     this.transactions = transactions ?? new TournamentEngineTransactionManager(database);
     this.writerRepository = new PostgresMatchWriterRepository(database, this.transactions);
@@ -810,71 +821,129 @@ implements TournamentProgressionRepositoryContract {
   activatePodStandings(
     input: ActivatePodStandingsInput
   ): Promise<ActivatePodStandingsResult> {
-    return this.transactions.run((transaction) =>
-      this.activatePodStandingsInTransaction(input, transaction)
-    );
+    return this.runProjectedCommand({
+      tournamentId: input.tournamentId,
+      occurredAt: input.activatedAt,
+      sourceCommandType: input.resolution === undefined
+        ? "pod_standings_activated"
+        : "pod_standing_tie_resolved",
+      administratorId: input.resolution?.administratorId,
+      rowVersion: (result) => result.tournamentRowVersion,
+      command: (transaction) =>
+        this.activatePodStandingsInTransaction(input, transaction)
+    });
   }
 
   resolvePodTie(input: ResolvePodTieInput): Promise<ActivatePodStandingsResult> {
-    return this.transactions.run((transaction) =>
-      this.resolvePodTieInTransaction(input, transaction)
-    );
+    return this.runProjectedCommand({
+      tournamentId: input.tournamentId,
+      occurredAt: input.occurredAt,
+      sourceCommandType: "pod_standing_tie_resolved",
+      administratorId: input.administratorId,
+      rowVersion: (result) => result.tournamentRowVersion,
+      command: (transaction) => this.resolvePodTieInTransaction(input, transaction)
+    });
   }
 
   finalizePod(input: FinalizePodInput): Promise<FinalizePodResult> {
-    return this.transactions.run((transaction) =>
-      this.finalizePodInTransaction(input, transaction)
-    );
+    return this.runProjectedCommand({
+      tournamentId: input.tournamentId,
+      occurredAt: input.occurredAt,
+      sourceCommandType: "pod_finalized",
+      administratorId: input.administratorId,
+      rowVersion: (result) => result.tournamentRowVersion,
+      command: (transaction) => this.finalizePodInTransaction(input, transaction)
+    });
   }
 
   invalidatePodFinalization(
     input: InvalidatePodFinalizationInput
   ): Promise<ActivatePodStandingsResult> {
-    return this.transactions.run((transaction) =>
-      this.invalidatePodFinalizationInTransaction(input, transaction)
-    );
+    return this.runProjectedCommand({
+      tournamentId: input.tournamentId,
+      occurredAt: input.occurredAt,
+      sourceCommandType: "pod_finalization_invalidated",
+      administratorId: input.administratorId,
+      rowVersion: (result) => result.tournamentRowVersion,
+      command: (transaction) =>
+        this.invalidatePodFinalizationInTransaction(input, transaction)
+    });
   }
 
   activateGlobalSeeds(input: ActivateGlobalSeedsInput): Promise<ActiveSeedResult> {
-    return this.transactions.run((transaction) =>
-      this.activateGlobalSeedsInTransaction(input, transaction)
-    );
+    return this.runProjectedCommand({
+      tournamentId: input.tournamentId,
+      occurredAt: input.createdAt,
+      sourceCommandType: "global_seeds_activated",
+      rowVersion: (result) => result.tournamentRowVersion,
+      command: (transaction) =>
+        this.activateGlobalSeedsInTransaction(input, transaction)
+    });
   }
 
   resolveGlobalSeedTie(input: ResolveGlobalSeedTieInput): Promise<GlobalSeedReviewResult> {
-    return this.transactions.run((transaction) =>
-      this.resolveGlobalSeedTieInTransaction(input, transaction)
-    );
+    return this.runProjectedCommand({
+      tournamentId: input.tournamentId,
+      occurredAt: input.occurredAt,
+      sourceCommandType: "global_seed_tie_resolved",
+      administratorId: input.administratorId,
+      rowVersion: (result) => result.tournamentRowVersion,
+      command: (transaction) =>
+        this.resolveGlobalSeedTieInTransaction(input, transaction)
+    });
   }
 
   applySeedOverridePermutation(
     input: ApplySeedOverridePermutationInput
   ): Promise<ActiveSeedResult> {
-    return this.transactions.run((transaction) =>
-      this.applySeedOverridePermutationInTransaction(input, transaction)
-    );
+    return this.runProjectedCommand({
+      tournamentId: input.tournamentId,
+      occurredAt: input.occurredAt,
+      sourceCommandType: "seed_override_applied",
+      administratorId: input.administratorId,
+      rowVersion: (result) => result.tournamentRowVersion,
+      command: (transaction) =>
+        this.applySeedOverridePermutationInTransaction(input, transaction)
+    });
   }
 
   publishBracket(input: PublishBracketInput): Promise<PublishBracketResult> {
-    return this.transactions.run((transaction) =>
-      this.publishBracketInTransaction(input, transaction)
-    );
+    return this.runProjectedCommand({
+      tournamentId: input.tournamentId,
+      occurredAt: input.occurredAt,
+      sourceCommandType: "bracket_published",
+      administratorId: input.administratorId,
+      rowVersion: (result) => result.tournamentRowVersion,
+      command: (transaction) => this.publishBracketInTransaction(input, transaction)
+    });
   }
 
   resolveBracketMatch(
     input: ResolveBracketMatchInput
   ): Promise<ResolveBracketMatchResult> {
-    return this.transactions.run((transaction) =>
-      this.resolveBracketMatchInTransaction(input, transaction)
-    );
+    return this.runProjectedCommand({
+      tournamentId: input.tournamentId,
+      occurredAt: input.occurredAt,
+      sourceCommandType: "bracket_match_resolved",
+      administratorId: input.administratorId,
+      rowVersion: (result) => result.tournamentRowVersion,
+      command: (transaction) =>
+        this.resolveBracketMatchInTransaction(input, transaction)
+    });
   }
 
   replaceStartedDependentMatch(
     input: ReplaceStartedDependentMatchInput
   ): Promise<ReplaceStartedDependentMatchResult> {
-    return this.transactions.run((transaction) =>
-      this.replaceStartedDependentMatchInTransaction(input, transaction)
-    );
+    return this.runProjectedCommand({
+      tournamentId: input.tournamentId,
+      occurredAt: input.occurredAt,
+      sourceCommandType: "started_dependent_match_replaced",
+      administratorId: input.administratorId,
+      rowVersion: (result) => result.tournamentRowVersion,
+      command: (transaction) =>
+        this.replaceStartedDependentMatchInTransaction(input, transaction)
+    });
   }
 
   previewOperatorMatchResolution(
@@ -888,17 +957,63 @@ implements TournamentProgressionRepositoryContract {
   recordOperatorMatchResolution(
     input: RecordOperatorMatchResolutionInput
   ): Promise<RecordOperatorMatchResolutionResult> {
-    return this.transactions.run((transaction) =>
-      this.recordOperatorMatchResolutionInTransaction(input, transaction)
-    );
+    return this.runProjectedCommand({
+      tournamentId: input.tournamentId,
+      occurredAt: input.occurredAt,
+      sourceCommandType: "operator_match_resolution_recorded",
+      administratorId: input.actorId,
+      rowVersion: (result) => result.progression.tournamentRowVersion,
+      command: (transaction) =>
+        this.recordOperatorMatchResolutionInTransaction(input, transaction)
+    });
   }
 
   recordOperatorMatchResolutionWithCascade(
     input: RecordOperatorMatchResolutionWithCascadeInput
   ): Promise<RecordOperatorMatchResolutionWithCascadeResult> {
-    return this.transactions.run((transaction) =>
-      this.recordOperatorMatchResolutionInTransaction(input, transaction, input)
-    ) as Promise<RecordOperatorMatchResolutionWithCascadeResult>;
+    return this.runProjectedCommand({
+      tournamentId: input.tournamentId,
+      occurredAt: input.occurredAt,
+      sourceCommandType: "operator_match_resolution_cascade_recorded",
+      administratorId: input.actorId,
+      rowVersion: (result) => result.progression.tournamentRowVersion,
+      command: (transaction) =>
+        this.recordOperatorMatchResolutionInTransaction(
+          input,
+          transaction,
+          input
+        ) as Promise<RecordOperatorMatchResolutionWithCascadeResult>
+    });
+  }
+
+  private async runProjectedCommand<T>(input: {
+    tournamentId: TournamentId;
+    occurredAt: string;
+    sourceCommandType: string;
+    administratorId?: string;
+    rowVersion: (result: T) => number;
+    command: (transaction: TransactionContext) => Promise<T>;
+  }): Promise<T> {
+    let projection: CanonicalProjectionActivationResult | undefined;
+    const result = await this.transactions.run(async (transaction) => {
+      const commandResult = await input.command(transaction);
+      projection = await refreshCanonicalProjectionInTransaction(
+        this.projections,
+        {
+          tournamentId: input.tournamentId,
+          expectedTournamentRowVersion: input.rowVersion(commandResult),
+          occurredAt: input.occurredAt,
+          sourceCommandType: input.sourceCommandType,
+          actor: input.administratorId === undefined
+            ? { kind: "system" }
+            : { kind: "administrator", id: input.administratorId }
+        },
+        transaction
+      );
+      return commandResult;
+    });
+    notifyCanonicalProjectionActivation(this.projectionListener, projection);
+    return result;
   }
 
   async readProgressionInTransaction(
