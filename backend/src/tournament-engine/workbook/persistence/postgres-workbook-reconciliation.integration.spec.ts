@@ -11,6 +11,7 @@ import {
   GeneratedWorkbookSheetInput,
   StoreGeneratedWorkbookInput,
   WorkbookImportObservationInput,
+  WorkbookImportPreviewRecord,
   WorkbookRevisionCandidateInput,
   WorkbookRevisionCandidateTeamInput
 } from "./contracts";
@@ -161,6 +162,10 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       tournamentId: fixture.tournamentId,
       batchId: preview.batchId,
       previewDigest: preview.previewDigest,
+      confirmationDigest: confirmationDigestFor(
+        preview,
+        [proposed.observationId]
+      ),
       acceptedObservationIds: [proposed.observationId],
       skippedObservationIds: [],
       confirmedByAdminId: fixture.adminId,
@@ -171,7 +176,23 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       appliedMatchIds: [fixture.matchIds[0]],
       missingMatchIds: [fixture.matchIds[1]]
     });
-    expect(await count(database, "engine_match_revisions")).toBe(0);
+    expect(await count(database, "engine_match_revisions")).toBe(1);
+    expect(await count(database, "engine_match_events")).toBe(1);
+    expect(applied.materializedRevisions).toHaveLength(1);
+    expect(applied.tournamentStatisticRunId).not.toBeNull();
+    expect(await database.query<{ lifecycle: string; row_version: string }>(`
+      SELECT lifecycle, row_version::text
+      FROM engine_tournaments
+      WHERE id = $1::uuid
+    `, [fixture.tournamentId])).toMatchObject({
+      rows: [{ lifecycle: "pod_play", row_version: "3" }]
+    });
+    expect(await database.query<{ count: string }>(`
+      SELECT count(*)::text AS count
+      FROM engine_audit_events
+      WHERE tournament_id = $1::uuid
+        AND command_type = 'tournament_pod_play_started'
+    `, [fixture.tournamentId])).toMatchObject({ rows: [{ count: "1" }] });
     expect(await database.query(`
       SELECT row_version::text, active_fingerprint
       FROM engine_match_workbook_source_states
@@ -191,18 +212,23 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
           1
         ),
         missingObservation(generation.sheets[3], fixture.matchIds[1])
-      ]
+      ],
+      3
     ));
     const noOp = await repository.confirmImport({
       tournamentId: fixture.tournamentId,
       batchId: noOpPreview.batchId,
       previewDigest: noOpPreview.previewDigest,
+      confirmationDigest: confirmationDigestFor(noOpPreview, []),
       acceptedObservationIds: [],
       skippedObservationIds: [],
       confirmedByAdminId: fixture.adminId,
       audit: { eventId: randomUUID() }
     });
     expect(noOp.status).toBe("no_op");
+    expect(noOp.materializedRevisions).toEqual([]);
+    expect(noOp.tournamentStatisticRunId).toBeNull();
+    expect(await count(database, "engine_match_revisions")).toBe(1);
     expect(await count(database, "engine_match_workbook_source_states")).toBe(1);
   });
 
@@ -225,6 +251,10 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       tournamentId: fixture.tournamentId,
       batchId: preview.batchId,
       previewDigest: preview.previewDigest,
+      confirmationDigest: confirmationDigestFor(
+        preview,
+        [preview.observations[0].observationId]
+      ),
       acceptedObservationIds: [preview.observations[0].observationId],
       skippedObservationIds: [],
       confirmedByAdminId: fixture.adminId,
@@ -242,6 +272,155 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       rosterMembershipId: fixture.membershipIds[2],
       displayName: "Player 3"
     });
+  });
+
+  it("crosses a Phase 3 source boundary before a canonical revision exists", async () => {
+    const fixture = await seedPublishedTournament(database);
+    const generation = generatedWorkbook(fixture);
+    await repository.storeGeneratedWorkbook(generation);
+    const phaseThreeCandidate = candidateFor(fixture, 0, {
+      sourceRevisionNumber: 1,
+      fingerprint: digest("phase-three-source"),
+      reason: "initial"
+    });
+    const phaseThreePreview = await repository.createImportPreview(previewInput(
+      fixture,
+      generation,
+      [proposedObservation(
+        generation.sheets[2],
+        fixture.matchIds[0],
+        phaseThreeCandidate
+      )]
+    ));
+    const phaseThreeObservation = phaseThreePreview.observations[0];
+    if (phaseThreeObservation?.candidate === null ||
+        phaseThreeObservation?.candidate === undefined) {
+      throw new Error("Phase 3 boundary fixture requires a candidate.");
+    }
+    const acceptedAt = new Date().toISOString();
+    await database.query(
+      `
+        INSERT INTO engine_match_workbook_source_states (
+          tournament_id, match_id, active_candidate_id, active_fingerprint,
+          participant_digest, source_batch_id, source_observation_id,
+          row_version, updated_at
+        ) VALUES (
+          $1::uuid, $2::uuid, $3::uuid, $4,
+          $5, $6::uuid, $7::uuid,
+          1, $8
+        )
+      `,
+      [
+        fixture.tournamentId,
+        fixture.matchIds[0],
+        phaseThreeObservation.candidate.candidateId,
+        phaseThreeObservation.candidate.fingerprint,
+        phaseThreeObservation.candidate.participantDigest,
+        phaseThreePreview.batchId,
+        phaseThreeObservation.observationId,
+        acceptedAt
+      ]
+    );
+    await database.query(
+      `
+        INSERT INTO engine_workbook_import_decisions (
+          id, tournament_id, batch_id, observation_id, match_id, candidate_id,
+          decision, actor_kind, administrator_id, reason,
+          preview_digest, decided_at
+        ) VALUES (
+          $1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::uuid, $6::uuid,
+          'accepted', 'administrator', $7::uuid, $8,
+          $9, $10
+        )
+      `,
+      [
+        randomUUID(),
+        fixture.tournamentId,
+        phaseThreePreview.batchId,
+        phaseThreeObservation.observationId,
+        fixture.matchIds[0],
+        phaseThreeObservation.candidate.candidateId,
+        fixture.adminId,
+        "Phase 3 accepted source.",
+        phaseThreePreview.previewDigest,
+        acceptedAt
+      ]
+    );
+    await database.query(
+      `
+        UPDATE engine_workbook_import_batches
+        SET status = 'applied', confirmed_by_admin_id = $2::uuid,
+            confirmed_at = $3, completed_at = $3
+        WHERE id = $1::uuid
+      `,
+      [phaseThreePreview.batchId, fixture.adminId, acceptedAt]
+    );
+
+    const correction = candidateFor(fixture, 0, {
+      sourceRevisionNumber: 2,
+      fingerprint: digest("phase-four-correction"),
+      reason: "correction",
+      previousAppliedCandidateId: phaseThreeObservation.candidate.candidateId,
+      expectedMatchRowVersion: 1
+    });
+    const preview = await repository.createImportPreview(previewInput(
+      fixture,
+      generation,
+      [proposedObservation(
+        generation.sheets[2],
+        fixture.matchIds[0],
+        correction,
+        1
+      )]
+    ));
+    const observationId = preview.observations[0].observationId;
+    const correctionReasons = {
+      [observationId]: "Correct the pre-Phase 4 workbook source."
+    };
+    const applied = await repository.confirmImport({
+      tournamentId: fixture.tournamentId,
+      batchId: preview.batchId,
+      previewDigest: preview.previewDigest,
+      confirmationDigest: confirmationDigestFor(
+        preview,
+        [observationId],
+        correctionReasons
+      ),
+      acceptedObservationIds: [observationId],
+      skippedObservationIds: [],
+      correctionReasons,
+      confirmedByAdminId: fixture.adminId,
+      audit: { eventId: randomUUID() }
+    });
+    expect(applied.materializedRevisions).toHaveLength(1);
+    expect(await database.query<{
+      revision_number: number;
+      candidate_id: string;
+    }>(`
+      SELECT revision.revision_number, materialization.candidate_id::text
+      FROM engine_match_revisions revision
+      JOIN engine_workbook_candidate_materializations materialization
+        ON materialization.revision_id = revision.id
+      WHERE revision.match_id = $1::uuid
+      ORDER BY revision.revision_number
+    `, [fixture.matchIds[0]])).toMatchObject({
+      rows: [
+        {
+          revision_number: 1,
+          candidate_id: phaseThreeObservation.candidate.candidateId
+        },
+        {
+          revision_number: 2,
+          candidate_id: preview.observations[0].candidate?.candidateId
+        }
+      ]
+    });
+    expect(await count(database, "engine_match_events")).toBe(2);
+    expect(await database.query<{ count: string }>(`
+      SELECT count(*)::text AS count
+      FROM engine_canonical_statistic_run_scopes
+      WHERE tournament_id = $1::uuid AND run_kind = 'match_revision'
+    `, [fixture.tournamentId])).toMatchObject({ rows: [{ count: "2" }] });
   });
 
   it("allows live updates without a reason but requires one for corrections", async () => {
@@ -262,6 +441,10 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       tournamentId: fixture.tournamentId,
       batchId: first.batchId,
       previewDigest: first.previewDigest,
+      confirmationDigest: confirmationDigestFor(
+        first,
+        [first.observations[0].observationId]
+      ),
       acceptedObservationIds: [first.observations[0].observationId],
       skippedObservationIds: [],
       confirmedByAdminId: fixture.adminId,
@@ -289,12 +472,17 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
         fixture.matchIds[0],
         liveUpdate,
         1
-      )]
+      )],
+      3
     ));
     await expect(repository.confirmImport({
       tournamentId: fixture.tournamentId,
       batchId: second.batchId,
       previewDigest: second.previewDigest,
+      confirmationDigest: confirmationDigestFor(
+        second,
+        [second.observations[0].observationId]
+      ),
       acceptedObservationIds: [second.observations[0].observationId],
       skippedObservationIds: [],
       confirmedByAdminId: fixture.adminId,
@@ -321,12 +509,17 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
         fixture.matchIds[0],
         correction,
         2
-      )]
+      )],
+      3
     ));
     await expect(repository.confirmImport({
       tournamentId: fixture.tournamentId,
       batchId: third.batchId,
       previewDigest: third.previewDigest,
+      confirmationDigest: confirmationDigestFor(
+        third,
+        [third.observations[0].observationId]
+      ),
       acceptedObservationIds: [third.observations[0].observationId],
       skippedObservationIds: [],
       confirmedByAdminId: fixture.adminId,
@@ -336,6 +529,14 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       tournamentId: fixture.tournamentId,
       batchId: third.batchId,
       previewDigest: third.previewDigest,
+      confirmationDigest: confirmationDigestFor(
+        third,
+        [third.observations[0].observationId],
+        {
+          [third.observations[0].observationId]:
+            "Correct the final source rows"
+        }
+      ),
       acceptedObservationIds: [third.observations[0].observationId],
       skippedObservationIds: [],
       correctionReasons: {
@@ -384,6 +585,10 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       tournamentId: fixture.tournamentId,
       batchId: preview.batchId,
       previewDigest: preview.previewDigest,
+      confirmationDigest: confirmationDigestFor(
+        preview,
+        preview.observations.map((item) => item.observationId)
+      ),
       acceptedObservationIds: preview.observations.map((item) => item.observationId),
       skippedObservationIds: [],
       confirmedByAdminId: fixture.adminId,
@@ -399,6 +604,91 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       "SELECT holder_id FROM engine_match_writer_leases ORDER BY holder_id"
     );
     expect(leases.rows).toEqual([{ holder_id: "live-writer" }]);
+  });
+
+  it("rolls back every canonical write when a late decision insert fails", async () => {
+    const fixture = await seedPublishedTournament(database);
+    const generation = generatedWorkbook(fixture);
+    await repository.storeGeneratedWorkbook(generation);
+    const candidate = candidateFor(fixture, 0, {
+      sourceRevisionNumber: 1,
+      fingerprint: digest("late-atomic-failure"),
+      reason: "initial"
+    });
+    const preview = await repository.createImportPreview(previewInput(
+      fixture,
+      generation,
+      [proposedObservation(generation.sheets[2], fixture.matchIds[0], candidate)]
+    ));
+    await database.query(`
+      CREATE FUNCTION phase4_test_reject_workbook_decision()
+      RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        RAISE EXCEPTION 'injected late workbook confirmation failure';
+      END;
+      $$
+    `);
+    await database.query(`
+      CREATE TRIGGER phase4_test_reject_workbook_decision
+      BEFORE INSERT ON engine_workbook_import_decisions
+      FOR EACH ROW EXECUTE FUNCTION phase4_test_reject_workbook_decision()
+    `);
+    try {
+      await expect(repository.confirmImport({
+        tournamentId: fixture.tournamentId,
+        batchId: preview.batchId,
+        previewDigest: preview.previewDigest,
+        confirmationDigest: confirmationDigestFor(
+          preview,
+          [preview.observations[0].observationId]
+        ),
+        acceptedObservationIds: [preview.observations[0].observationId],
+        skippedObservationIds: [],
+        confirmedByAdminId: fixture.adminId,
+        audit: { eventId: randomUUID() }
+      })).rejects.toThrow(/injected late workbook confirmation failure/i);
+    } finally {
+      await database.query(`
+        DROP TRIGGER phase4_test_reject_workbook_decision
+        ON engine_workbook_import_decisions
+      `);
+      await database.query(
+        "DROP FUNCTION phase4_test_reject_workbook_decision()"
+      );
+    }
+
+    for (const table of [
+      "engine_match_revisions",
+      "engine_match_revision_teams",
+      "engine_match_revision_players",
+      "engine_match_events",
+      "engine_shot_attempts",
+      "engine_shot_classifications",
+      "engine_statistic_runs",
+      "engine_canonical_statistic_run_scopes",
+      "engine_canonical_statistic_values",
+      "engine_workbook_candidate_materializations",
+      "engine_active_tournament_statistic_runs",
+      "engine_match_workbook_source_states",
+      "engine_workbook_import_decisions",
+      "engine_match_writer_leases"
+    ]) {
+      expect(await count(database, table)).toBe(0);
+    }
+    expect(await database.query<{
+      lifecycle: string;
+      row_version: string;
+    }>(`
+      SELECT lifecycle, row_version::text
+      FROM engine_tournaments
+      WHERE id = $1::uuid
+    `, [fixture.tournamentId])).toMatchObject({
+      rows: [{ lifecycle: "setup_published", row_version: "2" }]
+    });
+    expect((await repository.findImportPreview(
+      fixture.tournamentId,
+      preview.batchId
+    ))?.status).toBe("preview_ready");
   });
 
   it("applies an explicit subset and database guards keep history forward-only", async () => {
@@ -427,6 +717,10 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       tournamentId: fixture.tournamentId,
       batchId: preview.batchId,
       previewDigest: preview.previewDigest,
+      confirmationDigest: confirmationDigestFor(
+        preview,
+        [preview.observations[0].observationId]
+      ),
       acceptedObservationIds: [preview.observations[0].observationId],
       skippedObservationIds: [preview.observations[1].observationId],
       confirmedByAdminId: fixture.adminId,
@@ -710,6 +1004,10 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       tournamentId: fixture.tournamentId,
       batchId: preview.batchId,
       previewDigest: preview.previewDigest,
+      confirmationDigest: confirmationDigestFor(
+        preview,
+        [preview.observations[0].observationId]
+      ),
       acceptedObservationIds: [preview.observations[0].observationId],
       skippedObservationIds: [],
       confirmedByAdminId: fixture.adminId,
@@ -740,6 +1038,10 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       tournamentId: fixture.tournamentId,
       batchId: first.batchId,
       previewDigest: digest("wrong-preview"),
+      confirmationDigest: confirmationDigestFor(
+        first,
+        [first.observations[0].observationId]
+      ),
       acceptedObservationIds: [first.observations[0].observationId],
       skippedObservationIds: [],
       confirmedByAdminId: fixture.adminId,
@@ -749,6 +1051,10 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       tournamentId: fixture.tournamentId,
       batchId: first.batchId,
       previewDigest: first.previewDigest,
+      confirmationDigest: confirmationDigestFor(
+        first,
+        [first.observations[0].observationId]
+      ),
       acceptedObservationIds: [first.observations[0].observationId],
       skippedObservationIds: [],
       confirmedByAdminId: fixture.adminId,
@@ -774,12 +1080,20 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
         fixture.matchIds[0],
         changed,
         1
-      )]
+      )],
+      3
     ));
     await expect(repository.confirmImport({
       tournamentId: fixture.tournamentId,
       batchId: correction.batchId,
       previewDigest: correction.previewDigest,
+      confirmationDigest: confirmationDigestFor(
+        correction,
+        [correction.observations[0].observationId],
+        {
+          [correction.observations[0].observationId]: "Correct source rows"
+        }
+      ),
       acceptedObservationIds: [correction.observations[0].observationId],
       skippedObservationIds: [],
       correctionReasons: {
@@ -793,7 +1107,8 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
     const expiredInput = previewInput(
       fixture,
       generation,
-      [missingObservation(generation.sheets[3], fixture.matchIds[1])]
+      [missingObservation(generation.sheets[3], fixture.matchIds[1])],
+      3
     );
     expiredInput.receivedAt = new Date(old.getTime() - 60_000).toISOString();
     expiredInput.previewedAt = old.toISOString();
@@ -802,6 +1117,7 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       tournamentId: fixture.tournamentId,
       batchId: expired.batchId,
       previewDigest: expired.previewDigest,
+      confirmationDigest: confirmationDigestFor(expired, []),
       acceptedObservationIds: [],
       skippedObservationIds: [],
       confirmedByAdminId: fixture.adminId,
@@ -1042,6 +1358,7 @@ function candidateFor(
     fingerprint: string;
     reason: WorkbookRevisionCandidateInput["reason"];
     previousAppliedCandidateId?: string;
+    expectedMatchRowVersion?: number;
     useHistoricalPlayer?: boolean;
     proposedStatus?: WorkbookRevisionCandidateInput["proposedStatus"];
     proposedScoreAvailability?: WorkbookRevisionCandidateInput[
@@ -1069,32 +1386,74 @@ function candidateFor(
       }]
     })
   );
+  const proposedStatus = input.proposedStatus ?? (
+    input.reason === "initial" ? "in_progress" : "final"
+  );
+  const proposedScoreAvailability = input.proposedScoreAvailability ?? (
+    input.reason === "initial" ? "partial" : "complete"
+  );
+  const participantDigest = digestWorkbookParticipants(teams);
+  const semanticCandidateId = randomUUID();
+  const participants = teams.flatMap((team) => team.players.map((player) => ({
+    sideNumber: team.sideNumber,
+    teamId: team.teamId,
+    playerId: player.playerId,
+    rosterMembershipId: player.rosterMembershipId,
+    rosterSlot: player.rosterSlot,
+    displayNameAtImport: player.displayName
+  })));
+  const rows = teams.flatMap((team) => Array.from({ length: 80 }, (_, index) => ({
+    sideNumber: team.sideNumber,
+    worksheetRow: index + 10,
+    shotNumber: index + 1,
+    teamId: team.teamId,
+    playerId: team.players[0].playerId,
+    rosterMembershipId: team.players[0].rosterMembershipId,
+    rosterSlot: 1,
+    markers: {
+      miss: false,
+      make: team.sideNumber === 1 && index === 0,
+      splashOut: false,
+      guy: false,
+      tri: false,
+      di: false,
+      vom: false
+    }
+  })));
   const envelope = {
-    schemaVersion: 1,
-    rows: [{ row: 1, values: { result: input.reason } }]
+    contract: "workbook-match-revision-candidate-v1",
+    semanticCandidateId,
+    tournamentId: fixture.tournamentId,
+    matchId: fixture.matchIds[matchIndex],
+    sourceRevisionNumber: input.sourceRevisionNumber,
+    previousCandidateId: input.previousAppliedCandidateId ?? null,
+    fingerprint: input.fingerprint,
+    proposedStatus,
+    proposedScoreAvailability,
+    reason: input.reason,
+    participantDigest,
+    participants,
+    rows
   };
   return {
-    candidateId: randomUUID(),
+    candidateId: semanticCandidateId,
     matchId: fixture.matchIds[matchIndex],
     ...(input.previousAppliedCandidateId === undefined
       ? {}
       : { previousAppliedCandidateId: input.previousAppliedCandidateId }),
     sourceRevisionNumber: input.sourceRevisionNumber,
     fingerprint: input.fingerprint,
-    proposedStatus: input.proposedStatus ?? (
-      input.reason === "initial" ? "in_progress" : "final"
-    ),
-    proposedScoreAvailability: input.proposedScoreAvailability ?? (
-      input.reason === "initial" ? "partial" : "complete"
-    ),
+    proposedStatus,
+    proposedScoreAvailability,
     reason: input.reason,
     requiresConfirmation: input.reason === "correction",
-    expectedMatchRowVersion: 1,
+    expectedMatchRowVersion:
+      input.expectedMatchRowVersion ?? input.sourceRevisionNumber,
     expectedSourceStateVersion: input.sourceRevisionNumber - 1,
     envelopeSchemaVersion: 1,
     envelope,
     envelopeDigest: digestWorkbookValue(envelope),
-    participantDigest: digestWorkbookParticipants(teams),
+    participantDigest,
     teams
   };
 }
@@ -1118,7 +1477,7 @@ function proposedObservation(
     assignmentSource: "stable_metadata",
     disposition: "proposed",
     fingerprint: candidate.fingerprint,
-    baseMatchRowVersion: 1,
+    baseMatchRowVersion: candidate.expectedMatchRowVersion,
     baseSourceStateVersion,
     sourceEnvelopeSchemaVersion: 1,
     sourceEnvelope,
@@ -1147,7 +1506,7 @@ function unchangedObservation(
     assignmentSource: "stable_metadata",
     disposition: "unchanged",
     fingerprint,
-    baseMatchRowVersion: 1,
+    baseMatchRowVersion: baseSourceStateVersion + 1,
     baseSourceStateVersion,
     sourceEnvelopeSchemaVersion: 1,
     sourceEnvelope,
@@ -1176,7 +1535,8 @@ function missingObservation(
 function previewInput(
   fixture: Fixture,
   generation: StoreGeneratedWorkbookInput,
-  observations: readonly WorkbookImportObservationInput[]
+  observations: readonly WorkbookImportObservationInput[],
+  baseTournamentRowVersion = 2
 ): CreateWorkbookImportPreviewInput {
   const previewedAt = new Date();
   return {
@@ -1186,7 +1546,7 @@ function previewInput(
     workbookSchemaVersion: 1,
     sourceWorkbookDigest: generation.artifactDigest,
     sourceSizeBytes: generation.artifact.byteLength,
-    baseTournamentRowVersion: 2,
+    baseTournamentRowVersion,
     previewDigest: digestWorkbookValue({
       observations: observations.map((item) => ({
         id: item.observationId,
@@ -1200,6 +1560,35 @@ function previewInput(
     observations,
     audit: { eventId: randomUUID() }
   };
+}
+
+function confirmationDigestFor(
+  preview: WorkbookImportPreviewRecord,
+  acceptedObservationIds: readonly string[],
+  correctionReasons: Readonly<Record<string, string>> = {}
+): string {
+  const accepted = new Set(acceptedObservationIds);
+  const selected = preview.observations
+    .filter((observation) => accepted.has(observation.observationId))
+    .map((observation) => {
+      if (observation.matchId === null || observation.candidate === null) {
+        throw new Error("Accepted fixture observation requires a candidate.");
+      }
+      return {
+        matchId: observation.matchId,
+        observationId: observation.observationId,
+        candidateId: observation.candidate.candidateId,
+        correctionReason:
+          correctionReasons[observation.observationId]?.trim() ?? null
+      };
+    })
+    .sort((first, second) => first.matchId.localeCompare(second.matchId))
+    .map(({ matchId: _matchId, ...value }) => value);
+  return digestWorkbookValue({
+    contract: "canonical-workbook-apply-v1",
+    previewDigest: preview.previewDigest,
+    selected
+  });
 }
 
 async function count(database: PostgresDatabase, table: string): Promise<number> {
