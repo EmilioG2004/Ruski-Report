@@ -66,6 +66,24 @@ describe("workbook persistence digests", () => {
 
     expect(digestWorkbookParticipants(renamed))
       .toBe(digestWorkbookParticipants(teams));
+    expect(digestWorkbookParticipants([...teams].reverse())).toBe(
+      digestWorkbookValue([
+        {
+          sideNumber: 1,
+          teamId: "team-1",
+          playerId: "player-1",
+          rosterMembershipId: "membership-1",
+          rosterSlot: 1
+        },
+        {
+          sideNumber: 2,
+          teamId: "team-2",
+          playerId: "player-2",
+          rosterMembershipId: "membership-2",
+          rosterSlot: 1
+        }
+      ])
+    );
     expect(digestWorkbookParticipants([
       {
         ...teams[0],

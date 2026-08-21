@@ -65,6 +65,24 @@ export interface WorkbookGenerationSourceMatchRecord {
   sequenceInPod: number;
   roundNumber: number;
   gameNumberForPair: number;
+  activeScoringPreview: {
+    revisionId: string;
+    teams: readonly [
+      {
+        sideNumber: 1;
+        teamId: string;
+        score: number | null;
+        result: "pending" | "win" | "loss" | "tie" | "cancelled" | "forfeited";
+      },
+      {
+        sideNumber: 2;
+        teamId: string;
+        score: number | null;
+        result: "pending" | "win" | "loss" | "tie" | "cancelled" | "forfeited";
+      }
+    ];
+    winnerTeamId: string | null;
+  } | null;
   workbookState: {
     rowVersion: number;
     sourceRevisionNumber: number;
@@ -342,6 +360,7 @@ export interface ConfirmWorkbookImportInput {
   tournamentId: TournamentId;
   batchId: WorkbookImportBatchId;
   previewDigest: string;
+  confirmationDigest: string;
   acceptedObservationIds: readonly WorkbookImportObservationId[];
   skippedObservationIds: readonly WorkbookImportObservationId[];
   correctionReasons?: Readonly<Record<WorkbookImportObservationId, string>>;
@@ -357,6 +376,15 @@ export interface WorkbookImportConfirmationResult {
   skippedMatchIds: readonly string[];
   unchangedMatchIds: readonly string[];
   missingMatchIds: readonly string[];
+  materializedRevisions: readonly {
+    matchId: string;
+    candidateId: WorkbookRevisionCandidateId;
+    revisionId: string;
+    matchStatisticRunId: string;
+    matchRowVersion: number;
+  }[];
+  tournamentStatisticRunId: string | null;
+  tournamentStatisticRunDigest: string | null;
   completedAt: string;
 }
 
@@ -368,19 +396,18 @@ export function digestWorkbookParticipants(
   teams: readonly WorkbookRevisionCandidateTeamInput[]
 ): string {
   return digestWorkbookValue(teams
-    .map((team) => ({
+    .flatMap((team) => team.players.map((player) => ({
       sideNumber: team.sideNumber,
       teamId: team.teamId,
-      players: team.players.map((player) => ({
         playerId: player.playerId,
         rosterMembershipId: player.rosterMembershipId,
         rosterSlot: player.rosterSlot
-      })).sort((first, second) =>
-        first.rosterSlot - second.rosterSlot ||
-        first.playerId.localeCompare(second.playerId)
-      )
-    }))
-    .sort((first, second) => first.sideNumber - second.sideNumber));
+    })))
+    .sort((first, second) =>
+      first.sideNumber - second.sideNumber ||
+      first.rosterSlot - second.rosterSlot ||
+      first.playerId.localeCompare(second.playerId)
+    ));
 }
 
 function canonicalJson(value: unknown): string {
