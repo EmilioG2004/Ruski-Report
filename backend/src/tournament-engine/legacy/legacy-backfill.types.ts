@@ -1,4 +1,4 @@
-export const LEGACY_BACKFILL_SCHEMA_VERSION = 1;
+export const LEGACY_BACKFILL_SCHEMA_VERSION = 2;
 export const LEGACY_TOURNAMENT_YEAR = 2026;
 
 export type LegacyLifecycle = "completed";
@@ -14,6 +14,7 @@ export interface LegacyTournamentSource {
   status: string;
   format: Record<string, unknown>;
   metadata: Record<string, unknown>;
+  tournamentStatistics: LegacyTournamentStatisticTableSource[];
   teams: LegacyTeamSource[];
   players: LegacyPlayerSource[];
   rosterMemberships: LegacyRosterMembershipSource[];
@@ -67,8 +68,60 @@ export interface LegacyMatchSource {
   legacyBracketMatchId?: string;
   participants: LegacyMatchParticipantSource[];
   score: LegacyMatchScoreSource;
+  events: LegacyMatchEventSource[];
+  statistics: LegacyMatchStatisticSource[];
+  scorecardRows: LegacyScorecardRowSource[];
   detailAvailability?: "recorded" | "unrecorded";
   updatedAt: string;
+}
+
+export interface LegacyMatchEventSource {
+  legacyEventId: string;
+  sequence: number;
+  type: "make" | "miss" | "splash-out" | "guy" | "tri" | "di" | "vom";
+  legacyTeamId: string;
+  legacyPlayerId: string;
+  legacyScorecardRowId?: string;
+  attributionMethod:
+    | "source_event_player_id"
+    | "scorecard_player_id"
+    | "stable_participant_key_alias"
+    | "legacy_2026_explicit_alias";
+  occurredAt?: string;
+  phase?: string;
+  turnNumber?: number;
+  teamTurnOrder?: number;
+  shotInTeamTurn?: number;
+}
+
+export interface LegacyMatchStatisticSource {
+  subjectType: "team" | "player";
+  legacyTeamId?: string;
+  legacyPlayerId?: string;
+  metricValues: Record<string, number | null>;
+}
+
+export interface LegacyScorecardRowSource {
+  legacyScorecardRowId: string;
+  sequence: number;
+  legacyTeamId?: string;
+  legacyPlayerId?: string;
+  legacyEventIds: string[];
+  values: Record<string, boolean | number | string | null>;
+}
+
+export interface LegacyTournamentStatisticTableSource {
+  legacyTableId: string;
+  scope: "season" | "playoffs";
+  subjectType: "team" | "player";
+  rows: LegacyTournamentStatisticRowSource[];
+}
+
+export interface LegacyTournamentStatisticRowSource {
+  rank: number;
+  legacyTeamId?: string;
+  legacyPlayerId?: string;
+  metricValues: Record<string, number | null>;
 }
 
 export interface LegacyMatchParticipantSource {
@@ -147,6 +200,7 @@ export type LegacyEntityKind =
   | "pod"
   | "match"
   | "match_revision"
+  | "scoring_event"
   | "standing_calculation"
   | "standing"
   | "pod_finalization"
@@ -175,6 +229,7 @@ export interface CanonicalLegacyTournament {
   visibility: LegacyVisibility;
   format: Record<string, unknown>;
   configuration: CanonicalLegacyTournamentConfiguration;
+  sourceStatistics: LegacyTournamentStatisticTableSource[];
 }
 
 export interface CanonicalLegacyTournamentConfiguration {
@@ -268,6 +323,39 @@ export interface CanonicalLegacyMatchRevision {
   scores: CanonicalLegacyTeamScore[];
   winnerTeamId?: string;
   isFinal: boolean;
+  events: CanonicalLegacyMatchEvent[];
+  sourceStatistics: CanonicalLegacyMatchStatistic[];
+  sourceScorecardRows: LegacyScorecardRowSource[];
+}
+
+export interface CanonicalLegacyMatchStatistic {
+  subjectType: "team" | "player";
+  teamId?: string;
+  playerId?: string;
+  metricValues: Record<string, number | null>;
+}
+
+export interface CanonicalLegacyMatchEvent {
+  id: string;
+  publicKey: string;
+  legacyEventId: string;
+  sequence: number;
+  type: "shot_attempt" | "vom";
+  teamId: string;
+  playerId: string;
+  legacyScorecardRowId?: string;
+  attributionMethod: LegacyMatchEventSource["attributionMethod"];
+  occurredAt?: string;
+  sourceReference: string;
+  shotAttempt?: {
+    outcome: "make" | "miss";
+    classification?: "guy" | "di" | "tri" | "splash_out";
+    cupDelta: number;
+    phase?: string;
+    turnNumber?: number;
+    teamTurnOrder?: number;
+    shotInTeamTurn?: number;
+  };
 }
 
 export interface CanonicalLegacyStandingCalculation {
@@ -372,8 +460,8 @@ export interface CanonicalLegacyBracketSlot {
 export interface CanonicalLegacyIdentityReference {
   legacyMatchId: string;
   canonicalMatchId: string;
-  commentCount: number;
-  reportCount: number;
+  commentIds: string[];
+  reportIds: string[];
 }
 
 export interface LegacyBackfillCounts {
@@ -387,16 +475,35 @@ export interface LegacyBackfillCounts {
   matchRevisions: number;
   matchParticipants: number;
   standingCalculations: number;
+  standingCalculationMatches: number;
   standings: number;
   podFinalizations: number;
+  podFinalizationProvenance: number;
   seedCalculations: number;
   seeds: number;
   brackets: number;
   bracketRounds: number;
   bracketMatches: number;
   bracketSlots: number;
-  commentReferences: number;
-  reportReferences: number;
+  scoringEvents: number;
+  shotAttempts: number;
+  shotClassifications: number;
+  statisticRuns: number;
+  statisticValues: number;
+  activeStatisticRuns: number;
+  activePodStandingCalculations: number;
+  activeTournamentStandingCalculations: number;
+  seedCalculationFinalizations: number;
+  activeSeedCalculations: number;
+  bracketPublications: number;
+  activeBrackets: number;
+  bracketResolutions: number;
+  activeBracketResolutions: number;
+  bracketAdvancements: number;
+  projectionVersions: number;
+  tournamentProjectionPayloads: number;
+  matchProjectionPayloads: number;
+  projectionActivations: number;
 }
 
 export interface LegacyBackfillPlan {
@@ -432,6 +539,8 @@ export interface LegacyBackfillRecordedState {
   planDigest: string;
   mappingDigest: string;
   counts: LegacyBackfillCounts;
+  /** Present only on the atomic apply path to distinguish a lock-race no-op. */
+  wasApplied?: boolean;
 }
 
 export type LegacyBackfillRunStatus =
