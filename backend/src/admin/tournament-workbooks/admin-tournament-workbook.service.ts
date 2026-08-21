@@ -9,6 +9,10 @@ import {
 } from "../../tournament-engine/domain";
 import { createUuidV5 } from "../../tournament-engine/scheduling/uuid-v5";
 import {
+  previewWorkbookCandidate,
+  WorkbookCandidateScoringPreview
+} from "../../tournament-engine/scoring";
+import {
   CANONICAL_SCORECARD_LAYOUT_VERSION,
   CANONICAL_WORKBOOK_MAGIC,
   CANONICAL_WORKBOOK_SCHEMA_VERSION,
@@ -17,7 +21,10 @@ import {
   CanonicalWorkbookParser,
   CanonicalWorkbookScope,
   canonicalSha256,
+  compareWorkbookFormulaSummaries,
   createWorkbookReconciliationPreview,
+  deriveWorkbookFormulaScoringImpact,
+  digestWorkbookParticipants,
   digestWorkbookValue,
   ExplicitBlankAssignment,
   GeneratedWorkbookArtifactRecord,
@@ -25,10 +32,12 @@ import {
   GeneratedWorkbookSheetInput,
   generateCanonicalTournamentWorkbook,
   planWorkbookImportApply,
+  ParsedCanonicalScorecardSheet,
   ParsedCanonicalWorkbook,
   ParsedCanonicalWorkbookManifestEntry,
   PostgresWorkbookReconciliationRepository,
   WorkbookGenerationSourceRecord,
+  WorkbookFormulaSummaryObservation,
   WorkbookImportObservationInput,
   WorkbookImportObservationRecord,
   WorkbookImportPreviewRecord,
@@ -392,6 +401,7 @@ export class AdminTournamentWorkbookService {
         tournamentId,
         batchId: batch.batchId,
         previewDigest: parsed.previewDigest,
+        confirmationDigest: plan.confirmationDigest,
         acceptedObservationIds: parsed.acceptedObservationIds,
         skippedObservationIds: parsed.skippedObservationIds,
         correctionReasons: parsed.correctionReasons,
@@ -406,6 +416,9 @@ export class AdminTournamentWorkbookService {
         skippedCount: result.skippedMatchIds.length,
         unchangedCount: result.unchangedMatchIds.length,
         missingNonDestructiveCount: result.missingMatchIds.length,
+        materializedRevisions: result.materializedRevisions,
+        tournamentStatisticRunId: result.tournamentStatisticRunId,
+        tournamentStatisticRunDigest: result.tournamentStatisticRunDigest,
         appliedAt: result.completedAt
       };
     } catch (error) {
@@ -646,22 +659,12 @@ function generationRoster(
 function digestParticipants(
   teams: ReturnType<typeof candidateTeams>
 ): string {
-  return canonicalSha256(teams.map((team) => ({
-    sideNumber: team.sideNumber,
-    teamId: team.teamId,
-    players: [...team.players]
-      .sort((left, right) => left.rosterSlot - right.rosterSlot)
-      .map((player) => ({
-        playerId: player.playerId,
-        rosterMembershipId: player.rosterMembershipId,
-        rosterSlot: player.rosterSlot
-      }))
-  })));
+  return digestWorkbookParticipants(teams);
 }
 
 function persistenceObservations(
   preview: WorkbookReconciliationPreview,
-  scorecards: readonly { worksheetIndex: number }[],
+  scorecards: readonly ParsedCanonicalScorecardSheet[],
   artifact: GeneratedWorkbookArtifactRecord,
   source: WorkbookGenerationSourceRecord
 ): WorkbookImportObservationInput[] {
@@ -671,7 +674,6 @@ function persistenceObservations(
       ? undefined
       : source.matches.find((item) => item.matchId === observation.matchId);
     const workbookSheet = trustedSheetForObservation(observation, artifact.sheets);
-    const issues = persistedIssues(observation.issues);
     if (observation.decision === "missing_non_destructive") {
       if (observation.matchId === undefined || match === undefined ||
           workbookSheet === undefined) {
@@ -686,7 +688,7 @@ function persistenceObservations(
         disposition: "missing" as const,
         baseMatchRowVersion: match.rowVersion,
         baseSourceStateVersion: match.workbookState?.rowVersion ?? 0,
-        validationIssues: issues
+        validationIssues: persistedIssues(observation.issues)
       };
     }
     if (observation.worksheetIndex === undefined) {
@@ -696,6 +698,13 @@ function persistenceObservations(
     if (sourceSheet === undefined) {
       throw new Error("Present workbook observation lost its normalized source.");
     }
+    const formulaIssues = compareWorkbookFormulaSummaries(
+      sourceSheet.formulaSummaryObservations ?? [],
+      deriveWorkbookFormulaScoringImpact(
+        sourceSheet.rows,
+        sourceSheet.playersPerTeam
+      )
+    );
     const sourceEnvelope = jsonRecord({ sheet: sourceSheet });
     return {
       observationId: observation.id,
@@ -717,7 +726,7 @@ function persistenceObservations(
       sourceEnvelopeSchemaVersion: 1,
       sourceEnvelope,
       sourceEnvelopeDigest: digestWorkbookValue(sourceEnvelope),
-      validationIssues: issues,
+      validationIssues: persistedIssues([...observation.issues, ...formulaIssues]),
       ...(observation.candidate === undefined ? {} : {
         candidate: persistenceCandidate(observation.candidate, source)
       })
@@ -735,7 +744,7 @@ function persistenceCandidate(
   }
   const teams = candidateTeams(source, match.participantTeamIds, match);
   const envelope = jsonRecord({
-    contract: "workbook-match-revision-candidate-v1",
+    contract: "workbook-match-revision-candidate-v2",
     semanticCandidateId: candidate.id,
     tournamentId: candidate.tournamentId,
     matchId: candidate.matchId,
@@ -747,7 +756,8 @@ function persistenceCandidate(
     reason: candidate.reason,
     participantDigest: candidate.participantDigest,
     participants: candidate.participants,
-    rows: candidate.rawRows
+    rows: candidate.rawRows,
+    formulaSummaryObservations: candidate.formulaSummaryObservations ?? []
   });
   return {
     candidateId: candidate.id,
@@ -763,7 +773,7 @@ function persistenceCandidate(
     requiresConfirmation: candidate.requiresConfirmation,
     expectedMatchRowVersion: candidate.expectedMatchRowVersion,
     expectedSourceStateVersion: candidate.expectedSourceStateRowVersion ?? 0,
-    envelopeSchemaVersion: 1,
+    envelopeSchemaVersion: 2,
     envelope,
     envelopeDigest: digestWorkbookValue(envelope),
     participantDigest: candidate.participantDigest,
@@ -902,6 +912,9 @@ function candidateFromRecord(
   if (!Array.isArray(rows)) {
     throw new Error("Stored workbook candidate rows are invalid.");
   }
+  const formulaSummaryObservations = storedFormulaSummaryObservations(
+    candidate.envelope
+  );
   return {
     id: candidate.candidateId,
     tournamentId: parseStableUuid(
@@ -935,8 +948,57 @@ function candidateFromRecord(
       rosterSlot: player.rosterSlot,
       displayNameAtImport: player.displayName
     }))),
-    rawRows: rows as never
+    rawRows: rows as never,
+    formulaSummaryObservations
   };
+}
+
+function storedFormulaSummaryObservations(
+  envelope: Readonly<Record<string, unknown>>
+): readonly WorkbookFormulaSummaryObservation[] {
+  const contract = envelope.contract;
+  if (contract === "workbook-match-revision-candidate-v1") {
+    return [];
+  }
+  if (contract !== "workbook-match-revision-candidate-v2" ||
+      !Array.isArray(envelope.formulaSummaryObservations)) {
+    throw new Error("Stored workbook candidate envelope is unsupported.");
+  }
+  return envelope.formulaSummaryObservations.map((value) => {
+    if (!isObject(value) ||
+        (value.sideNumber !== 1 && value.sideNumber !== 2) ||
+        (value.subjectType !== "player" && value.subjectType !== "team") ||
+        !isFormulaMetric(value.metric) ||
+        !["exact", "changed", "missing"].includes(String(value.formulaState)) ||
+        !(value.cachedValue === null || (
+          typeof value.cachedValue === "number" &&
+          Number.isFinite(value.cachedValue)
+        )) ||
+        !(value.rosterSlot === undefined || (
+          Number.isSafeInteger(value.rosterSlot) && Number(value.rosterSlot) > 0
+        ))) {
+      throw new Error("Stored workbook formula summary is invalid.");
+    }
+    return {
+      sideNumber: value.sideNumber as 1 | 2,
+      subjectType: value.subjectType as "player" | "team",
+      ...(value.rosterSlot === undefined
+        ? {}
+        : { rosterSlot: Number(value.rosterSlot) }),
+      metric: value.metric,
+      formulaState: value.formulaState as "exact" | "changed" | "missing",
+      cachedValue: value.cachedValue
+    };
+  });
+}
+
+function isFormulaMetric(value: unknown): value is
+  "misses" | "makes" | "splashOuts" | "guys" | "tris" | "dis" | "voms" |
+  "shootingPercentage" {
+  return typeof value === "string" && [
+    "misses", "makes", "splashOuts", "guys", "tris", "dis", "voms",
+    "shootingPercentage"
+  ].includes(value);
 }
 
 function mapPreview(
@@ -969,6 +1031,9 @@ function mapPreview(
           const team = source.teams.find((item) => item.teamId === teamId);
           return team === undefined ? [] : [team.name];
         });
+      const proposedImpact = observation.candidate === null
+        ? null
+        : proposedScoringImpact(observation.candidate);
       return {
         id: observation.observationId,
         ordinal: observation.sheetOrdinal ?? 0,
@@ -982,6 +1047,8 @@ function mapPreview(
         proposedScoreAvailability: responseScoreAvailability(
           observation.candidate?.proposedScoreAvailability
         ),
+        currentImpact: match?.activeScoringPreview ?? null,
+        proposedImpact,
         correction: observation.candidate?.reason === "correction",
         issues: observation.validationIssues.map((issue) => ({
           ...issue,
@@ -1020,6 +1087,41 @@ function mapPreview(
       message: "Workbook preview contains validation errors.",
       severity: "error"
     }] : []
+  };
+}
+
+function proposedScoringImpact(
+  candidate: WorkbookRevisionCandidateInput
+) {
+  const preview = previewWorkbookCandidate(candidate);
+  const totalsByTeam = new Map(
+    preview.reduction.teams.map((team) => [team.teamId, team.totals])
+  );
+  return {
+    teams: preview.teams.map((team) => ({
+      sideNumber: team.sideNumber,
+      teamId: team.teamId,
+      score: team.score ?? null,
+      result: team.result,
+      totals: totalsByTeam.get(team.teamId) ?? emptyScoringTotals()
+    })),
+    matchTotals: preview.reduction.match,
+    winnerTeamId: preview.winnerTeamId ?? null
+  };
+}
+
+function emptyScoringTotals(): WorkbookCandidateScoringPreview["reduction"]["match"] {
+  return {
+    attempts: 0,
+    makes: 0,
+    misses: 0,
+    shootingPercentage: null,
+    splashOuts: 0,
+    guys: 0,
+    tris: 0,
+    dis: 0,
+    voms: 0,
+    cupsScored: 0
   };
 }
 
