@@ -591,6 +591,25 @@ async function readStatistics(
   tournamentId: string
 ): Promise<StatisticRow[]> {
   return (await executor.query<StatisticRow>(`
+    WITH active_rules AS (
+      SELECT active.statistic_run_id, active.rules_version
+      FROM engine_active_tournament_statistic_runs active
+      WHERE active.tournament_id = $1::uuid
+    ), selected_runs AS (
+      SELECT active.statistic_run_id
+      FROM active_rules active
+      UNION
+      SELECT scope.statistic_run_id
+      FROM engine_canonical_statistic_run_scopes scope
+      JOIN active_rules active ON active.rules_version = scope.rules_version
+      JOIN engine_matches match
+        ON match.tournament_id = scope.tournament_id
+       AND match.id = scope.match_id
+       AND match.active_revision_id = scope.revision_id
+      WHERE scope.tournament_id = $1::uuid
+        AND scope.run_kind = 'match_revision'
+        AND NOT match.identity_only
+    )
     SELECT value.scope,
            CASE value.scope WHEN 'match' THEN match.public_key
              WHEN 'pod' THEN pod.public_key ELSE tournament.public_key END
@@ -599,9 +618,9 @@ async function readStatistics(
            COALESCE(team.public_key, player.public_key) AS subject_public_key,
            COALESCE(team.name, player.display_name) AS subject_name,
            value.metric, value.value
-    FROM engine_active_tournament_statistic_runs active
+    FROM selected_runs selected
     JOIN engine_canonical_statistic_values value
-      ON value.statistic_run_id = active.statistic_run_id
+      ON value.statistic_run_id = selected.statistic_run_id
     JOIN engine_tournaments tournament ON tournament.id = value.tournament_id
     LEFT JOIN engine_matches match ON match.id = value.match_id
     LEFT JOIN engine_pods pod ON pod.id = value.pod_id
@@ -609,7 +628,7 @@ async function readStatistics(
       ON value.subject_type = 'team' AND team.id = value.subject_id
     LEFT JOIN engine_players player
       ON value.subject_type = 'player' AND player.id = value.subject_id
-    WHERE active.tournament_id = $1::uuid
+    WHERE value.tournament_id = $1::uuid
     ORDER BY value.scope, scope_public_key, value.stage,
              value.subject_type, subject_public_key, value.metric
   `, [tournamentId])).rows;

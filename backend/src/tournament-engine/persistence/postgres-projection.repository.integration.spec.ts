@@ -9,6 +9,8 @@ import {
 import { parseStableUuid, StableUuidKind } from "../domain";
 import { createTournamentSetupPreview } from "../setup";
 import { EngineAuditCommand } from "./contracts";
+import { TournamentEngineTransactionManager } from "./engine-transaction.manager";
+import { PostgresCanonicalStatisticRepository } from "./postgres-canonical-statistic.repository";
 import { PostgresProjectionRepository } from "./postgres-projection.repository";
 import { PostgresRosterRepository } from "./postgres-roster.repository";
 import { PostgresTournamentSetupRepository } from "./postgres-tournament-setup.repository";
@@ -102,8 +104,25 @@ postgresDescribe("canonical public projection PostgreSQL persistence", () => {
 
   it("projects pod final and forfeit winners from active revision teams", async () => {
     const fixture = await createPublishedFixture();
-    await seedResolvedMatch(database, fixture, 0, "final", 1200);
-    await seedResolvedMatch(database, fixture, 1, "forfeited", 1210);
+    const finalRevisionId = await seedResolvedMatch(
+      database, fixture, 0, "final", 1200
+    );
+    const forfeitRevisionId = await seedResolvedMatch(
+      database, fixture, 1, "forfeited", 1210
+    );
+    await new TournamentEngineTransactionManager(database).run((transaction) =>
+      new PostgresCanonicalStatisticRepository(database)
+        .refreshActiveRevisionsInTransaction({
+          tournamentId: fixture.tournamentId,
+          rulesVersion: 1,
+          calculatedAt: "2027-01-03T00:01:00.000Z",
+          revisions: [
+            { matchId: fixture.matches[0]!.id, revisionId: finalRevisionId },
+            { matchId: fixture.matches[1]!.id, revisionId: forfeitRevisionId }
+          ]
+        }, transaction)
+    );
+    await seedActiveRulesVersionTwo(database, fixture, finalRevisionId);
     await projections.buildAndActivateCanonical({
       tournamentId: fixture.tournamentId,
       expectedTournamentRowVersion: 2,
@@ -118,6 +137,9 @@ postgresDescribe("canonical public projection PostgreSQL persistence", () => {
       winner_id: string;
       scores: Array<number | null>;
       player_count: number;
+      statistic_count: number;
+      box_score_row_count: number | null;
+      team_makes: number | null;
     }>(`
       SELECT match_public_key, detail_payload ->> 'status' AS status,
              detail_payload -> 'winner' ->> 'id' AS winner_id,
@@ -126,7 +148,15 @@ postgresDescribe("canonical public projection PostgreSQL persistence", () => {
                ORDER BY (participant ->> 'side')::integer) AS scores,
              (SELECT count(*)::integer
               FROM jsonb_array_elements(detail_payload -> 'participants') participant,
-                   jsonb_array_elements(participant -> 'players')) AS player_count
+                   jsonb_array_elements(participant -> 'players')) AS player_count,
+             jsonb_array_length(detail_payload -> 'statistics') AS statistic_count,
+             jsonb_array_length(detail_payload -> 'boxScore' -> 'rows')
+               AS box_score_row_count,
+             (SELECT (statistic -> 'values' ->> 'makes')::integer
+              FROM jsonb_array_elements(detail_payload -> 'statistics') statistic
+              WHERE statistic ->> 'scope' = 'match'
+                AND statistic -> 'subject' ->> 'id' = 'team-1'
+              LIMIT 1) AS team_makes
       FROM engine_public_match_projection_payloads
       WHERE tournament_id = $1::uuid AND projection_version = 1
       ORDER BY match_public_key
@@ -135,18 +165,30 @@ postgresDescribe("canonical public projection PostgreSQL persistence", () => {
       status: row.status,
       winnerId: row.winner_id,
       scores: row.scores,
-      playerCount: row.player_count
+      playerCount: row.player_count,
+      statisticCount: row.statistic_count,
+      boxScoreRowCount: row.box_score_row_count,
+      teamMakes: row.team_makes
     }))).toEqual(expect.arrayContaining([{
       status: "final",
       winnerId: expect.stringMatching(/^team-/),
       scores: [1, 0],
-      playerCount: 4
+      playerCount: 4,
+      statisticCount: 1,
+      boxScoreRowCount: 1,
+      teamMakes: 99
     }, {
       status: "forfeited",
       winnerId: expect.stringMatching(/^team-/),
       scores: [null, null],
-      playerCount: 4
+      playerCount: 4,
+      statisticCount: 0,
+      boxScoreRowCount: null,
+      teamMakes: null
     }]));
+    const finalPayload = payloads.rows.find((row) => row.status === "final");
+    expect(finalPayload?.statistic_count).toBeGreaterThan(0);
+    expect(finalPayload?.box_score_row_count).toBeGreaterThan(0);
   });
 
   it("pins old payloads and refreshes scheduled matches with the current roster", async () => {
@@ -457,6 +499,67 @@ postgresDescribe("canonical public projection PostgreSQL persistence", () => {
   }
 });
 
+async function seedActiveRulesVersionTwo(
+  database: PostgresDatabase,
+  fixture: ReturnType<typeof createFixture>,
+  revisionId: string
+): Promise<void> {
+  const matchRunId = rawUuid(1250);
+  const aggregateRunId = rawUuid(1251);
+  const createdAt = "2027-01-03T00:02:00.000Z";
+  await database.query(`
+    INSERT INTO engine_statistic_runs (
+      id, tournament_id, input_digest, rules_version, created_at, metadata
+    ) VALUES
+      ($1::uuid, $3::uuid, $4, 2, $6, '{}'::jsonb),
+      ($2::uuid, $3::uuid, $5, 2, $6, '{}'::jsonb)
+  `, [
+    matchRunId,
+    aggregateRunId,
+    fixture.tournamentId,
+    "8".repeat(64),
+    "9".repeat(64),
+    createdAt
+  ]);
+  await database.query(`
+    INSERT INTO engine_canonical_statistic_run_scopes (
+      statistic_run_id, tournament_id, run_kind, match_id, revision_id,
+      rules_version, created_at, metadata
+    ) VALUES
+      ($1::uuid, $3::uuid, 'match_revision', $4::uuid, $5::uuid,
+       2, $6, '{}'::jsonb),
+      ($2::uuid, $3::uuid, 'tournament_aggregate', NULL, NULL,
+       2, $6, '{}'::jsonb)
+  `, [
+    matchRunId,
+    aggregateRunId,
+    fixture.tournamentId,
+    fixture.matches[0]!.id,
+    revisionId,
+    createdAt
+  ]);
+  await database.query(`
+    INSERT INTO engine_canonical_statistic_values (
+      id, tournament_id, statistic_run_id, scope, match_id, pod_id, stage,
+      subject_type, subject_id, metric, numerator, denominator, value, metadata
+    ) VALUES (
+      $1::uuid, $2::uuid, $3::uuid, 'match', $4::uuid, NULL, 'pod',
+      'team', $5::uuid, 'makes', 99, NULL, 99, '{}'::jsonb
+    )
+  `, [
+    rawUuid(1252),
+    fixture.tournamentId,
+    matchRunId,
+    fixture.matches[0]!.id,
+    fixture.teamIds[0]
+  ]);
+  await database.query(`
+    UPDATE engine_active_tournament_statistic_runs
+    SET statistic_run_id = $2::uuid, rules_version = 2, activated_at = $3
+    WHERE tournament_id = $1::uuid
+  `, [fixture.tournamentId, aggregateRunId, createdAt]);
+}
+
 async function activeVersion(database: PostgresDatabase, tournamentId: string) {
   return (await database.query<{ projection_version: string }>(`
     SELECT projection_version::text FROM engine_active_projection_versions
@@ -566,7 +669,7 @@ async function seedResolvedMatch(
   matchIndex: number,
   status: "final" | "forfeited",
   idBase: number
-): Promise<void> {
+): Promise<string> {
   const match = fixture.matches[matchIndex];
   if (match === undefined) throw new Error("Resolved match fixture is missing.");
   const revisionId = stable(idBase, "match_revision");
@@ -676,6 +779,7 @@ async function seedResolvedMatch(
     "2027-01-03T00:00:00.000Z"
     ]);
     await client.query("COMMIT");
+    return revisionId;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
