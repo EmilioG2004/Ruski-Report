@@ -31,7 +31,7 @@ describe("AppExceptionFilter", () => {
       expect.objectContaining({
         code: "VALIDATION_FAILED",
         message: "Invalid request.",
-        requestId: "request-1",
+        requestId: "00000000-0000-4000-8000-000000000001",
         details: [
           {
             message: "gameType is required",
@@ -41,11 +41,12 @@ describe("AppExceptionFilter", () => {
       })
     );
     expect(logger.warning).toHaveBeenCalledWith(
-      "Invalid request.",
+      "Request rejected.",
       expect.objectContaining({
         component: "AppExceptionFilter",
         operation: "handleException",
-        requestId: "request-1"
+        requestId: "00000000-0000-4000-8000-000000000001",
+        metadata: expect.objectContaining({ errorCode: "VALIDATION_FAILED" })
       })
     );
     expect(logger.error).not.toHaveBeenCalled();
@@ -68,16 +69,16 @@ describe("AppExceptionFilter", () => {
       })
     );
     expect(logger.error).toHaveBeenCalledWith(
-      "Unhandled request error",
+      "Unhandled request error.",
       expect.objectContaining({
         component: "AppExceptionFilter",
         operation: "handleException",
-        requestId: "request-1"
+        requestId: "00000000-0000-4000-8000-000000000001"
       })
     );
   });
 
-  it("sets Retry-After without logging URL query values", () => {
+  it("sets Retry-After without logging URL or query values", () => {
     const logger = createMockLogger();
     const response = createMockResponse();
     const host = createMockHost(response, "/api/admin/auth/login?token=secret");
@@ -95,10 +96,10 @@ describe("AppExceptionFilter", () => {
 
     expect(response.setHeader).toHaveBeenCalledWith("Retry-After", "60");
     expect(logger.warning).toHaveBeenCalledWith(
-      "Try again later.",
+      "Request rejected.",
       expect.objectContaining({
         metadata: expect.objectContaining({
-          path: "/api/admin/auth/login"
+          errorCode: "RATE_LIMITED"
         })
       })
     );
@@ -106,10 +107,29 @@ describe("AppExceptionFilter", () => {
       expect.anything(),
       expect.objectContaining({
         metadata: expect.objectContaining({
-          url: expect.stringContaining("secret")
+          path: expect.anything()
         })
       })
     );
+  });
+
+  it("omits attacker-controlled request paths and non-UUID request IDs from logs", () => {
+    const logger = createMockLogger();
+    const filter = new AppExceptionFilter(logger);
+    const response = createMockResponse();
+    const host = createMockHost(
+      response,
+      "/api/private-canary-path?value=private-canary-query",
+      "private-canary-request-id"
+    );
+
+    filter.catch(new AppError({
+      code: "BAD_REQUEST",
+      message: "private-canary-message",
+      statusCode: HttpStatus.BAD_REQUEST
+    }), host);
+
+    expect(JSON.stringify(logger.warning.mock.calls)).not.toContain("private-canary");
   });
 });
 
@@ -140,12 +160,13 @@ function createMockHost(response: {
   setHeader: jest.Mock;
   status: jest.Mock;
   json: jest.Mock;
-}, url = "/api/tournaments/active"): ArgumentsHost {
+}, url = "/api/tournaments/active",
+requestId = "00000000-0000-4000-8000-000000000001"): ArgumentsHost {
   const request = {
     method: "GET",
     url,
     headers: {
-      "x-request-id": "request-1"
+      "x-request-id": requestId
     }
   };
 

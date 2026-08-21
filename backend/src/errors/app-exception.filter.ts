@@ -68,28 +68,25 @@ export class AppExceptionFilter implements ExceptionFilter {
       operation: "handleException",
       requestId,
       metadata: {
-        method: request.method,
-        path: request.url?.split("?", 1)[0],
+        method: safeHttpMethod(request.method),
         statusCode
       }
     };
 
     if (exception instanceof AppError && statusCode < 500) {
-      this.logger.warning(exception.message, {
+      this.logger.warning("Request rejected.", {
         ...context,
-        error: exception
+        metadata: {
+          ...context.metadata,
+          errorCode: exception.code
+        }
       });
       return;
     }
 
-    this.logger.error("Unhandled request error", {
+    this.logger.error("Unhandled request error.", {
       ...context,
-      error: exception instanceof Error ? exception : undefined,
-      metadata: {
-        ...context.metadata,
-        exception:
-          exception instanceof Error ? undefined : String(exception)
-      }
+      error: exception instanceof Error ? exception : undefined
     });
   }
 }
@@ -97,9 +94,16 @@ export class AppExceptionFilter implements ExceptionFilter {
 function extractRequestId(request: RequestLike): string | undefined {
   const value = request.headers?.["x-request-id"];
 
-  if (Array.isArray(value)) {
-    return value[0];
-  }
+  const selected = Array.isArray(value) ? value[0] : value;
+  return selected !== undefined &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
+      .test(selected)
+    ? selected
+    : undefined;
+}
 
-  return value;
+function safeHttpMethod(value: string | undefined): string | undefined {
+  return value !== undefined && /^[A-Z]{3,10}$/u.test(value)
+    ? value
+    : undefined;
 }
