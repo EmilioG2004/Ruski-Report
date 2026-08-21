@@ -5,6 +5,7 @@ import { CanonicalWorkbookParser } from "./canonical-workbook.parser";
 import {
   copyBlankWorksheet,
   createSanitizedMultiPlayerWorkbookFixture,
+  createSanitizedPlayerCountWorkbookFixture,
   createSanitizedWorkbookFixture,
   matchWorksheet,
   mutateWorkbook
@@ -253,6 +254,70 @@ describe("canonical workbook parser and preview", () => {
         fixture.scope.matches[0].participants[2].rosterMembershipId
     });
     expect(candidate?.participants).toHaveLength(16);
+  });
+
+  it("observes only cached numeric values from exact two-player summary formulas", async () => {
+    const fixture = await createSanitizedWorkbookFixture();
+    const parsed = await parser.parse({ buffer: fixture.buffer, scope: fixture.scope });
+    const sheet = parsed.scorecards.find((item) =>
+      item.matchId === fixture.matchIds[0]
+    );
+
+    expect(sheet?.formulaSummaryObservations).toHaveLength(32);
+    expect(sheet?.formulaSummaryObservations).toContainEqual({
+      sideNumber: 1,
+      subjectType: "player",
+      rosterSlot: 1,
+      metric: "misses",
+      formulaState: "exact",
+      cachedValue: null
+    });
+    expect(JSON.stringify(sheet?.formulaSummaryObservations)).not.toContain(
+      "SUMPRODUCT"
+    );
+  });
+
+  it.each([1, 3, 8])(
+    "observes generated team-total formulas for %i-player rosters",
+    async (playersPerTeam) => {
+      const fixture = await createSanitizedPlayerCountWorkbookFixture(
+        playersPerTeam
+      );
+      const parsed = await parser.parse({
+        buffer: fixture.buffer,
+        scope: fixture.scope
+      });
+      const sheet = parsed.scorecards.find((item) =>
+        item.matchId === fixture.matchIds[0]
+      );
+
+      expect(sheet?.formulaSummaryObservations).toHaveLength(16);
+      expect(sheet?.formulaSummaryObservations.every((item) =>
+        item.subjectType === "team" && item.formulaState === "exact"
+      )).toBe(true);
+    }
+  );
+
+  it("keeps formula-only cached-value churn outside the semantic fingerprint", async () => {
+    const fixture = await createSanitizedWorkbookFixture();
+    const changed = await mutateWorkbook(fixture.buffer, (workbook) => {
+      const sheet = matchWorksheet(workbook, fixture.matchIds[0]);
+      const formula = sheet.getCell("D3").value as { formula: string };
+      sheet.getCell("D3").value = { formula: formula.formula, result: 7 };
+    });
+    const preview = await parseAndPreview(changed, fixture.scope);
+    const observation = preview.observations.find((item) =>
+      item.matchId === fixture.matchIds[0]
+    );
+
+    expect(observation?.decision).toBe("unchanged");
+    expect(observation?.formulaSummaryObservations).toContainEqual(
+      expect.objectContaining({
+        metric: "misses",
+        formulaState: "exact",
+        cachedValue: 7
+      })
+    );
   });
 });
 

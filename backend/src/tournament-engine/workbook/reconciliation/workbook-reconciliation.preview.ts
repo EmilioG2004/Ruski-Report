@@ -395,7 +395,8 @@ function reconcileBoundSheet(
       rosterSlot: participant.rosterSlot,
       displayNameAtImport: participant.displayName
     })),
-    rawRows: normalizedRows
+    rawRows: normalizedRows,
+    formulaSummaryObservations: sheet.formulaSummaryObservations ?? []
   };
   return observation(sheet, "proposed", issues, { ...observationBase, candidate });
 }
@@ -567,6 +568,7 @@ function observation(
     worksheetIndex: sheet.worksheetIndex,
     worksheetName: sheet.worksheetName,
     sheetId: sheet.sheetId,
+    formulaSummaryObservations: sheet.formulaSummaryObservations ?? [],
     ...extra
   };
   return {

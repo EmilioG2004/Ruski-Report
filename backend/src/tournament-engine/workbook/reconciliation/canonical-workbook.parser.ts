@@ -27,6 +27,8 @@ import {
   ParsedCanonicalWorkbookControl,
   ParsedCanonicalWorkbookManifestEntry,
   ParseCanonicalWorkbookInput,
+  WorkbookFormulaSummaryMetric,
+  WorkbookFormulaSummaryObservation,
   WorkbookIssue,
   WorkbookParticipantIdentity
 } from "./types";
@@ -425,6 +427,10 @@ function parseScorecard(
   const team2Id = optionalStableId(text(metadata.team2Id), "tournament_team", issues, worksheet, "team2Id");
   const participants = parseParticipantDirectory(worksheet, playersPerTeam, issues);
   const rows = parseShotRows(worksheet, playersPerTeam, issues);
+  const formulaSummaryObservations = parseFormulaSummaryObservations(
+    worksheet,
+    playersPerTeam
+  );
   validateSheetMetadata(
     metadata,
     sheetKind,
@@ -453,10 +459,118 @@ function parseScorecard(
       : [team1Id, team2Id],
     participants,
     rows,
+    formulaSummaryObservations,
     issues
   };
   workbookIssues.push(...issues.filter((issue) => issue.code.startsWith("WORKBOOK_")));
   return sheet;
+}
+
+const SUMMARY_COUNT_METRICS: readonly WorkbookFormulaSummaryMetric[] = [
+  "misses",
+  "makes",
+  "splashOuts",
+  "guys",
+  "tris",
+  "dis",
+  "voms"
+];
+
+function parseFormulaSummaryObservations(
+  worksheet: Worksheet,
+  playersPerTeam: number
+): WorkbookFormulaSummaryObservation[] {
+  return ([
+    [1, "D", "E"],
+    [2, "M", "N"]
+  ] as const).flatMap(([sideNumber, firstStatColumn, makeColumn]) => {
+    if (playersPerTeam === 2) {
+      return [1, 2].flatMap((rosterSlot) => {
+        const summaryRow = rosterSlot + 2;
+        const percentageRow = rosterSlot + 4;
+        const parity = rosterSlot === 1 ? "=0" : "=1";
+        const counts = SUMMARY_COUNT_METRICS.map((metric, metricIndex) => {
+          const column = columnAt(firstStatColumn, metricIndex);
+          return formulaSummaryObservation(
+            worksheet.getCell(`${column}${summaryRow}`),
+            `SUMPRODUCT((${column}$10:${column}$89<>\"\")*(MOD(ROW(${column}$10:${column}$89),2)${parity}))`,
+            sideNumber,
+            "player",
+            metric,
+            rosterSlot
+          );
+        });
+        return [
+          ...counts,
+          formulaSummaryObservation(
+            worksheet.getCell(`${firstStatColumn}${percentageRow}`),
+            `IFERROR(${makeColumn}${summaryRow}/(${makeColumn}${summaryRow}+${firstStatColumn}${summaryRow}),0)`,
+            sideNumber,
+            "player",
+            "shootingPercentage",
+            rosterSlot
+          )
+        ];
+      });
+    }
+
+    const counts = SUMMARY_COUNT_METRICS.map((metric, metricIndex) => {
+      const column = columnAt(firstStatColumn, metricIndex);
+      return formulaSummaryObservation(
+        worksheet.getCell(`${column}3`),
+        `COUNTIF(${column}$10:${column}$89,\"<>\")`,
+        sideNumber,
+        "team",
+        metric
+      );
+    });
+    return [
+      ...counts,
+      formulaSummaryObservation(
+        worksheet.getCell(`${firstStatColumn}4`),
+        `IFERROR(${makeColumn}3/(${makeColumn}3+${firstStatColumn}3),0)`,
+        sideNumber,
+        "team",
+        "shootingPercentage"
+      )
+    ];
+  });
+}
+
+function formulaSummaryObservation(
+  cell: Cell,
+  expectedFormula: string,
+  sideNumber: 1 | 2,
+  subjectType: "player" | "team",
+  metric: WorkbookFormulaSummaryMetric,
+  rosterSlot?: number
+): WorkbookFormulaSummaryObservation {
+  const value = cell.value;
+  const formulaState = value === null || value === undefined
+    ? "missing"
+    : isFormula(value) && value.sharedFormula === undefined &&
+      value.formula === expectedFormula
+      ? "exact"
+      : "changed";
+  const cachedValue = isFormula(value)
+    ? finiteNumber(value.result)
+    : finiteNumber(value);
+  return {
+    sideNumber,
+    subjectType,
+    ...(rosterSlot === undefined ? {} : { rosterSlot }),
+    metric,
+    formulaState,
+    cachedValue
+  };
+}
+
+function finiteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function columnAt(firstColumn: string, offset: number): string {
+  return String.fromCharCode(firstColumn.charCodeAt(0) + offset);
 }
 
 function parsePlayersPerTeam(
@@ -884,7 +998,13 @@ function readShooter(
   return normalizeCellValue(value.result ?? null);
 }
 
-function isFormula(value: CellValue): boolean {
+function isFormula(
+  value: CellValue
+): value is Exclude<CellValue, null> & {
+  formula?: string;
+  sharedFormula?: string;
+  result?: CellValue;
+} {
   return value !== null && typeof value === "object" &&
     ("formula" in value || "sharedFormula" in value);
 }

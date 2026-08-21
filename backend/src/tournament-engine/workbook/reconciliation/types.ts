@@ -128,6 +128,25 @@ export interface ParsedWorkbookShotRow {
   }>;
 }
 
+export type WorkbookFormulaSummaryMetric =
+  | "misses"
+  | "makes"
+  | "splashOuts"
+  | "guys"
+  | "tris"
+  | "dis"
+  | "voms"
+  | "shootingPercentage";
+
+export interface WorkbookFormulaSummaryObservation {
+  readonly sideNumber: 1 | 2;
+  readonly subjectType: "player" | "team";
+  readonly rosterSlot?: number;
+  readonly metric: WorkbookFormulaSummaryMetric;
+  readonly formulaState: "exact" | "changed" | "missing";
+  readonly cachedValue: number | null;
+}
+
 export interface NormalizedWorkbookShotRow {
   readonly sideNumber: 1 | 2;
   readonly worksheetRow: number;
@@ -153,6 +172,8 @@ export interface ParsedCanonicalScorecardSheet {
   readonly teamIds?: readonly [TournamentTeamId, TournamentTeamId];
   readonly participants: readonly WorkbookParticipantIdentity[];
   readonly rows: readonly ParsedWorkbookShotRow[];
+  readonly formulaSummaryObservations:
+    readonly WorkbookFormulaSummaryObservation[];
   readonly issues: readonly WorkbookIssue[];
 }
 
@@ -202,6 +223,8 @@ export interface WorkbookMatchRevisionCandidate {
   readonly participantDigest: string;
   readonly participants: readonly WorkbookRevisionParticipant[];
   readonly rawRows: readonly NormalizedWorkbookShotRow[];
+  readonly formulaSummaryObservations?:
+    readonly WorkbookFormulaSummaryObservation[];
 }
 
 export interface WorkbookSheetObservation {
@@ -214,6 +237,8 @@ export interface WorkbookSheetObservation {
   readonly fingerprint?: string;
   readonly decision: WorkbookSheetObservationDecision;
   readonly issues: readonly WorkbookIssue[];
+  readonly formulaSummaryObservations?:
+    readonly WorkbookFormulaSummaryObservation[];
   readonly candidate?: WorkbookMatchRevisionCandidate;
 }
 

@@ -31,6 +31,12 @@ export async function createSanitizedMultiPlayerWorkbookFixture(): Promise<Sanit
   return createFixture(8);
 }
 
+export async function createSanitizedPlayerCountWorkbookFixture(
+  playersPerTeam: number
+): Promise<SanitizedWorkbookFixture> {
+  return createFixture(playersPerTeam);
+}
+
 async function createFixture(playersPerTeam: number): Promise<SanitizedWorkbookFixture> {
   const tournamentId = stable(1, "tournament");
   const podId = stable(2, "pod");
