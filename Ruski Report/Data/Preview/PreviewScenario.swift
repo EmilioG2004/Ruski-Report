@@ -22,6 +22,9 @@ nonisolated enum PreviewScenario: String, Equatable {
     case publicTwo = "public-two"
     case publicStates = "public-states"
     case publicLongContent = "public-long-content"
+    case publicOffline = "public-offline"
+    case publicRecovering = "public-recovering"
+    case publicPartialDetail = "public-partial-detail"
 
     static func resolve(from arguments: [String]) -> PreviewScenario {
         guard let flagIndex = arguments.firstIndex(of: argumentName),

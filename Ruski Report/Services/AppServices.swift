@@ -53,6 +53,11 @@ struct AppServices {
                 PublicDisplayFixtures.tournamentDetail,
                 PublicDisplayFixtures.secondaryTournamentDetail
             ]
+        case .publicPartialDetail:
+            [
+                PublicDisplayFixtures.tournamentDetail,
+                PublicDisplayFixtures.secondaryTournamentDetail
+            ]
         case .longContent, .publicLongContent:
             [PublicDisplayFixtures.longContentTournamentDetail]
         default:
@@ -66,15 +71,16 @@ struct AppServices {
         }
         let usesCanonicalPublicAPI: Bool
         switch scenario {
-        case .publicZero, .publicTwo, .publicStates, .publicLongContent:
+        case .publicZero, .publicTwo, .publicStates, .publicLongContent,
+             .publicOffline, .publicRecovering, .publicPartialDetail:
             usesCanonicalPublicAPI = true
         default:
             usesCanonicalPublicAPI = false
         }
         let tournamentNetworkCondition: PreviewNetworkCondition = switch scenario {
-        case .unavailable:
+        case .unavailable, .publicOffline:
             .unavailable
-        case .recovering:
+        case .recovering, .publicRecovering:
             .delayedRecovery
         default:
             .available
@@ -87,6 +93,9 @@ struct AppServices {
             tournaments: PreviewTournamentRepository(
                 detail: tournamentDetail,
                 publicDetails: publicTournamentDetails,
+                unavailablePublicDetailIds: scenario == .publicPartialDetail
+                    ? [PublicDisplayFixtures.secondaryTournamentId]
+                    : [],
                 networkCondition: tournamentNetworkCondition
             ),
             matches: PreviewMatchRepository(

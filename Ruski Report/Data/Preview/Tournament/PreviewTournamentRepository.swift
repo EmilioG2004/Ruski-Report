@@ -8,15 +8,24 @@ import Foundation
 nonisolated final class PreviewTournamentRepository: TournamentRepository {
     private let detail: TournamentDetail
     private let publicDetails: [PublicTournamentDetail]
+    private let historicalPublicDetails: [PublicTournamentDetail]
+    private let unavailablePublicDetailIds: Set<String>
     private let responseGate: PreviewTournamentResponseGate
 
     init(
         detail: TournamentDetail = PreviewData.tournamentDetail,
         publicDetails: [PublicTournamentDetail] = [PublicDisplayFixtures.tournamentDetail],
+        historicalPublicDetails: [PublicTournamentDetail] = [
+            PublicDisplayFixtures.completedTournamentDetail,
+            PublicDisplayFixtures.archivedTournamentDetail
+        ],
+        unavailablePublicDetailIds: Set<String> = [],
         networkCondition: PreviewNetworkCondition = .available
     ) {
         self.detail = detail
         self.publicDetails = publicDetails
+        self.historicalPublicDetails = historicalPublicDetails
+        self.unavailablePublicDetailIds = unavailablePublicDetailIds
         responseGate = PreviewTournamentResponseGate(
             condition: networkCondition
         )
@@ -53,12 +62,22 @@ nonisolated final class PreviewTournamentRepository: TournamentRepository {
         return publicDetails.map(\.summary)
     }
 
+    func historicalTournaments() async throws -> [PublicTournamentSummary] {
+        try await responseGate.waitForResponse()
+        return historicalPublicDetails.map(\.summary)
+    }
+
     func tournament(
         id: PublicTournamentSummary.ID,
         projectionVersion: Int64
     ) async throws -> PublicTournamentDetail {
         try await responseGate.waitForResponse()
-        guard let detail = publicDetails.first(where: {
+        guard !unavailablePublicDetailIds.contains(id) else {
+            throw AppError.networkUnavailable(
+                "Tournament game details are temporarily unavailable."
+            )
+        }
+        guard let detail = (publicDetails + historicalPublicDetails).first(where: {
             $0.id == id && $0.projection.version == projectionVersion
         }) else {
             throw AppError.badStatus(code: 404, message: "Tournament not found.")
