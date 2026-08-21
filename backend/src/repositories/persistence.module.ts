@@ -7,6 +7,7 @@ import {
   PostgresTransactionManager
 } from "../database";
 import {
+  PostgresCanonicalStatisticRepository,
   PostgresMatchRevisionRepository,
   PostgresMatchWriterRepository,
   PostgresProjectionRepository,
@@ -80,6 +81,7 @@ const tournamentEngineRepositoryTokens = [
   PostgresRosterRepository,
   PostgresMatchWriterRepository,
   PostgresMatchRevisionRepository,
+  PostgresCanonicalStatisticRepository,
   PostgresProjectionRepository,
   PostgresWorkbookReconciliationRepository
 ];
@@ -116,6 +118,12 @@ const tournamentEngineRepositoryProviders = [
     ) => new PostgresMatchWriterRepository(database, transactions)
   },
   {
+    provide: PostgresCanonicalStatisticRepository,
+    inject: [PostgresDatabase],
+    useFactory: (database: PostgresDatabase) =>
+      new PostgresCanonicalStatisticRepository(database)
+  },
+  {
     provide: PostgresMatchRevisionRepository,
     inject: [PostgresDatabase, TournamentEngineTransactionManager],
     useFactory: (
@@ -133,11 +141,26 @@ const tournamentEngineRepositoryProviders = [
   },
   {
     provide: PostgresWorkbookReconciliationRepository,
-    inject: [PostgresDatabase, TournamentEngineTransactionManager],
+    inject: [
+      PostgresDatabase,
+      TournamentEngineTransactionManager,
+      PostgresMatchWriterRepository,
+      PostgresMatchRevisionRepository,
+      PostgresCanonicalStatisticRepository
+    ],
     useFactory: (
       database: PostgresDatabase,
-      transactions: TournamentEngineTransactionManager
-    ) => new PostgresWorkbookReconciliationRepository(database, transactions)
+      transactions: TournamentEngineTransactionManager,
+      writers: PostgresMatchWriterRepository,
+      revisions: PostgresMatchRevisionRepository,
+      statistics: PostgresCanonicalStatisticRepository
+    ) => new PostgresWorkbookReconciliationRepository(
+      database,
+      transactions,
+      writers,
+      revisions,
+      statistics
+    )
   }
 ];
 
