@@ -1,9 +1,13 @@
 import { AppError } from "../../errors";
 import { parseStableUuid } from "../../tournament-engine/domain";
 import {
+  digestWorkbookParticipants,
+  digestWorkbookValue,
   PostgresWorkbookReconciliationRepository,
   StoreGeneratedWorkbookInput,
-  WorkbookGenerationSourceRecord
+  WorkbookGenerationSourceRecord,
+  WorkbookImportPreviewRecord,
+  WorkbookRevisionCandidateInput
 } from "../../tournament-engine/workbook";
 import { AdministratorPrincipal } from "../security";
 import { AdminTournamentWorkbookService } from "./admin-tournament-workbook.service";
@@ -117,6 +121,86 @@ describe("AdminTournamentWorkbookService", () => {
     });
     expect(repository.storeGeneratedWorkbook).not.toHaveBeenCalled();
   });
+
+  it("reads v1 candidate envelopes and exposes canonical proposed impact", async () => {
+    const source = generationSource();
+    const candidate = revisionCandidate(source, 1);
+    const batch = previewRecord(source, candidate);
+    const repository = {
+      findImportPreview: jest.fn().mockResolvedValue(batch),
+      readGenerationSource: jest.fn().mockResolvedValue(source)
+    } as unknown as PostgresWorkbookReconciliationRepository;
+    const service = new AdminTournamentWorkbookService(repository);
+
+    const response = await service.findPreview(TOURNAMENT_ID, batch.batchId);
+
+    expect(response.observations[0]).toMatchObject({
+      currentImpact: null,
+      proposedImpact: {
+        winnerTeamId: source.matches[0]?.participantTeamIds[0],
+        matchTotals: { attempts: 1, makes: 1, cupsScored: 1 }
+      }
+    });
+    expect(response.observations[0]?.proposedImpact?.teams.map((team) => team.score))
+      .toEqual([1, 0]);
+  });
+
+  it("passes the planned confirmation digest and returns materialization results", async () => {
+    const source = generationSource();
+    const candidate = revisionCandidate(source, 2, 2);
+    const batch = previewRecord(source, candidate);
+    const confirmImport = jest.fn().mockResolvedValue({
+      batchId: batch.batchId,
+      tournamentId: TOURNAMENT_ID,
+      status: "applied",
+      appliedMatchIds: [candidate.matchId],
+      skippedMatchIds: [],
+      unchangedMatchIds: [],
+      missingMatchIds: [],
+      materializedRevisions: [{
+        matchId: candidate.matchId,
+        candidateId: candidate.candidateId,
+        revisionId: stable(603, "match_revision"),
+        matchStatisticRunId: stable(604, "match_revision"),
+        matchRowVersion: 2
+      }],
+      tournamentStatisticRunId: stable(605, "match_revision"),
+      tournamentStatisticRunDigest: "9".repeat(64),
+      completedAt: "2026-08-20T13:00:00.000Z"
+    });
+    const repository = {
+      findImportPreview: jest.fn().mockResolvedValue(batch),
+      readGenerationSource: jest.fn().mockResolvedValue(source),
+      confirmImport
+    } as unknown as PostgresWorkbookReconciliationRepository;
+    const service = new AdminTournamentWorkbookService(repository);
+
+    const response = await service.apply(
+      TOURNAMENT_ID,
+      batch.batchId,
+      {
+        previewDigest: batch.previewDigest,
+        acceptedObservationIds: [batch.observations[0]?.observationId],
+        skippedObservationIds: [],
+        correctionReasons: {}
+      },
+      PRINCIPAL
+    );
+
+    expect(confirmImport).toHaveBeenCalledWith(expect.objectContaining({
+      previewDigest: batch.previewDigest,
+      confirmationDigest: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      acceptedObservationIds: [batch.observations[0]?.observationId]
+    }));
+    expect(response).toMatchObject({
+      acceptedCount: 1,
+      materializedRevisions: [{
+        candidateId: candidate.candidateId,
+        matchRowVersion: 2
+      }],
+      tournamentStatisticRunDigest: "9".repeat(64)
+    });
+  });
 });
 
 function generationSource(): WorkbookGenerationSourceRecord {
@@ -182,7 +266,152 @@ function generationSource(): WorkbookGenerationSourceRecord {
       sequenceInPod: 1,
       roundNumber: 1,
       gameNumberForPair: 1,
+      activeScoringPreview: null,
       workbookState: null
+    }]
+  };
+}
+
+function revisionCandidate(
+  source: WorkbookGenerationSourceRecord,
+  suffix: number,
+  envelopeSchemaVersion: 1 | 2 = 1
+): WorkbookRevisionCandidateInput {
+  const match = source.matches[0];
+  if (match === undefined) {
+    throw new Error("Sanitized source requires a match.");
+  }
+  const teams = match.participantTeams.map((team) => ({
+    sideNumber: team.sideNumber,
+    teamId: team.teamId,
+    displayName: team.name,
+    players: team.players.map((player) => ({
+      ...player,
+      displayName: player.displayName
+    }))
+  }));
+  const participantDigest = digestWorkbookParticipants(teams);
+  const candidateId = `00000000-0000-4000-8000-${String(600 + suffix).padStart(12, "0")}`;
+  const participants = teams.flatMap((team) => team.players.map((player) => ({
+    sideNumber: team.sideNumber,
+    teamId: team.teamId,
+    playerId: player.playerId,
+    rosterMembershipId: player.rosterMembershipId,
+    rosterSlot: player.rosterSlot,
+    displayNameAtImport: player.displayName
+  })));
+  const rows = ([1, 2] as const).flatMap((sideNumber) =>
+    Array.from({ length: 80 }, (_, index) => {
+      const team = teams[sideNumber - 1];
+      const player = team?.players[index % 2];
+      if (team === undefined || player === undefined) {
+        throw new Error("Sanitized source participant is missing.");
+      }
+      return {
+        sideNumber,
+        worksheetRow: index + 10,
+        shotNumber: Math.floor(index / 2) + 1,
+        teamId: team.teamId,
+        playerId: player.playerId,
+        rosterMembershipId: player.rosterMembershipId,
+        rosterSlot: player.rosterSlot,
+        markers: {
+          miss: false,
+          make: sideNumber === 1 && index === 0,
+          splashOut: false,
+          guy: false,
+          tri: false,
+          di: false,
+          vom: false
+        }
+      };
+    })
+  );
+  const envelope = {
+    contract: envelopeSchemaVersion === 1
+      ? "workbook-match-revision-candidate-v1"
+      : "workbook-match-revision-candidate-v2",
+    semanticCandidateId: candidateId,
+    tournamentId: source.tournament.tournamentId,
+    matchId: match.matchId,
+    sourceRevisionNumber: 1,
+    previousCandidateId: null,
+    fingerprint: "f".repeat(64),
+    proposedStatus: "final",
+    proposedScoreAvailability: "complete",
+    reason: "initial",
+    participantDigest,
+    participants,
+    rows,
+    ...(envelopeSchemaVersion === 1 ? {} : {
+      formulaSummaryObservations: [{
+        sideNumber: 1,
+        subjectType: "team",
+        metric: "makes",
+        formulaState: "changed",
+        cachedValue: 999
+      }]
+    })
+  };
+  return {
+    candidateId,
+    matchId: match.matchId,
+    sourceRevisionNumber: 1,
+    fingerprint: "f".repeat(64),
+    proposedStatus: "final",
+    proposedScoreAvailability: "complete",
+    reason: "initial",
+    requiresConfirmation: false,
+    expectedMatchRowVersion: match.rowVersion,
+    expectedSourceStateVersion: 0,
+    envelopeSchemaVersion,
+    envelope,
+    envelopeDigest: digestWorkbookValue(envelope),
+    participantDigest,
+    teams
+  };
+}
+
+function previewRecord(
+  source: WorkbookGenerationSourceRecord,
+  candidate: WorkbookRevisionCandidateInput
+): WorkbookImportPreviewRecord {
+  const observationId = "00000000-0000-4000-8000-000000000703";
+  return {
+    batchId: "00000000-0000-4000-8000-000000000701",
+    tournamentId: source.tournament.tournamentId,
+    workbookId: "00000000-0000-4000-8000-000000000702",
+    supersedesBatchId: null,
+    workbookSchemaVersion: 1,
+    sourceWorkbookDigest: "b".repeat(64),
+    sourceSizeBytes: 1024,
+    baseTournamentRowVersion: source.tournament.rowVersion,
+    previewDigest: "c".repeat(64),
+    status: "preview_ready",
+    receivedByAdminId: PRINCIPAL.administratorId,
+    receivedAt: "2026-08-20T12:00:00.000Z",
+    previewedAt: "2026-08-20T12:01:00.000Z",
+    previewExpiresAt: "2099-08-21T12:01:00.000Z",
+    confirmedByAdminId: null,
+    confirmedAt: null,
+    completedAt: null,
+    counts: { recognized: 1, proposed: 1, unchanged: 0, missing: 0, invalid: 0 },
+    observations: [{
+      observationId,
+      observationKind: "present",
+      sheetOrdinal: 3,
+      workbookSheetId: null,
+      matchId: candidate.matchId,
+      assignmentSource: "stable_metadata",
+      disposition: "proposed",
+      fingerprint: candidate.fingerprint,
+      baseMatchRowVersion: candidate.expectedMatchRowVersion,
+      baseSourceStateVersion: candidate.expectedSourceStateVersion,
+      sourceEnvelopeSchemaVersion: 1,
+      sourceEnvelopeDigest: "d".repeat(64),
+      sourceEnvelope: { sheet: { worksheetIndex: 2, worksheetName: "Game 1" } },
+      validationIssues: [],
+      candidate
     }]
   };
 }
