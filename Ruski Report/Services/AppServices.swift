@@ -18,6 +18,7 @@ struct AppServices {
     let realtime: any RealtimeUpdateRepository
     let logger: any AppLogger
     let initialTournament: TournamentPreview
+    let usesCanonicalPublicAPI: Bool
     let policyLinks: AppPolicyLinks
 
     static let preview = preview(scenario: .standard)
@@ -44,6 +45,32 @@ struct AppServices {
         default:
             tournamentDetail = PreviewData.tournamentDetail
         }
+        let publicTournamentDetails: [PublicTournamentDetail] = switch scenario {
+        case .empty, .publicZero:
+            []
+        case .publicTwo:
+            [
+                PublicDisplayFixtures.tournamentDetail,
+                PublicDisplayFixtures.secondaryTournamentDetail
+            ]
+        case .longContent, .publicLongContent:
+            [PublicDisplayFixtures.longContentTournamentDetail]
+        default:
+            [PublicDisplayFixtures.tournamentDetail]
+        }
+        let publicMatchIds = Set(
+            publicTournamentDetails.flatMap(\.matches).map(\.id)
+        )
+        let publicMatchDetails = PublicDisplayFixtures.matchDetailsById.filter {
+            publicMatchIds.contains($0.key)
+        }
+        let usesCanonicalPublicAPI: Bool
+        switch scenario {
+        case .publicZero, .publicTwo, .publicStates, .publicLongContent:
+            usesCanonicalPublicAPI = true
+        default:
+            usesCanonicalPublicAPI = false
+        }
         let tournamentNetworkCondition: PreviewNetworkCondition = switch scenario {
         case .unavailable:
             .unavailable
@@ -59,9 +86,12 @@ struct AppServices {
             games: PreviewGameRepository(),
             tournaments: PreviewTournamentRepository(
                 detail: tournamentDetail,
+                publicDetails: publicTournamentDetails,
                 networkCondition: tournamentNetworkCondition
             ),
-            matches: PreviewMatchRepository(),
+            matches: PreviewMatchRepository(
+                publicMatchDetails: publicMatchDetails
+            ),
             comments: PreviewCommentRepository(
                 blockingState: blockingState,
                 postError: previewCommentPostError(for: scenario)
@@ -81,6 +111,7 @@ struct AppServices {
             realtime: NoopRealtimeUpdateRepository(),
             logger: logger,
             initialTournament: tournamentDetail.preview,
+            usesCanonicalPublicAPI: usesCanonicalPublicAPI,
             policyLinks: .productionFallback
         )
     }
@@ -196,6 +227,7 @@ struct AppServices {
             ),
             logger: logger,
             initialTournament: PreviewData.tournamentPreview,
+            usesCanonicalPublicAPI: true,
             policyLinks: config.policyLinks
         )
     }
