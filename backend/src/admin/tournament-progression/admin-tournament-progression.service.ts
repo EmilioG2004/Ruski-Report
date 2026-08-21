@@ -1,16 +1,24 @@
 import { randomUUID } from "node:crypto";
 
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Inject, Injectable, Optional } from "@nestjs/common";
 
 import { AppError } from "../../errors";
 import {
   BracketNodeInput,
   BracketSlotInput,
+  CanonicalProjectionActivationResult,
+  notifyCanonicalProjectionActivation,
+  PostgresProjectionRepository,
   PostgresTournamentProgressionRepository,
   PublishBracketInput,
+  refreshCanonicalProjectionInTransaction,
   TournamentEngineTransactionManager,
   TournamentProgressionRecord
 } from "../../tournament-engine/persistence";
+import {
+  createCanonicalProjectionActivationListener,
+  RealtimeUpdatePublisher
+} from "../../realtime";
 import {
   BracketResolutionPlan,
   EffectiveSeedPlan,
@@ -76,7 +84,13 @@ export class AdminTournamentProgressionService {
   constructor(
     private readonly repository: PostgresTournamentProgressionRepository,
     private readonly workbooks: PostgresWorkbookReconciliationRepository,
-    private readonly transactions: TournamentEngineTransactionManager
+    private readonly transactions: TournamentEngineTransactionManager,
+    @Optional()
+    @Inject(PostgresProjectionRepository)
+    private readonly projections?: PostgresProjectionRepository,
+    @Optional()
+    @Inject(RealtimeUpdatePublisher)
+    private readonly realtime?: RealtimeUpdatePublisher
   ) {}
 
   async get(tournamentIdValue: string): Promise<TournamentProgressionRecord> {
@@ -593,7 +607,8 @@ export class AdminTournamentProgressionService {
         prepared.source,
         workbookId
       );
-      return await this.transactions.run(async (transaction) => {
+      let projection: CanonicalProjectionActivationResult | undefined;
+      const result = await this.transactions.run(async (transaction) => {
         const stored = await this.workbooks.storeGeneratedWorkbookInTransaction({
           workbookId,
           tournamentId: prepared.progression.tournamentId,
@@ -621,6 +636,20 @@ export class AdminTournamentProgressionService {
           ),
           transaction
         );
+        projection = await refreshCanonicalProjectionInTransaction(
+          this.projections,
+          {
+            tournamentId: prepared.progression.tournamentId,
+            expectedTournamentRowVersion: publication.tournamentRowVersion,
+            occurredAt: generatedAt,
+            sourceCommandType: "bracket_published",
+            actor: {
+              kind: "administrator",
+              id: principal.administratorId
+            }
+          },
+          transaction
+        );
         return {
           ...publication,
           workbook: {
@@ -632,6 +661,13 @@ export class AdminTournamentProgressionService {
           }
         };
       });
+      notifyCanonicalProjectionActivation(
+        this.realtime === undefined
+          ? undefined
+          : createCanonicalProjectionActivationListener(this.realtime),
+        projection
+      );
+      return result;
     } catch (error) {
       throw mapProgressionError(error);
     }
