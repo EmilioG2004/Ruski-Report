@@ -146,7 +146,7 @@ describe("administrator web controllers", () => {
     const host = {
       switchToHttp: () => ({
         getRequest: () => request({
-          "x-request-id": "request-123"
+          "x-request-id": "123e4567-e89b-42d3-a456-426614174000"
         }, {
           method: "POST",
           url: "/api/admin/app/recovery/complete?token=raw-query-secret"
@@ -160,7 +160,7 @@ describe("administrator web controllers", () => {
     const logged = JSON.stringify(logger.error.mock.calls);
     expect(logged).toContain("Administrator web request failed.");
     expect(logged).toContain("/api/admin/app/recovery/complete");
-    expect(logged).toContain("request-123");
+    expect(logged).toContain("123e4567-e89b-42d3-a456-426614174000");
     expect(logged).not.toContain("raw-query-secret");
     expect(logged).not.toContain("raw-error-secret");
     expect(logged).not.toContain("password");

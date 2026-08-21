@@ -29,11 +29,24 @@ export function administratorRequestContext(
   networkIdentity?: string;
   userAgent?: string;
 } {
+  const requestId = safeAdministratorRequestId(
+    headerValue(request, "x-request-id")
+  );
   return {
-    requestId: headerValue(request, "x-request-id"),
+    ...(requestId === undefined ? {} : { requestId }),
     networkIdentity: request.ip ?? request.socket?.remoteAddress,
     userAgent: headerValue(request, "user-agent")
   };
+}
+
+export function safeAdministratorRequestId(
+  value: string | undefined
+): string | undefined {
+  return value !== undefined &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu
+      .test(value)
+    ? value
+    : undefined;
 }
 
 export function headerValue(

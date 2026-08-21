@@ -24,7 +24,8 @@ import {
   AdministratorSessionGuard,
   CurrentAdministratorPrincipal,
   administratorRequestContext,
-  readAdministratorCookie
+  readAdministratorCookie,
+  safeAdministratorRequestId
 } from "../security";
 import {
   AdminTournamentDetailResponse,
@@ -315,8 +316,8 @@ function webAuditRequestContext(request: AdminWebRequest): {
   const { requestId, ...hashedContext } = administratorRequestContext(request);
   return {
     ...hashedContext,
-    ...(requestId !== undefined && /^[A-Za-z0-9._:-]{1,100}$/u.test(requestId)
-      ? { requestId }
+    ...(safeAdministratorRequestId(requestId) !== undefined
+      ? { requestId: safeAdministratorRequestId(requestId) }
       : {})
   };
 }

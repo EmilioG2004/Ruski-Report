@@ -72,7 +72,9 @@ describe("AdminTournamentsController", () => {
       request,
       principal,
       {
-        headers: { "x-request-id": "request-1" },
+        headers: {
+          "x-request-id": "123e4567-e89b-42d3-a456-426614174000"
+        },
         ip: "127.0.0.1"
       }
     );
@@ -85,7 +87,7 @@ describe("AdminTournamentsController", () => {
       },
       principal,
       {
-        requestId: "request-1",
+        requestId: "123e4567-e89b-42d3-a456-426614174000",
         networkIdentity: "127.0.0.1",
         userAgent: undefined
       }
