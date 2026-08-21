@@ -26,6 +26,12 @@ import {
 } from "./repository-result.mapper";
 import { RealtimeUpdatePublisher } from "../realtime";
 import { APP_LOGGER, AppLogger } from "../logging";
+import { PUBLIC_PROJECTION_READ_REPOSITORY } from
+  "./v2/public-projection-read.repository";
+import type {
+  PublicProjectionReadRepository,
+  VisiblePublicMatchReference
+} from "./v2/public-projection-read.repository";
 
 export interface CreateCommentRequest {
   body?: string;
@@ -38,6 +44,8 @@ export class CommentsService {
     private readonly commentRepository: CommentRepository,
     @Inject(TOURNAMENT_READ_REPOSITORY)
     private readonly tournamentReadRepository: TournamentReadRepository,
+    @Inject(PUBLIC_PROJECTION_READ_REPOSITORY)
+    private readonly publicProjectionReadRepository: PublicProjectionReadRepository,
     @Inject(TRANSACTION_MANAGER)
     private readonly transactions: TransactionManager,
     private readonly realtimeUpdates: RealtimeUpdatePublisher,
@@ -123,6 +131,9 @@ export class CommentsService {
     this.realtimeUpdates.publishCommentsUpdated({
       tournamentId: match.tournamentId,
       matchId,
+      ...("projectionVersion" in match
+        ? { projectionVersion: match.projectionVersion }
+        : {}),
       metadata: {
         commentId: comment.id
       }
@@ -131,17 +142,25 @@ export class CommentsService {
     return comment;
   }
 
-  private async requireMatch(matchId: string): Promise<MatchDetail> {
+  private async requireMatch(
+    matchId: string
+  ): Promise<Pick<MatchDetail, "id" | "tournamentId"> | VisiblePublicMatchReference> {
     const match = unwrapRepositoryResult(
       await this.tournamentReadRepository.findMatchDetail(matchId),
       "Unable to load match detail."
     );
 
-    if (match === null) {
-      throw resourceNotFound("Match was not found.", "matchId", matchId);
+    if (match !== null) {
+      return match;
     }
 
-    return match;
+    const canonicalMatch = await this.publicProjectionReadRepository
+      .findVisibleMatchReference(matchId);
+    if (canonicalMatch !== null) {
+      return canonicalMatch;
+    }
+
+    throw resourceNotFound("Match was not found.", "matchId", matchId);
   }
 
   private earliestDuplicateCreatedAt(): string {

@@ -18,12 +18,14 @@ import { MatchesController } from "./matches.controller";
 import { MatchesService } from "./matches.service";
 import { TournamentsController } from "./tournaments.controller";
 import { TournamentsService } from "./tournaments.service";
+import { PublicV2Module } from "./v2";
 
 @Module({
   imports: [
     AuthModule,
     CommentModerationModule,
     PersistenceModule,
+    PublicV2Module,
     RealtimeModule
   ],
   controllers: [

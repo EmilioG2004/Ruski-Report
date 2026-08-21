@@ -34,6 +34,8 @@ import { CommentsService } from "./comments.service";
 import { GamesService } from "./games.service";
 import { MatchesService } from "./matches.service";
 import { TournamentsService } from "./tournaments.service";
+import { PublicProjectionReadRepository } from
+  "./v2/public-projection-read.repository";
 
 class EmptyTournamentReadRepository implements TournamentReadRepository {
   async findActiveTournament(): Promise<
@@ -450,6 +452,37 @@ describe("public API services", () => {
       statusCode: 404
     } satisfies Partial<AppError>);
   });
+
+  it("accepts comments for a match in the active canonical projection", async () => {
+    const projections = emptyPublicProjections();
+    projections.findVisibleMatchReference = jest.fn().mockResolvedValue({
+      matchId: "match-2027-001",
+      tournamentId: "tournament-2027",
+      projectionVersion: 3
+    });
+    const realtime = createRealtimeUpdates();
+    const service = createCommentsService(
+      new InMemoryCommentRepository(),
+      new EmptyTournamentReadRepository(),
+      realtime,
+      createLogger(),
+      projections
+    );
+
+    const comment = await service.createMatchComment(
+      "match-2027-001",
+      { body: "Canonical match comment." },
+      authenticatedPrincipal
+    );
+
+    expect(comment.matchId).toBe("match-2027-001");
+    expect(realtime.publishCommentsUpdated).toHaveBeenCalledWith({
+      tournamentId: "tournament-2027",
+      matchId: "match-2027-001",
+      projectionVersion: 3,
+      metadata: { commentId: comment.id }
+    });
+  });
 });
 
 function createRealtimeUpdates(): jest.Mocked<RealtimeUpdatePublisher> {
@@ -473,7 +506,8 @@ function createCommentsService(
   comments: CommentRepository,
   tournaments: TournamentReadRepository,
   realtimeUpdates: RealtimeUpdatePublisher,
-  logger: AppLogger = createLogger()
+  logger: AppLogger = createLogger(),
+  projections: PublicProjectionReadRepository = emptyPublicProjections()
 ): CommentsService {
   const normalizer = new CommentBodyNormalizer();
   const moderation = new ConfiguredCommentModerationPolicy(
@@ -484,6 +518,7 @@ function createCommentsService(
   return new CommentsService(
     comments,
     tournaments,
+    projections,
     new InMemoryTransactionManager(),
     realtimeUpdates,
     new DefaultCommentSubmissionPolicy(
@@ -494,6 +529,17 @@ function createCommentsService(
     commentsConfig,
     logger
   );
+}
+
+function emptyPublicProjections(): jest.Mocked<PublicProjectionReadRepository> {
+  return {
+    listActiveTournaments: jest.fn().mockResolvedValue([]),
+    hasPublicTournament: jest.fn().mockResolvedValue(false),
+    findTournament: jest.fn().mockResolvedValue(null),
+    findTournamentMatches: jest.fn().mockResolvedValue(null),
+    findMatch: jest.fn().mockResolvedValue(null),
+    findVisibleMatchReference: jest.fn().mockResolvedValue(null)
+  };
 }
 
 function createLogger(): jest.Mocked<AppLogger> {
