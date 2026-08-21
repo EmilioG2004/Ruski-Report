@@ -60,6 +60,21 @@ interface ProjectionMatchPayloadRow extends QueryResultRow {
   detail_payload: CanonicalPublicMatch;
 }
 
+interface LegacyTournamentStatisticCorrectionSummary {
+  policy: "canonical_match_events_v1";
+  mismatchCount: number;
+  mismatchDigest: string;
+}
+
+interface LegacyTournamentStatisticCorrection {
+  scope: "season" | "playoffs";
+  subjectType: "team" | "player";
+  subjectId: string;
+  metric: string;
+  legacyValue: number | null;
+  canonicalValue: number | null;
+}
+
 interface CountRow extends QueryResultRow {
   tournaments: string;
   teams: string;
@@ -180,7 +195,10 @@ implements LegacyBackfillRepository {
             }
           }
         }, transaction);
-      await assertSemanticProjectionEquivalence(client, plan);
+      const statisticCorrections = await assertSemanticProjectionEquivalence(
+        client,
+        plan
+      );
       const protectedDigestAfter = await readProtectedLegacyDigest(client, plan);
       if (protectedDigestAfter !== protectedDigest) {
         throw new Error("Protected legacy identity and moderation rows changed.");
@@ -190,7 +208,14 @@ implements LegacyBackfillRepository {
         plan.tournament.id
       );
       assertCountsMatch(plan.counts, actualCounts);
-      await completeCheckpoint(client, checkpointId, plan, run, actualCounts);
+      await completeCheckpoint(
+        client,
+        checkpointId,
+        plan,
+        run,
+        actualCounts,
+        statisticCorrections
+      );
       await client.query("COMMIT");
 
       return { ...stateFromPlan(plan, actualCounts), wasApplied: true };
@@ -545,7 +570,7 @@ async function readProtectedLegacyDigest(
 async function assertSemanticProjectionEquivalence(
   executor: SqlExecutor,
   plan: LegacyBackfillPlan
-): Promise<void> {
+): Promise<LegacyTournamentStatisticCorrectionSummary> {
   const tournamentResult = await executor.query<ProjectionTournamentPayloadRow>(
     `
       SELECT payload.projection_version, payload.tournament_detail
@@ -576,7 +601,10 @@ async function assertSemanticProjectionEquivalence(
     lifecycle: tournament.lifecycle,
     format: tournament.format
   });
-  assertLegacyTournamentStatisticsEquivalent(plan, tournament);
+  const statisticCorrections = summarizeLegacyTournamentStatisticCorrections(
+    plan,
+    tournament
+  );
 
   const podByTeam = new Map(
     plan.pods.flatMap((pod) => pod.teamIds.map((teamId) => [teamId, pod]))
@@ -587,7 +615,9 @@ async function assertSemanticProjectionEquivalence(
     podId: requireMapValue(podByTeam, team.id).publicKey,
     initialPodSeed: team.initialPodSeed,
     players: plan.rosterMemberships
-      .filter((membership) => membership.teamId === team.id)
+      .filter((membership) =>
+        membership.teamId === team.id && membership.effectiveTo === undefined
+      )
       .sort((left, right) => left.sequence - right.sequence)
       .map((membership) => ({
         id: requirePlayer(plan, membership.playerId).publicKey,
@@ -757,7 +787,12 @@ async function assertSemanticProjectionEquivalence(
           displayName: requirePlayer(plan, playerId).displayName,
           rosterSlot: playerIndex + 1
         })),
-        seed: participant.seed ?? null,
+        seed: expectedMatchParticipantSeed(
+          plan,
+          match,
+          participant.teamId,
+          participant.seed
+        ),
         score: participant.score ??
           revision.scores.find((score) => score.teamId === participant.teamId)
             ?.score ?? null,
@@ -816,6 +851,21 @@ async function assertSemanticProjectionEquivalence(
   if (payloadByMatch.size !== plan.counts.matchProjectionPayloads) {
     throw new Error("Canonical projection contains an unexpected match set.");
   }
+  return statisticCorrections;
+}
+
+function expectedMatchParticipantSeed(
+  plan: LegacyBackfillPlan,
+  match: CanonicalLegacyMatch,
+  teamId: string,
+  sourceSeed: number | undefined
+): number | null {
+  if (match.bracketMatchId === undefined) {
+    return sourceSeed ?? null;
+  }
+  const bracketSeed = requireBracketMatch(plan, match.bracketMatchId).slots
+    .find((slot) => slot.teamId === teamId)?.seed;
+  return bracketSeed ?? sourceSeed ?? null;
 }
 
 function normalizedExpectedBracketSlot(
@@ -852,38 +902,51 @@ function assertLegacyStatisticsEquivalent(
   revision: CanonicalLegacyMatchRevision,
   payload: CanonicalPublicMatch
 ): void {
+  const explicitPlayerIds = new Set(revision.sourceStatistics.flatMap(
+    (statistic) => statistic.playerId === undefined
+      ? []
+      : [requirePlayer(plan, statistic.playerId).publicKey]
+  ));
   for (const statistic of revision.sourceStatistics) {
-    const subjectId = statistic.playerId === undefined
-      ? statistic.teamId === undefined
-        ? undefined
-        : requireTeam(plan, statistic.teamId).publicKey
+    const teamPublicKey = statistic.teamId === undefined
+      ? undefined
+      : requireTeam(plan, statistic.teamId).publicKey;
+    const playerPublicKey = statistic.playerId === undefined
+      ? undefined
       : requirePlayer(plan, statistic.playerId).publicKey;
-    const row = payload.boxScore?.rows.find((candidate) =>
-      candidate.subject.id === subjectId &&
-      candidate.subject.type === statistic.subjectType
-    );
-    if (row === undefined) {
-      throw new Error("Canonical legacy statistic subject is missing.");
-    }
-    for (const [legacyMetric, expected] of Object.entries(
-      statistic.metricValues
-    )) {
-      const canonicalMetric = legacyMetricMap[legacyMetric];
-      if (canonicalMetric === undefined) {
-        continue;
+    const candidates = (payload.boxScore?.rows ?? []).filter((row) => {
+      if (playerPublicKey !== undefined) {
+        return row.subject.type === "player" &&
+          row.subject.id === playerPublicKey;
       }
-      const actual = row.values[canonicalMetric];
-      if (!numbersEquivalent(expected, actual)) {
-        throw new Error("Canonical legacy statistic differs from v1.");
+      return row.teamId === teamPublicKey && (
+        row.subject.type === "team" ||
+        !explicitPlayerIds.has(row.subject.id)
+      );
+    }).filter((row) => Object.entries(statistic.metricValues).every(
+      ([legacyMetric, expected]) => {
+        const canonicalMetric = legacyMetricMap[legacyMetric];
+        return canonicalMetric === undefined || numbersEquivalent(
+          expected,
+          row.values[canonicalMetric]
+        );
       }
+    ));
+    if (candidates.length !== 1) {
+      throw new Error(
+        candidates.length === 0
+          ? "Canonical legacy statistic differs from v1."
+          : "Canonical legacy statistic subject is ambiguous."
+      );
     }
   }
 }
 
-function assertLegacyTournamentStatisticsEquivalent(
+function summarizeLegacyTournamentStatisticCorrections(
   plan: LegacyBackfillPlan,
   tournament: CanonicalPublicTournament
-): void {
+): LegacyTournamentStatisticCorrectionSummary {
+  const corrections: LegacyTournamentStatisticCorrection[] = [];
   for (const table of plan.tournament.sourceStatistics) {
     const stage = table.scope === "season" ? null : "playoffs";
     for (const sourceRow of table.rows) {
@@ -905,15 +968,37 @@ function assertLegacyTournamentStatisticsEquivalent(
         sourceRow.metricValues
       )) {
         const canonicalMetric = legacyMetricMap[legacyMetric];
-        if (canonicalMetric !== undefined && !numbersEquivalent(
-          expected,
-          canonical.values[canonicalMetric]
-        )) {
-          throw new Error("Canonical legacy tournament statistic differs from v1.");
+        if (canonicalMetric === undefined) {
+          continue;
+        }
+        const actual = canonical.values[canonicalMetric];
+        if (actual === undefined) {
+          throw new Error("Canonical legacy tournament statistic is incomplete.");
+        }
+        if (!numbersEquivalent(expected, actual)) {
+          corrections.push({
+            scope: table.scope,
+            subjectType: table.subjectType,
+            subjectId,
+            metric: canonicalMetric,
+            legacyValue: expected,
+            canonicalValue: actual
+          });
         }
       }
     }
   }
+  corrections.sort((left, right) =>
+    left.scope.localeCompare(right.scope) ||
+    left.subjectType.localeCompare(right.subjectType) ||
+    left.subjectId.localeCompare(right.subjectId) ||
+    left.metric.localeCompare(right.metric)
+  );
+  return {
+    policy: "canonical_match_events_v1",
+    mismatchCount: corrections.length,
+    mismatchDigest: createDigest(corrections)
+  };
 }
 
 const legacyMetricMap: Readonly<Record<string, string>> = {
@@ -1026,7 +1111,8 @@ async function completeCheckpoint(
   checkpointId: string,
   plan: LegacyBackfillPlan,
   run: LegacyBackfillRunRecord,
-  counts: LegacyBackfillCounts
+  counts: LegacyBackfillCounts,
+  statisticCorrections: LegacyTournamentStatisticCorrectionSummary
 ): Promise<void> {
   await executor.query(
     `
@@ -1046,7 +1132,8 @@ async function completeCheckpoint(
         outcomeStatus: "applied",
         planDigest: plan.planDigest,
         mappingDigest: plan.mappingDigest,
-        schemaVersion: plan.schemaVersion
+        schemaVersion: plan.schemaVersion,
+        tournamentStatisticCorrections: statisticCorrections
       })
     ]
   );
@@ -1218,7 +1305,12 @@ async function writeTeamsPlayersPods(
         player.publicKey,
         player.displayName,
         plan.sourceSnapshotPublishedAt,
-        writeJson({ legacyPlayerId: player.legacyPlayerId })
+        writeJson({
+          legacyPlayerId: player.legacyPlayerId,
+          legacyIdentitySource: player.sourceSnapshotVersion === undefined
+            ? "frozen_match_participant"
+            : "player_snapshot"
+        })
       ]
     );
   }
@@ -1227,10 +1319,11 @@ async function writeTeamsPlayersPods(
       `
         INSERT INTO engine_roster_memberships (
           id, tournament_id, public_key, team_id, player_id, roster_slot,
-          opened_at, opened_by, metadata
+          opened_at, closed_at, opened_by, closed_by, replacement_reason,
+          metadata
         ) VALUES (
-          $1::uuid, $2::uuid, $3, $4::uuid, $5::uuid, $6, $7, $8,
-          $9::jsonb
+          $1::uuid, $2::uuid, $3, $4::uuid, $5::uuid, $6, $7, $8, $9,
+          $10, $11, $12::jsonb
         )
       `,
       [
@@ -1241,10 +1334,17 @@ async function writeTeamsPlayersPods(
         membership.playerId,
         membership.sequence,
         membership.effectiveFrom,
+        membership.effectiveTo ?? null,
         BACKFILL_ACTOR,
+        membership.effectiveTo === undefined ? null : BACKFILL_ACTOR,
+        membership.replacementReason ?? null,
         writeJson({
           legacyTeamId: membership.legacyTeamId,
-          legacyPlayerId: membership.legacyPlayerId
+          legacyPlayerId: membership.legacyPlayerId,
+          legacyIdentitySource:
+            membership.sourceSnapshotVersion === undefined
+              ? "frozen_match_participant"
+              : "roster_snapshot"
         })
       ]
     );
@@ -1545,7 +1645,21 @@ async function writeMatchSlots(
   for (const match of plan.matches.filter((candidate) => !candidate.identityOnly)) {
     const bracketMatch = bracketByEngineMatch.get(match.id);
     if (bracketMatch !== undefined) {
-      for (const slot of bracketMatch.slots) {
+      const revision = revisionsByMatch.get(match.id);
+      const slots = revision === undefined
+        ? bracketMatch.slots
+        : revision.participants.map((participant, index) => {
+            const slot = bracketMatch.slots.find((candidate) =>
+              candidate.teamId === participant.teamId
+            );
+            if (slot === undefined) {
+              throw new Error(
+                "Legacy playoff participant is absent from its bracket slots."
+              );
+            }
+            return { ...slot, sequence: index + 1 };
+          });
+      for (const slot of slots) {
         await insertEngineMatchSlot(
           executor,
           tournamentId,
@@ -2228,6 +2342,9 @@ async function writeLegacyLinks(
     );
   }
   for (const player of plan.players) {
+    if (player.sourceSnapshotVersion === undefined) {
+      continue;
+    }
     await executor.query(
       `
         INSERT INTO engine_legacy_player_links (
@@ -2235,10 +2352,20 @@ async function writeLegacyLinks(
           source_snapshot_version, legacy_player_id, backfill_run_id
         ) VALUES ($1::uuid, $2::uuid, $3, $4, $5, $6::uuid)
       `,
-      [player.id, ...common.slice(0, 3), player.legacyPlayerId, checkpointId]
+      [
+        player.id,
+        tournamentId,
+        plan.legacyTournamentId,
+        player.sourceSnapshotVersion,
+        player.legacyPlayerId,
+        checkpointId
+      ]
     );
   }
   for (const membership of plan.rosterMemberships) {
+    if (membership.sourceSnapshotVersion === undefined) {
+      continue;
+    }
     await executor.query(
       `
         INSERT INTO engine_legacy_roster_membership_links (
@@ -2251,7 +2378,9 @@ async function writeLegacyLinks(
       `,
       [
         membership.id,
-        ...common.slice(0, 3),
+        tournamentId,
+        plan.legacyTournamentId,
+        membership.sourceSnapshotVersion,
         membership.legacyTeamId,
         membership.legacyPlayerId,
         membership.sequence,
