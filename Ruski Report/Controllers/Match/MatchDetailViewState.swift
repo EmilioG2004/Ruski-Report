@@ -8,6 +8,7 @@ import Foundation
 nonisolated enum MatchDetailViewState: Equatable {
     case loading
     case loaded(MatchDetailScreen)
+    case canonicalLoaded(PublicMatchDetail)
     case failed(message: String)
 }
 
