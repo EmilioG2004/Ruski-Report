@@ -6,6 +6,7 @@ export * from "./postgres-match-revision.repository";
 export * from "./postgres-canonical-statistic.repository";
 export * from "./postgres-match-writer.repository";
 export * from "./postgres-projection.repository";
+export * from "./projection-refresh";
 export * from "./postgres-roster.repository";
 export * from "./postgres-tournament-setup.repository";
 export * from "./progression-contracts";
