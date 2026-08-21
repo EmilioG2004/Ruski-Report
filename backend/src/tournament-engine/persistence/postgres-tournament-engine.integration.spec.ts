@@ -564,6 +564,7 @@ postgresDescribe("canonical tournament engine PostgreSQL persistence", () => {
         revisionNumber: 2,
         previousRevisionId: command.revision.id,
         reason: "correction",
+        correctionReason: "Corrected workbook result.",
         createdAt: "2027-01-03T00:12:00.000Z"
       },
       writerFence: {
@@ -852,7 +853,7 @@ function firstRevision(
       sideNumber: (sideIndex + 1) as 1 | 2,
       teamId,
       displayName: fixture.input.teams[teamIndex].name,
-      score: sideIndex === 0 ? 2 : 1,
+      score: sideIndex === 0 ? 3 : 0,
       result: sideIndex === 0 ? "win" as const : "loss" as const,
       players: fixture.input.teams[teamIndex].players.map((player) => ({
         playerId: player.id,
@@ -886,7 +887,7 @@ function firstRevision(
         type: "shot_attempt",
         teamId: participantTeams[0].teamId,
         playerId: participantTeams[0].players[0].playerId,
-        shotAttempt: { outcome: "miss", classification: "tri", cupDelta: 0 }
+        shotAttempt: { outcome: "miss", classification: "tri", cupDelta: 3 }
       },
       {
         id: stable(84, "scoring_event"),

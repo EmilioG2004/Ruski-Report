@@ -38,6 +38,8 @@ interface FrozenPlayerRow {
   side_number: number;
   team_id: string;
   player_id: string;
+  roster_membership_id: string | null;
+  roster_slot: number;
 }
 
 export class PostgresMatchRevisionRepository
@@ -68,6 +70,7 @@ implements MatchRevisionRepositoryContract {
     await lockEngineMatch(executor, input.matchId);
     const match = await this.lockMatch(executor, input);
     this.assertRevisionSequence(match, input);
+    this.assertRevisionReason(input);
     await this.assertWriter(executor, input);
     await this.assertParticipants(executor, input, match.active_revision_id);
     this.assertEvents(input);
@@ -262,6 +265,18 @@ implements MatchRevisionRepositoryContract {
     }
   }
 
+  private assertRevisionReason(input: ActivateMatchRevisionInput): void {
+    if (input.revision.reason !== "correction") {
+      return;
+    }
+    const reason = input.revision.correctionReason?.trim();
+    if (reason === undefined || reason.length < 3 || reason.length > 500) {
+      throw new EnginePersistenceInvariantError(
+        "Canonical correction revisions require a reason between 3 and 500 characters."
+      );
+    }
+  }
+
   private async assertWriter(
     executor: EnginePostgresExecutor,
     input: ActivateMatchRevisionInput
@@ -340,7 +355,8 @@ implements MatchRevisionRepositoryContract {
     if (activeRevisionId !== null) {
       const frozen = await executor.query<FrozenPlayerRow>(
         `
-          SELECT side_number, team_id, player_id
+          SELECT side_number, team_id, player_id,
+                 roster_membership_id, roster_slot
           FROM engine_match_revision_players
           WHERE revision_id = $1::uuid
           ORDER BY side_number, roster_slot, player_id
@@ -354,7 +370,9 @@ implements MatchRevisionRepositoryContract {
             participantKey({
               side_number: team.sideNumber,
               team_id: team.teamId,
-              player_id: player.playerId
+              player_id: player.playerId,
+              roster_membership_id: player.rosterMembershipId ?? null,
+              roster_slot: player.rosterSlot
             })
           )
         )
@@ -533,7 +551,13 @@ implements MatchRevisionRepositoryContract {
 }
 
 function participantKey(row: FrozenPlayerRow): string {
-  return `${row.side_number}:${row.team_id}:${row.player_id}`;
+  return [
+    row.side_number,
+    row.team_id,
+    row.player_id,
+    row.roster_membership_id ?? "legacy",
+    row.roster_slot
+  ].join(":");
 }
 
 function sourceWriterMode(sourceAdapter: string): ScoringWriterMode {
