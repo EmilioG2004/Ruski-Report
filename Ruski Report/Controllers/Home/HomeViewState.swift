@@ -10,6 +10,7 @@ nonisolated enum HomeViewState: Equatable {
     case idle
     case loading
     case loaded(HomeScreen)
+    case canonicalLoaded(PublicHomeScreen)
     case failed(message: String)
 
     var tournament: TournamentPreview? {
@@ -18,6 +19,15 @@ nonisolated enum HomeViewState: Equatable {
         }
 
         return screen.tournament
+    }
+}
+
+nonisolated struct PublicHomeScreen: Equatable {
+    let tournaments: [PublicTournamentSummary]
+    let detailsByTournamentId: [String: PublicTournamentDetail]
+
+    func detail(for tournamentId: PublicTournamentSummary.ID) -> PublicTournamentDetail? {
+        detailsByTournamentId[tournamentId]
     }
 }
 
