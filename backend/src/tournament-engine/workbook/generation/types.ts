@@ -1,4 +1,5 @@
 import {
+  BracketMatchId,
   MatchId,
   PodId,
   RosterMembershipId,
@@ -7,6 +8,30 @@ import {
   TournamentPlayerId,
   TournamentTeamId
 } from "../../domain";
+import { CanonicalScorecardStatus } from "../schema";
+
+export interface CanonicalWorkbookSourceRow {
+  readonly sideNumber: 1 | 2;
+  readonly worksheetRow: number;
+  readonly shotNumber: number | null;
+  readonly playerId: TournamentPlayerId;
+  readonly rosterMembershipId: RosterMembershipId;
+  readonly rosterSlot: number;
+  readonly markers: Readonly<{
+    miss: boolean;
+    make: boolean;
+    splashOut: boolean;
+    guy: boolean;
+    tri: boolean;
+    di: boolean;
+    vom: boolean;
+  }>;
+}
+
+export interface CanonicalWorkbookScorecardSource {
+  readonly status: Exclude<CanonicalScorecardStatus, "SCHEDULED">;
+  readonly rows: readonly CanonicalWorkbookSourceRow[];
+}
 
 export interface CanonicalWorkbookGenerationIdentity {
   readonly id: string;
@@ -57,7 +82,27 @@ export interface CanonicalWorkbookPodMatchInput {
     CanonicalWorkbookMatchParticipantRoster,
     CanonicalWorkbookMatchParticipantRoster
   ];
+  readonly scorecardSource?: CanonicalWorkbookScorecardSource;
 }
+
+export interface CanonicalWorkbookPlayoffMatchInput {
+  readonly id: MatchId;
+  readonly bracketMatchId: BracketMatchId;
+  readonly stage: "playoffs";
+  readonly sequence: number;
+  readonly roundNumber: number;
+  readonly sequenceInRound: number;
+  readonly participantTeamIds: readonly [TournamentTeamId, TournamentTeamId];
+  readonly participantRosters?: readonly [
+    CanonicalWorkbookMatchParticipantRoster,
+    CanonicalWorkbookMatchParticipantRoster
+  ];
+  readonly scorecardSource?: CanonicalWorkbookScorecardSource;
+}
+
+export type CanonicalWorkbookMatchInput =
+  | CanonicalWorkbookPodMatchInput
+  | CanonicalWorkbookPlayoffMatchInput;
 
 export interface CanonicalWorkbookMatchParticipantRoster {
   readonly teamId: TournamentTeamId;
@@ -69,7 +114,7 @@ export interface CanonicalWorkbookGenerationInput {
   readonly tournament: CanonicalWorkbookTournamentInput;
   readonly pods: readonly CanonicalWorkbookPodInput[];
   readonly teams: readonly CanonicalWorkbookTeamInput[];
-  readonly matches: readonly CanonicalWorkbookPodMatchInput[];
+  readonly matches: readonly CanonicalWorkbookMatchInput[];
 }
 
 export type CanonicalWorkbookSheetManifestEntry =
@@ -100,9 +145,9 @@ export type CanonicalWorkbookSheetManifestEntry =
       readonly sheetName: string;
       readonly sheetKind: "game";
       readonly matchId: MatchId;
-      readonly stage: "pod_play";
-      readonly podId: PodId;
-      readonly bracketMatchId: null;
+      readonly stage: "pod_play" | "playoffs";
+      readonly podId: PodId | null;
+      readonly bracketMatchId: BracketMatchId | null;
       readonly teamIds: readonly [TournamentTeamId, TournamentTeamId];
       readonly baselineFingerprint: string;
     };

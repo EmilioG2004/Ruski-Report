@@ -105,30 +105,89 @@ export function validateGenerationInput(
 
   const matchIds = new Set<string>();
   const matchSequences = new Set<number>();
+  const bracketMatchIds = new Set<string>();
+  const playoffRoundPositions = new Set<string>();
   for (const match of input.matches) {
     requireUuid(match.id, "match ID");
     requireUnique(matchIds, match.id, "match ID");
     requirePositiveInteger(match.sequence, "match sequence");
     requireUnique(matchSequences, match.sequence, "match sequence");
-    requirePositiveInteger(match.sequenceInPod, "pod match sequence");
     requirePositiveInteger(match.roundNumber, "round number");
-    requirePositiveInteger(match.gameNumberForPair, "game number for pair");
-    if (match.stage !== "pod_play") {
-      invalid("Phase 3 workbook generation supports pod-play matches only.");
-    }
-    if (!podIds.has(match.podId)) {
-      invalid(`Match '${match.id}' references an unknown pod.`);
-    }
     const [firstTeamId, secondTeamId] = match.participantTeamIds;
     if (firstTeamId === secondTeamId) {
       invalid(`Match '${match.id}' must contain two distinct teams.`);
     }
-    if (teamPod.get(firstTeamId) !== match.podId ||
-        teamPod.get(secondTeamId) !== match.podId) {
-      invalid(`Match '${match.id}' participants must belong to its pod.`);
+    if (!teamIds.has(firstTeamId) || !teamIds.has(secondTeamId)) {
+      invalid(`Match '${match.id}' references an unknown participant team.`);
+    }
+    if (match.stage === "pod_play") {
+      requirePositiveInteger(match.sequenceInPod, "pod match sequence");
+      requirePositiveInteger(match.gameNumberForPair, "game number for pair");
+      if (!podIds.has(match.podId)) {
+        invalid(`Match '${match.id}' references an unknown pod.`);
+      }
+      if (teamPod.get(firstTeamId) !== match.podId ||
+          teamPod.get(secondTeamId) !== match.podId) {
+        invalid(`Match '${match.id}' participants must belong to its pod.`);
+      }
+    } else {
+      requireUuid(match.bracketMatchId, "bracket match ID");
+      requireUnique(bracketMatchIds, match.bracketMatchId, "bracket match ID");
+      requirePositiveInteger(match.sequenceInRound, "playoff round match sequence");
+      const roundPosition = `${match.roundNumber}:${match.sequenceInRound}`;
+      requireUnique(
+        playoffRoundPositions,
+        roundPosition,
+        "playoff round match sequence"
+      );
     }
     validateMatchParticipantRosters(match, playersPerTeam);
+    validateScorecardSource(match, playersPerTeam);
   }
+}
+
+function validateScorecardSource(
+  match: CanonicalWorkbookGenerationInput["matches"][number],
+  playersPerTeam: number
+): void {
+  const source = match.scorecardSource;
+  if (source === undefined) return;
+  if (source.status !== "LIVE GAME" && source.status !== "FINAL") {
+    invalid(`Match '${match.id}' source scorecard status is invalid.`);
+  }
+  const rosters = match.participantRosters;
+  if (rosters === undefined) {
+    invalid(`Match '${match.id}' source scorecard requires frozen participants.`);
+  }
+  const seen = new Set<string>();
+  source.rows.forEach((row) => {
+    if (row.sideNumber !== 1 && row.sideNumber !== 2) {
+      invalid(`Match '${match.id}' source scorecard side is invalid.`);
+    }
+    if (!Number.isSafeInteger(row.worksheetRow) ||
+        row.worksheetRow < 10 || row.worksheetRow > 89) {
+      invalid(`Match '${match.id}' source scorecard row is invalid.`);
+    }
+    const key = `${row.sideNumber}:${row.worksheetRow}`;
+    requireUnique(seen, key, "source scorecard row");
+    const expectedSlot = ((row.worksheetRow - 10) % playersPerTeam) + 1;
+    const player = rosters[row.sideNumber - 1].players.find(
+      (candidate) => candidate.rosterSlot === expectedSlot
+    );
+    if (player === undefined || row.rosterSlot !== expectedSlot ||
+        row.playerId !== player.id ||
+        row.rosterMembershipId !== player.rosterMembershipId) {
+      invalid(`Match '${match.id}' source scorecard participant is invalid.`);
+    }
+    const expectedShot = Math.floor((row.worksheetRow - 10) / playersPerTeam) + 1;
+    if (row.shotNumber !== expectedShot) {
+      invalid(`Match '${match.id}' source scorecard shot number is invalid.`);
+    }
+    const markerValues = Object.values(row.markers);
+    if (markerValues.length !== 7 || markerValues.some((value) => typeof value !== "boolean")) {
+      invalid(`Match '${match.id}' source scorecard markers are invalid.`);
+    }
+  });
 }
 
 function validateMatchParticipantRosters(

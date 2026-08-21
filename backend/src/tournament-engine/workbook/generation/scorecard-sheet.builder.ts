@@ -11,9 +11,9 @@ import {
 } from "../schema";
 import {
   CanonicalWorkbookGenerationInput,
+  CanonicalWorkbookMatchInput,
   CanonicalWorkbookPlayerInput,
   CanonicalWorkbookPodInput,
-  CanonicalWorkbookPodMatchInput,
   CanonicalWorkbookTeamInput
 } from "./types";
 
@@ -21,7 +21,7 @@ export interface ScorecardBuildInput {
   readonly workbook: CanonicalWorkbookGenerationInput;
   readonly sheetId: string;
   readonly playersPerTeam: number;
-  readonly match?: CanonicalWorkbookPodMatchInput;
+  readonly match?: CanonicalWorkbookMatchInput;
   readonly pod?: CanonicalWorkbookPodInput;
   readonly teams?: readonly [CanonicalWorkbookTeamInput, CanonicalWorkbookTeamInput];
 }
@@ -39,15 +39,37 @@ export function buildScorecardSheet(
   const teams = input.teams;
   const title = teams === undefined
     ? "UNASSIGNED SCORECARD TEMPLATE"
-    : `${input.pod?.name ?? "Pod play"} · ${teams[0].name} vs ${teams[1].name}`;
+    : `${input.match?.stage === "playoffs"
+      ? `Playoffs · Round ${input.match.roundNumber}`
+      : input.pod?.name ?? "Pod play"} · ${teams[0].name} vs ${teams[1].name}`;
 
   configureScorecardPage(worksheet);
   writeTitle(worksheet, title);
   writeSummaryArea(worksheet, teams, input.playersPerTeam);
   writeShotGrid(worksheet, teams, input.playersPerTeam);
+  writeSourceScorecard(worksheet, input.match);
   writeLocalMetadata(worksheet, input);
   writeParticipantDirectory(worksheet, teams);
   hideMetadataColumns(worksheet);
+}
+
+function writeSourceScorecard(
+  worksheet: Worksheet,
+  match: CanonicalWorkbookMatchInput | undefined
+): void {
+  const source = match?.scorecardSource;
+  if (source === undefined) return;
+  worksheet.getCell(CANONICAL_SCORECARD.statusCell).value = source.status;
+  const columns = [
+    CANONICAL_SCORECARD.markerColumns.left,
+    CANONICAL_SCORECARD.markerColumns.right
+  ] as const;
+  source.rows.forEach((row) => {
+    const markerColumns = columns[row.sideNumber - 1];
+    Object.values(row.markers).forEach((marked, index) => {
+      if (marked) worksheet.getCell(`${markerColumns[index]}${row.worksheetRow}`).value = "X";
+    });
+  });
 }
 
 function configureScorecardPage(worksheet: Worksheet): void {
@@ -378,8 +400,10 @@ function writeLocalMetadata(
     sheetKind: match === undefined ? "blank" : "game",
     matchId: match?.id ?? null,
     stage: match?.stage ?? null,
-    podId: match?.podId ?? null,
-    bracketMatchId: null,
+    podId: match?.stage === "pod_play" ? match.podId : null,
+    bracketMatchId: match?.stage === "playoffs"
+      ? match.bracketMatchId
+      : null,
     team1Id: teams?.[0].id ?? null,
     team2Id: teams?.[1].id ?? null
   };

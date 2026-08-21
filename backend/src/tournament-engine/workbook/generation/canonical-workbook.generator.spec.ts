@@ -19,6 +19,13 @@ import {
   CANONICAL_SCORECARD_METADATA_KEYS,
   CANONICAL_WORKBOOK_SHEETS
 } from "../schema";
+import {
+  CanonicalWorkbookParser,
+  createSemanticSheetFingerprint,
+  createWorkbookParticipantDigest,
+  createWorkbookReconciliationPreview,
+  ParsedCanonicalWorkbookManifestEntry
+} from "../reconciliation";
 import { createScheduledScorecardBaselineFingerprint } from "./baseline-fingerprint";
 import { generateCanonicalTournamentWorkbook } from "./canonical-workbook.generator";
 import {
@@ -56,10 +63,10 @@ describe("generateCanonicalTournamentWorkbook", () => {
     expect(metadata.getCell("B5").value).toBe(input.generation.id);
     expect(metadata.getCell("A11").value).toBe("sheetId");
     expect(metadata.getCell("J12").value).toMatch(/^[a-f0-9]{64}$/);
-    expect(metadata.getCell("F13").value).toBe(input.matches[0].podId);
+    const firstMatch = requirePodMatch(input.matches[0]);
+    expect(metadata.getCell("F13").value).toBe(firstMatch.podId);
     expect(workbook.getWorksheet("Regular Season Standings")).toBeUndefined();
     expect(workbook.getWorksheet("Playoff Bracket (16)")).toBeUndefined();
-    const firstMatch = input.matches[0];
     const firstManifest = generated.manifest.find(
       (entry) => entry.sheetKind === "game" && entry.matchId === firstMatch.id
     );
@@ -197,6 +204,211 @@ describe("generateCanonicalTournamentWorkbook", () => {
       "P02-R01-M01",
       "__Ruski Metadata"
     ]);
+  });
+
+  it("generates a cumulative pod-plus-playoff workbook only from resolved playable matches", async () => {
+    const podInput = createSmallInput();
+    const playoffMatch = {
+      id: parseStableUuid(
+        "00000000-0000-4000-8000-000000008001",
+        "match"
+      ),
+      bracketMatchId: parseStableUuid(
+        "00000000-0000-4000-8000-000000008002",
+        "bracket_match"
+      ),
+      stage: "playoffs" as const,
+      sequence: 3,
+      roundNumber: 1,
+      sequenceInRound: 1,
+      participantTeamIds: [
+        podInput.teams[0].id,
+        podInput.teams[2].id
+      ] as const
+    };
+    const input: CanonicalWorkbookGenerationInput = {
+      ...podInput,
+      tournament: { ...podInput.tournament, lifecycle: "playoffs" },
+      matches: [...podInput.matches, playoffMatch]
+    };
+    const first = await generateCanonicalTournamentWorkbook(input);
+    const retry = await generateCanonicalTournamentWorkbook(input);
+    const workbook = await loadWorkbook(first);
+    const playoff = requireWorksheet(workbook, "PO-R01-M01");
+    const entry = first.manifest.find((candidate) =>
+      candidate.sheetKind === "game" && candidate.matchId === playoffMatch.id
+    );
+
+    expect(workbook.worksheets.map((sheet) => sheet.name)).toEqual([
+      "Control",
+      "Blank Scorecard",
+      "P01-R01-M01",
+      "P02-R01-M01",
+      "PO-R01-M01",
+      "__Ruski Metadata"
+    ]);
+    expect(entry).toMatchObject({
+      stage: "playoffs",
+      podId: null,
+      bracketMatchId: playoffMatch.bracketMatchId,
+      teamIds: playoffMatch.participantTeamIds
+    });
+    expect(readLocalMetadata(playoff)).toMatchObject({
+      matchId: playoffMatch.id,
+      stage: "playoffs",
+      podId: null,
+      bracketMatchId: playoffMatch.bracketMatchId,
+      team1Id: playoffMatch.participantTeamIds[0],
+      team2Id: playoffMatch.participantTeamIds[1]
+    });
+    expect(playoff.getCell("B1").value).toContain("Playoffs · Round 1");
+    expect(first.manifest).toEqual(retry.manifest);
+    expect(first.baselineFingerprints).toEqual(retry.baselineFingerprints);
+    expect(first.semanticDigest).toBe(retry.semanticDigest);
+  });
+
+  it("preserves an accepted scorecard as the cumulative-workbook baseline", async () => {
+    const original = createSmallInput();
+    const match = original.matches[0];
+    if (match === undefined) throw new Error("Sanitized match is missing.");
+    if (match.stage !== "pod_play") throw new Error("Sanitized match is not pod play.");
+    const teams = match.participantTeamIds.map((teamId) => {
+      const team = original.teams.find((candidate) => candidate.id === teamId);
+      if (team === undefined) throw new Error("Sanitized team is missing.");
+      return { teamId, players: team.players };
+    });
+    const player = teams[0]?.players[0];
+    if (player === undefined || teams[1] === undefined) {
+      throw new Error("Sanitized participant is missing.");
+    }
+    const row = {
+      sideNumber: 1 as const,
+      worksheetRow: 10,
+      shotNumber: 1,
+      playerId: player.id,
+      rosterMembershipId: player.rosterMembershipId,
+      rosterSlot: player.rosterSlot,
+      markers: {
+        miss: false, make: true, splashOut: false, guy: false,
+        tri: false, di: false, vom: false
+      }
+    };
+    const participantRosters = [teams[0], teams[1]] as const;
+    const populatedMatch = {
+      ...match,
+      participantRosters,
+      scorecardSource: { status: "LIVE GAME" as const, rows: [row] }
+    };
+    const generated = await generateCanonicalTournamentWorkbook({
+      ...original,
+      matches: [populatedMatch, ...original.matches.slice(1)]
+    });
+    const workbook = await loadWorkbook(generated);
+    const worksheet = requireWorksheet(workbook, "P01-R01-M01");
+    const participants = teams.flatMap((team, index) => team.players.map((item) => ({
+      sideNumber: (index + 1) as 1 | 2,
+      teamId: team.teamId,
+      playerId: item.id,
+      rosterMembershipId: item.rosterMembershipId,
+      rosterSlot: item.rosterSlot,
+      displayName: item.displayName
+    })));
+
+    expect(worksheet.getCell("B2").value).toBe("LIVE GAME");
+    expect(worksheet.getCell("E10").value).toBe("X");
+    expect(generated.baselineFingerprints[match.id]).toBe(
+      createSemanticSheetFingerprint({
+        tournamentId: original.tournament.id,
+        matchId: match.id,
+        stage: match.stage,
+        podId: match.podId,
+        teamIds: match.participantTeamIds,
+        participants,
+        status: "LIVE GAME",
+        rows: [{ ...row, teamId: teams[0].teamId }]
+      })
+    );
+    const trustedManifest = generated.manifest
+      .flatMap<ParsedCanonicalWorkbookManifestEntry>((entry) => {
+        if (entry.sheetKind === "blank") {
+          return [{
+            sheetId: entry.sheetId,
+            sheetName: entry.sheetName,
+            sheetKind: "blank",
+            baselineFingerprint: entry.baselineFingerprint
+          }];
+        }
+        if (entry.sheetKind === "game") {
+          return [{
+            sheetId: entry.sheetId,
+            sheetName: entry.sheetName,
+            sheetKind: "game",
+            matchId: entry.matchId,
+            stage: entry.stage,
+            ...(entry.podId === null ? {} : { podId: entry.podId }),
+            ...(entry.bracketMatchId === null
+              ? {}
+              : { bracketMatchId: entry.bracketMatchId }),
+            teamIds: entry.teamIds,
+            baselineFingerprint: entry.baselineFingerprint
+          }];
+        }
+        return [];
+      });
+    const scope = {
+      tournamentId: original.tournament.id,
+      generation: {
+        generationId: original.generation.id,
+        generationRevision: original.generation.revision,
+        generationSourceDigest: original.generation.sourceDigest
+      },
+      manifest: trustedManifest,
+      matches: original.matches.map((candidate) => {
+        if (candidate.stage !== "pod_play") throw new Error("Unexpected playoff fixture.");
+        const candidateTeams = candidate.participantTeamIds.map((teamId) => {
+          const team = original.teams.find((item) => item.id === teamId);
+          if (team === undefined) throw new Error("Sanitized team is missing.");
+          return team;
+        });
+        const candidateParticipants = candidateTeams.flatMap((team, index) =>
+          team.players.map((item) => ({
+            sideNumber: (index + 1) as 1 | 2,
+            teamId: team.id,
+            playerId: item.id,
+            rosterMembershipId: item.rosterMembershipId,
+            rosterSlot: item.rosterSlot,
+            displayName: item.displayName
+          }))
+        );
+        const populated = candidate.id === match.id;
+        return {
+          matchId: candidate.id,
+          matchRowVersion: populated ? 2 : 1,
+          canonicalStatus: populated ? "in_progress" as const : "scheduled" as const,
+          stage: candidate.stage,
+          podId: candidate.podId,
+          teamIds: candidate.participantTeamIds,
+          participants: candidateParticipants,
+          ...(populated ? {
+            sourceState: {
+              fingerprint: generated.baselineFingerprints[candidate.id],
+              candidateId: "00000000-0000-4000-8000-000000008099",
+              sourceRevisionNumber: 1,
+              proposedStatus: "in_progress" as const,
+              participantDigest: createWorkbookParticipantDigest(candidateParticipants),
+              rowVersion: 1
+            }
+          } : {})
+        };
+      })
+    };
+    const parsed = await new CanonicalWorkbookParser().parse({
+      buffer: generated.buffer,
+      scope
+    });
+    const preview = createWorkbookReconciliationPreview({ parsed, scope });
+    expect(preview.observations.every((item) => item.decision === "unchanged"))
+      .toBe(true);
   });
 
   it.each([3, 8])(
@@ -370,15 +582,16 @@ describe("generateCanonicalTournamentWorkbook", () => {
     })).rejects.toThrow("published tournament");
 
     const mismatched = createSmallInput();
+    const mismatchedPodMatch = requirePodMatch(mismatched.matches[0]);
     await expect(generateCanonicalTournamentWorkbook({
       ...mismatched,
       matches: [{
-        ...mismatched.matches[0],
+        ...mismatchedPodMatch,
         participantTeamIds: [
-          mismatched.matches[0].participantTeamIds[0],
+          mismatchedPodMatch.participantTeamIds[0],
           mismatched.teams.find(
-            (team) => team.podId !== mismatched.matches[0].podId
-          )?.id ?? mismatched.matches[0].participantTeamIds[1]
+            (team) => team.podId !== mismatchedPodMatch.podId
+          )?.id ?? mismatchedPodMatch.participantTeamIds[1]
         ]
       }]
     })).rejects.toThrow("participants must belong to its pod");
@@ -472,6 +685,15 @@ function membershipId(
     `00000000-0000-4000-8000-${String(20_000 + teamIndex * 2 + playerIndex).padStart(12, "0")}`,
     "roster_membership"
   );
+}
+
+function requirePodMatch(
+  match: CanonicalWorkbookGenerationInput["matches"][number]
+) {
+  if (match.stage !== "pod_play") {
+    throw new Error("Expected a pod-play fixture match.");
+  }
+  return match;
 }
 
 function withPlayersPerTeam(

@@ -15,7 +15,7 @@ import { buildMetadataSheet } from "./metadata-sheet.builder";
 import { buildScorecardSheet } from "./scorecard-sheet.builder";
 import {
   CanonicalWorkbookGenerationInput,
-  CanonicalWorkbookPodMatchInput,
+  CanonicalWorkbookMatchInput,
   CanonicalWorkbookSheetManifestEntry,
   CanonicalWorkbookTeamInput,
   GeneratedCanonicalWorkbook
@@ -70,8 +70,11 @@ export async function generateCanonicalTournamentWorkbook(
   matches.forEach((match, index) => {
     const firstTeam = teamsById.get(match.participantTeamIds[0]);
     const secondTeam = teamsById.get(match.participantTeamIds[1]);
-    const pod = podsById.get(match.podId);
-    if (firstTeam === undefined || secondTeam === undefined || pod === undefined) {
+    const pod = match.stage === "pod_play"
+      ? podsById.get(match.podId)
+      : undefined;
+    if (firstTeam === undefined || secondTeam === undefined ||
+        (match.stage === "pod_play" && pod === undefined)) {
       throw new Error("Validated workbook generation input lost a referenced identity.");
     }
     const teams = resolveMatchTeams(match, [firstTeam, secondTeam]);
@@ -99,8 +102,10 @@ export async function generateCanonicalTournamentWorkbook(
       sheetKind: "game",
       matchId: match.id,
       stage: match.stage,
-      podId: match.podId,
-      bracketMatchId: null,
+      podId: match.stage === "pod_play" ? match.podId : null,
+      bracketMatchId: match.stage === "playoffs"
+        ? match.bracketMatchId
+        : null,
       teamIds: match.participantTeamIds,
       baselineFingerprint: fingerprint
     });
@@ -139,7 +144,7 @@ export async function generateCanonicalTournamentWorkbook(
 }
 
 function resolveMatchTeams(
-  match: CanonicalWorkbookPodMatchInput,
+  match: CanonicalWorkbookMatchInput,
   currentTeams: readonly [CanonicalWorkbookTeamInput, CanonicalWorkbookTeamInput]
 ): readonly [CanonicalWorkbookTeamInput, CanonicalWorkbookTeamInput] {
   if (match.participantRosters === undefined) {
@@ -174,6 +179,14 @@ function createMatchSheetNames(
   [...input.matches]
     .sort((left, right) => left.sequence - right.sequence)
     .forEach((match) => {
+      if (match.stage === "playoffs") {
+        const name = `PO-R${pad(match.roundNumber)}-M${pad(match.sequenceInRound)}`;
+        if (name.length > 31) {
+          throw new Error("Generated worksheet name exceeds Excel's limit.");
+        }
+        names.set(match.id, name);
+        return;
+      }
       const podSequence = podSequenceById.get(match.podId);
       if (podSequence === undefined) {
         throw new Error("Validated match references an unknown pod.");

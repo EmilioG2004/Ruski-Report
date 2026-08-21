@@ -58,7 +58,7 @@ export function buildMetadataSheet(
         entry.sheetKind,
         entry.matchId,
         game?.stage ?? null,
-        match?.podId ?? null,
+        match?.stage === "pod_play" ? match.podId : null,
         game?.bracketMatchId ?? null,
         game?.teamIds[0] ?? null,
         game?.teamIds[1] ?? null,

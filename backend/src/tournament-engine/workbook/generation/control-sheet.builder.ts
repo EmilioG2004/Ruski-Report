@@ -6,7 +6,7 @@ import {
 } from "../schema";
 import {
   CanonicalWorkbookGenerationInput,
-  CanonicalWorkbookPodMatchInput
+  CanonicalWorkbookMatchInput
 } from "./types";
 
 const DARK_FILL = "FF34495E";
@@ -98,9 +98,13 @@ export function buildControlSheet(
     const row = matchHeaderRow + 1 + index;
     worksheet.getRow(row).values = [
       sheetNamesByMatchId.get(match.id) ?? "",
-      podById.get(match.podId)?.name ?? "",
+      match.stage === "pod_play"
+        ? podById.get(match.podId)?.name ?? ""
+        : "Playoffs",
       match.roundNumber,
-      match.gameNumberForPair,
+      match.stage === "pod_play"
+        ? match.gameNumberForPair
+        : match.sequenceInRound,
       teamById.get(match.participantTeamIds[0])?.name ?? "",
       teamById.get(match.participantTeamIds[1])?.name ?? "",
       "SCHEDULED"
@@ -164,8 +168,8 @@ function writeHeaderRow(
 }
 
 function sortedMatches(
-  matches: readonly CanonicalWorkbookPodMatchInput[]
-): CanonicalWorkbookPodMatchInput[] {
+  matches: readonly CanonicalWorkbookMatchInput[]
+): CanonicalWorkbookMatchInput[] {
   return [...matches].sort((left, right) => left.sequence - right.sequence);
 }
 
