@@ -99,13 +99,27 @@ accepted/skipped partition before applying. Missing sheets are non-destructive,
 identical sheets are audited no-ops, and uploaded workbook bytes are never
 stored.
 
-Migrations `0008` and `0009` are additive. A previous application binary can
-run while their new tables and guards remain in place; do not drop
-administrator audit, tournament-engine history, generated workbook artifacts,
-or workbook reconciliation records to roll back an application release. A
-database rollback uses a verified pre-migration backup and the documented
-restore rehearsal in `deploy/raspberry-pi/operations`, never a destructive down
-script.
+Tournament-engine migrations `0007` through `0013` are additive. A previous
+application binary can run while their new tables and guards remain in place;
+do not drop administrator audit, tournament-engine history, generated workbook
+artifacts, reconciliation records, progression history, or public projections
+to roll back an application release. A database rollback uses a verified
+pre-migration backup and the documented restore rehearsal in
+`deploy/raspberry-pi/operations`, never a destructive down script.
+
+The 2026 migration command is dry-run by default and is the only supported
+legacy mutator:
+
+```bash
+npm run db:backfill:legacy -- --tournament-id <legacy-public-id>
+# Apply only under the Phase 7 maintenance and rollback procedure:
+npm run db:backfill:legacy -- --tournament-id <legacy-public-id> --apply
+```
+
+Completed canonical tournaments are intentionally absent from active discovery
+and remain readable through `/api/v2/tournaments/history` and pinned v2 detail
+routes. Follow the Phase 7 rollout runbook before applying the 2026 backfill;
+never infer production authorization from these commands.
 
 Health check:
 
