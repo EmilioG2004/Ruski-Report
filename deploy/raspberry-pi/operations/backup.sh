@@ -95,6 +95,7 @@ printf 'Applying the %s snapshot-retention window.\n' "${retention}"
 restic forget \
   --host ruski-pi \
   --tag ruski-report \
+  --group-by host,tags \
   --keep-within "${retention}" \
   --prune
 
