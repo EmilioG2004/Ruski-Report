@@ -2,6 +2,10 @@ import { loadDatabaseConfig } from "../../config/database.config";
 import { MigrationRunner } from "../../database/migration-runner";
 import { PostgresDatabase } from "../../database/postgres-database";
 import { PostgresTournamentReadRepository } from "../../repositories/postgres/postgres-tournament-read.repository";
+import type {
+  CanonicalPublicMatch,
+  CanonicalPublicTournament
+} from "../public-projection/contracts";
 import { LegacyBackfillPlanner } from "./legacy-backfill-planner";
 import { runLegacy2026Backfill } from "./legacy-backfill.tool";
 import { LegacyTournamentSource } from "./legacy-backfill.types";
@@ -25,7 +29,8 @@ postgresDescribe("PostgreSQL 2026 legacy backfill rehearsal", () => {
 
   beforeEach(async () => {
     await database.query(
-      "TRUNCATE tournaments, scorebook_sources, user_accounts CASCADE"
+      "TRUNCATE engine_legacy_backfill_runs, engine_tournaments, " +
+      "tournaments, scorebook_sources, user_accounts CASCADE"
     );
   });
 
@@ -46,6 +51,10 @@ postgresDescribe("PostgreSQL 2026 legacy backfill rehearsal", () => {
       throw new Error("Synthetic legacy public read failed before backfill.");
     }
     const identitiesBefore = await readRawMatchIdentities(
+      database,
+      source.legacyTournamentId
+    );
+    const protectedRowsBefore = await readProtectedRowVersions(
       database,
       source.legacyTournamentId
     );
@@ -70,17 +79,81 @@ postgresDescribe("PostgreSQL 2026 legacy backfill rehearsal", () => {
       database,
       legacyTournamentId: source.legacyTournamentId
     });
+    const protectedRowsAfter = await readProtectedRowVersions(
+      database,
+      source.legacyTournamentId
+    );
+    expect(protectedRowsAfter).toEqual(protectedRowsBefore);
     const second = await runLegacy2026Backfill({
+      database,
+      legacyTournamentId: source.legacyTournamentId
+    });
+    await database.query(
+      `INSERT INTO comments (
+         id, match_id, author_kind, author_display_name, body, created_at
+       ) VALUES ($1, $2, 'guest', 'Synthetic Guest', 'Sanitized later comment', $3)`,
+      [
+        "synthetic-comment-after-backfill",
+        "legacy-match-pod-a",
+        "2026-06-23T00:00:00.000Z"
+      ]
+    );
+    const afterCommunityWrite = await runLegacy2026Backfill({
       database,
       legacyTournamentId: source.legacyTournamentId
     });
 
     expect(applied).toMatchObject({ status: "applied", issues: [] });
+    await assertPinnedSyntheticProjection(database);
+    await expect(database.query(
+      `
+        WITH fake_run AS (
+          INSERT INTO engine_legacy_backfill_runs (
+            id, legacy_tournament_id, source_snapshot_version, tool_version,
+            source_digest, status, started_at, counts, metadata
+          ) VALUES (
+            'ffffffff-ffff-4fff-8fff-000000000001'::uuid,
+            $1, $2, 2, repeat('f', 64), 'running', $3,
+            '{}'::jsonb, '{}'::jsonb
+          ) RETURNING id
+        ), source AS (
+          SELECT resolution.*, fake_run.id AS fake_run_id
+          FROM engine_bracket_match_resolutions resolution
+          CROSS JOIN fake_run
+          WHERE resolution.provenance_kind = 'legacy_backfill'
+          ORDER BY resolution.id
+          LIMIT 1
+        )
+        INSERT INTO engine_bracket_match_resolutions (
+          id, tournament_id, bracket_match_id, match_id, revision_id,
+          winner_team_id, resolution_type, match_status,
+          confirmation_digest, resolved_by_admin_id, resolved_at, metadata,
+          provenance_kind, legacy_backfill_run_id
+        )
+        SELECT 'ffffffff-ffff-4fff-8fff-000000000002'::uuid,
+               tournament_id, bracket_match_id, match_id, revision_id,
+               winner_team_id, resolution_type, match_status,
+               confirmation_digest, NULL, resolved_at, metadata,
+               'legacy_backfill', fake_run_id
+        FROM source
+      `,
+      [
+        source.legacyTournamentId,
+        source.snapshotVersion,
+        source.snapshotPublishedAt
+      ]
+    )).rejects.toThrow("Legacy bracket resolution provenance is invalid.");
     expect(second).toMatchObject({
       status: "no_op",
       sourceDigest: applied.sourceDigest,
       planDigest: applied.planDigest,
       mappingDigest: applied.mappingDigest,
+      counts: applied.counts
+    });
+    expect(afterCommunityWrite).toMatchObject({
+      status: "no_op",
+      sourceDigest: applied.sourceDigest,
+      planDigest: applied.planDigest,
       counts: applied.counts
     });
     const publicAfter = await publicReads.findTournamentById(
@@ -114,6 +187,107 @@ postgresDescribe("PostgreSQL 2026 legacy backfill rehearsal", () => {
     expect(storedTournament.rows[0]?.setup_published_at.toISOString()).toBe(
       source.snapshotPublishedAt
     );
+
+    const releaseState = await database.query<{
+      pod_standings: string;
+      seed_pointers: string;
+      bracket_pointers: string;
+      resolution_pointers: string;
+      statistic_pointers: string;
+      projection_pointers: string;
+      legacy_publications: string;
+      legacy_resolutions: string;
+      standing_authority: string;
+      legacy_finalizations: string;
+      legacy_advancements: string;
+    }>(
+      `
+        SELECT
+          (SELECT count(*) FROM engine_active_pod_standing_calculations
+            WHERE tournament_id = $1::uuid)::text AS pod_standings,
+          (SELECT count(*) FROM engine_active_seed_calculations
+            WHERE tournament_id = $1::uuid)::text AS seed_pointers,
+          (SELECT count(*) FROM engine_active_brackets
+            WHERE tournament_id = $1::uuid)::text AS bracket_pointers,
+          (SELECT count(*) FROM engine_active_bracket_match_resolutions
+            WHERE tournament_id = $1::uuid)::text AS resolution_pointers,
+          (SELECT count(*) FROM engine_active_tournament_statistic_runs
+            WHERE tournament_id = $1::uuid)::text AS statistic_pointers,
+          (SELECT count(*) FROM engine_active_projection_versions
+            WHERE tournament_id = $1::uuid)::text AS projection_pointers,
+          (SELECT count(*) FROM engine_bracket_publications
+            WHERE tournament_id = $1::uuid
+              AND provenance_kind = 'legacy_backfill'
+              AND cumulative_workbook_id IS NULL
+              AND published_by_admin_id IS NULL)::text AS legacy_publications,
+          (SELECT count(*) FROM engine_bracket_match_resolutions
+            WHERE tournament_id = $1::uuid
+              AND provenance_kind = 'legacy_backfill'
+              AND resolved_by_admin_id IS NULL)::text AS legacy_resolutions,
+          (SELECT count(*) FROM engine_standing_calculation_matches
+            WHERE tournament_id = $1::uuid
+              AND revision_id IS NOT NULL
+              AND statistic_run_id IS NOT NULL
+              AND statistic_input_digest IS NOT NULL)::text AS standing_authority,
+          (SELECT count(*) FROM engine_pod_finalization_provenance
+            WHERE tournament_id = $1::uuid
+              AND provenance_kind = 'legacy_backfill'
+              AND finalized_by_admin_id IS NULL)::text AS legacy_finalizations,
+          (SELECT count(*) FROM engine_bracket_advancements
+            WHERE tournament_id = $1::uuid
+              AND provenance_kind = 'legacy_backfill'
+              AND advanced_by_admin_id IS NULL)::text AS legacy_advancements
+      `,
+      [new LegacyBackfillPlanner().plan(source).tournament.id]
+    );
+    expect(releaseState.rows).toEqual([{
+      pod_standings: "2",
+      seed_pointers: "1",
+      bracket_pointers: "1",
+      resolution_pointers: "3",
+      statistic_pointers: "1",
+      projection_pointers: "1",
+      legacy_publications: "1",
+      legacy_resolutions: "3",
+      standing_authority: "1",
+      legacy_finalizations: "2",
+      legacy_advancements: "2"
+    }]);
+    expect(applied.counts).toMatchObject({
+      scoringEvents: 5,
+      shotAttempts: 4,
+      shotClassifications: 2,
+      statisticRuns: 5,
+      standingCalculationMatches: 1,
+      podFinalizationProvenance: 2,
+      activePodStandingCalculations: 2,
+      activeSeedCalculations: 1,
+      activeBrackets: 1,
+      activeBracketResolutions: 3,
+      bracketAdvancements: 2,
+      projectionVersions: 1,
+      matchProjectionPayloads: 4
+    });
+
+    const compatibilityAttribution = await database.query<{
+      player_public_key: string;
+      attribution_method: string;
+      scorecard_row_id: string;
+    }>(
+      `
+        SELECT player.public_key AS player_public_key,
+               event.metadata ->> 'attributionMethod' AS attribution_method,
+               event.metadata ->> 'legacyScorecardRowId' AS scorecard_row_id
+        FROM engine_match_events event
+        JOIN engine_players player ON player.id = event.player_id
+        WHERE event.metadata ->> 'legacyEventId' = 'pod-a-make'
+      `
+    );
+    expect(compatibilityAttribution.rows).toEqual([{
+      player_public_key: "legacy-player-a1",
+      attribution_method: "scorecard_player_id",
+      scorecard_row_id: "legacy-scorecard-pod-a-make"
+    }]);
 
     const frozenSlots = await database.query<{
       slot_count: string;
@@ -211,8 +385,85 @@ postgresDescribe("PostgreSQL 2026 legacy backfill rehearsal", () => {
       [source.legacyTournamentId]
     );
     expect(checkpoint.rows).toEqual([
-      expect.objectContaining({ status: "completed", attempt_count: "3" })
+      expect.objectContaining({ status: "completed", attempt_count: "4" })
     ]);
+  });
+
+  it("serializes concurrent applies into one apply and one no-op", async () => {
+    const source = syntheticPopulatedLegacySource();
+    await seedLegacySource(database, source);
+
+    const results = await Promise.all([
+      runLegacy2026Backfill({
+        database,
+        legacyTournamentId: source.legacyTournamentId
+      }),
+      runLegacy2026Backfill({
+        database,
+        legacyTournamentId: source.legacyTournamentId
+      })
+    ]);
+
+    expect(results.map((result) => result.status).sort()).toEqual([
+      "applied",
+      "no_op"
+    ]);
+    const counts = await database.query<{
+      tournaments: string;
+      projections: string;
+      completed_runs: string;
+    }>(
+      `SELECT
+         (SELECT count(*) FROM engine_tournaments)::text AS tournaments,
+         (SELECT count(*) FROM engine_active_projection_versions)::text
+           AS projections,
+         (SELECT count(*) FROM engine_legacy_backfill_runs
+           WHERE status = 'completed')::text AS completed_runs`
+    );
+    expect(counts.rows).toEqual([{
+      tournaments: "1",
+      projections: "1",
+      completed_runs: "1"
+    }]);
+  });
+
+  it("rolls back every canonical artifact when equivalence fails", async () => {
+    const source = syntheticPopulatedLegacySource();
+    source.matches[0]?.statistics.push({
+      subjectType: "player",
+      legacyTeamId: "legacy-team-alpha",
+      legacyPlayerId: "legacy-player-a1",
+      metricValues: { makes: 99 }
+    });
+    await seedLegacySource(database, source);
+
+    const result = await runLegacy2026Backfill({
+      database,
+      legacyTournamentId: source.legacyTournamentId
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      retryable: true,
+      issues: [expect.objectContaining({ code: "LEGACY_BACKFILL_APPLY_FAILED" })]
+    });
+    const counts = await database.query<{
+      tournaments: string;
+      projections: string;
+      legacy_matches: string;
+    }>(
+      `SELECT
+         (SELECT count(*) FROM engine_tournaments)::text AS tournaments,
+         (SELECT count(*) FROM engine_projection_versions)::text AS projections,
+         (SELECT count(*) FROM matches WHERE tournament_id = $1)::text
+           AS legacy_matches`,
+      [source.legacyTournamentId]
+    );
+    expect(counts.rows).toEqual([{
+      tournaments: "0",
+      projections: "0",
+      legacy_matches: String(source.matches.length)
+    }]);
   });
 });
 
@@ -221,6 +472,58 @@ interface RawMatchIdentity {
   tournament_id: string;
   created_at: string;
   xmin: string;
+}
+
+interface ProtectedRowVersion {
+  table_name: string;
+  row_key: string;
+  row_version: string;
+}
+
+async function readProtectedRowVersions(
+  database: PostgresDatabase,
+  tournamentId: string
+): Promise<ProtectedRowVersion[]> {
+  const result = await database.query<ProtectedRowVersion>(
+    `
+      WITH match_keys AS (
+        SELECT match_id FROM match_identities WHERE tournament_id = $1
+      ), relevant_accounts AS (
+        SELECT author_user_id AS user_id FROM comments
+        WHERE match_id IN (SELECT match_id FROM match_keys)
+        UNION
+        SELECT reporter_user_id FROM comment_reports
+        WHERE match_id IN (SELECT match_id FROM match_keys)
+      )
+      SELECT 'tournament_snapshot_versions' AS table_name,
+             tournament_id || ':' || version::text AS row_key,
+             xmin::text AS row_version
+      FROM tournament_snapshot_versions WHERE tournament_id = $1
+      UNION ALL SELECT 'upload_reports', id, xmin::text
+      FROM upload_reports WHERE tournament_id = $1
+      UNION ALL SELECT 'comments', id, xmin::text FROM comments
+      WHERE match_id IN (SELECT match_id FROM match_keys)
+      UNION ALL SELECT 'comment_reports', id, xmin::text FROM comment_reports
+      WHERE match_id IN (SELECT match_id FROM match_keys)
+      UNION ALL SELECT 'user_accounts', id, xmin::text FROM user_accounts
+      WHERE id IN (SELECT user_id FROM relevant_accounts)
+      UNION ALL SELECT 'local_account_credentials', user_id, xmin::text
+      FROM local_account_credentials
+      WHERE user_id IN (SELECT user_id FROM relevant_accounts)
+      UNION ALL SELECT 'external_identities', provider || ':' || provider_subject,
+             xmin::text FROM external_identities
+      WHERE user_id IN (SELECT user_id FROM relevant_accounts)
+      UNION ALL SELECT 'auth_sessions', id, xmin::text FROM auth_sessions
+      WHERE user_id IN (SELECT user_id FROM relevant_accounts)
+      UNION ALL SELECT 'user_blocks', blocker_user_id || ':' || blocked_user_id,
+             xmin::text FROM user_blocks
+      WHERE blocker_user_id IN (SELECT user_id FROM relevant_accounts)
+         OR blocked_user_id IN (SELECT user_id FROM relevant_accounts)
+      ORDER BY table_name, row_key
+    `,
+    [tournamentId]
+  );
+  return result.rows;
 }
 
 async function readRawMatchIdentities(
@@ -239,6 +542,253 @@ async function readRawMatchIdentities(
   return result.rows;
 }
 
+async function assertPinnedSyntheticProjection(
+  database: PostgresDatabase
+): Promise<void> {
+  const tournamentResult = await database.query<{
+    tournament_detail: CanonicalPublicTournament;
+  }>(
+    `
+      SELECT payload.tournament_detail
+      FROM engine_public_tournament_projection_payloads payload
+      JOIN engine_active_projection_versions active
+        ON active.tournament_id = payload.tournament_id
+       AND active.projection_version = payload.projection_version
+    `
+  );
+  const tournament = tournamentResult.rows[0]?.tournament_detail;
+  if (tournament === undefined) {
+    throw new Error("Pinned synthetic tournament projection is missing.");
+  }
+  expect(tournament.pods.map((pod) => ({
+    id: pod.id,
+    standingState: pod.standingState,
+    standings: pod.standings.map((standing) => ({
+      teamId: standing.team.id,
+      rank: standing.rank,
+      wins: standing.wins,
+      losses: standing.losses,
+      cupDifferential: standing.cupDifferential,
+      shootingPercentage: standing.shootingPercentage
+    }))
+  }))).toEqual([
+    {
+      id: "legacy-pod-a",
+      standingState: "finalized",
+      standings: [
+        {
+          teamId: "legacy-team-alpha", rank: 1, wins: 1, losses: 0,
+          cupDifferential: 3, shootingPercentage: 0.55
+        },
+        {
+          teamId: "legacy-team-bravo", rank: 2, wins: 0, losses: 1,
+          cupDifferential: -3, shootingPercentage: 0.45
+        }
+      ]
+    },
+    {
+      id: "legacy-pod-b",
+      standingState: "finalized",
+      standings: [
+        {
+          teamId: "legacy-team-charlie", rank: 1, wins: 1, losses: 0,
+          cupDifferential: 2, shootingPercentage: 0.55
+        },
+        {
+          teamId: "legacy-team-delta", rank: 2, wins: 0, losses: 1,
+          cupDifferential: -2, shootingPercentage: 0.45
+        }
+      ]
+    }
+  ]);
+  expect(tournament.seeds.map((seed) => ({
+    teamId: seed.team.id,
+    calculatedSeed: seed.calculatedSeed,
+    effectiveSeed: seed.effectiveSeed,
+    overridden: seed.overridden
+  }))).toEqual([
+    { teamId: "legacy-team-alpha", calculatedSeed: 1, effectiveSeed: 1,
+      overridden: false },
+    { teamId: "legacy-team-charlie", calculatedSeed: 2, effectiveSeed: 2,
+      overridden: false },
+    { teamId: "legacy-team-delta", calculatedSeed: 3, effectiveSeed: 3,
+      overridden: false },
+    { teamId: "legacy-team-bravo", calculatedSeed: 4, effectiveSeed: 4,
+      overridden: false }
+  ]);
+  expect(statisticValue(
+    tournament.statistics,
+    null,
+    "legacy-player-a1",
+    "makes"
+  )).toBe(1);
+  expect(statisticValue(
+    tournament.statistics,
+    "playoffs",
+    "legacy-player-a-former",
+    "makes"
+  )).toBe(1);
+  expect(statisticValue(
+    tournament.statistics,
+    "playoffs",
+    "legacy-player-c1",
+    "guys"
+  )).toBe(1);
+
+  expect(tournament.bracket?.rounds.map((round) => ({
+    id: round.id,
+    matches: round.matches.map((match) => ({
+      id: match.id,
+      matchId: match.matchId,
+      winnerId: match.winner?.id ?? null,
+      slots: match.slots.map((slot) => ({
+        source: slot.source,
+        teamId: "team" in slot ? slot.team?.id ?? null : null,
+        seed: "seed" in slot ? slot.seed : null,
+        sourceBracketMatchId: "sourceBracketMatchId" in slot
+          ? slot.sourceBracketMatchId
+          : null
+      }))
+    }))
+  }))).toEqual([
+    {
+      id: "legacy-round-semis",
+      matches: [
+        {
+          id: "legacy-bracket-semi-1",
+          matchId: "legacy-match-playoff-scored",
+          winnerId: "legacy-team-alpha",
+          slots: [
+            { source: "team", teamId: "legacy-team-alpha", seed: 1,
+              sourceBracketMatchId: null },
+            { source: "team", teamId: "legacy-team-charlie", seed: 2,
+              sourceBracketMatchId: null }
+          ]
+        },
+        {
+          id: "legacy-bracket-semi-2",
+          matchId: expect.stringMatching(/^legacy_match_[0-9a-f]{32}$/),
+          winnerId: "legacy-team-delta",
+          slots: [
+            { source: "team", teamId: "legacy-team-delta", seed: 3,
+              sourceBracketMatchId: null },
+            { source: "team", teamId: "legacy-team-bravo", seed: 4,
+              sourceBracketMatchId: null }
+          ]
+        }
+      ]
+    },
+    {
+      id: "legacy-round-final",
+      matches: [{
+        id: "legacy-bracket-final",
+        matchId: "legacy-match-bracket-only-final",
+        winnerId: "legacy-team-alpha",
+        slots: [
+          { source: "match_winner", teamId: "legacy-team-alpha", seed: 1,
+            sourceBracketMatchId: "legacy-bracket-semi-1" },
+          { source: "match_winner", teamId: "legacy-team-delta", seed: 3,
+            sourceBracketMatchId: "legacy-bracket-semi-2" }
+        ]
+      }]
+    }
+  ]);
+
+  const matchResult = await database.query<{
+    match_public_key: string;
+    detail_payload: CanonicalPublicMatch;
+  }>(
+    `
+      SELECT payload.match_public_key, payload.detail_payload
+      FROM engine_public_match_projection_payloads payload
+      JOIN engine_active_projection_versions active
+        ON active.tournament_id = payload.tournament_id
+       AND active.projection_version = payload.projection_version
+      ORDER BY payload.match_public_key
+    `
+  );
+  const matches = new Map(matchResult.rows.map((row) => [
+    row.match_public_key,
+    row.detail_payload
+  ]));
+  const podMatch = matches.get("legacy-match-pod-a");
+  expect(podMatch?.events.map((event) => ({
+    sequence: event.sequence,
+    type: event.type,
+    teamId: event.teamId,
+    playerId: event.playerId,
+    outcome: event.details.outcome ?? null,
+    classification: event.details.classification ?? null
+  }))).toEqual([
+    { sequence: 1, type: "shot_attempt", teamId: "legacy-team-alpha",
+      playerId: "legacy-player-a1", outcome: "make", classification: null },
+    { sequence: 2, type: "shot_attempt", teamId: "legacy-team-bravo",
+      playerId: "legacy-player-b1", outcome: "miss", classification: "tri" },
+    { sequence: 3, type: "vom", teamId: "legacy-team-alpha",
+      playerId: "legacy-player-a2", outcome: null, classification: null }
+  ]);
+  expect(podMatch?.scorecard?.rows.map((row) => ({
+    sequence: row.sequence,
+    teamId: row.teamId,
+    playerId: row.playerId,
+    outcome: row.values.outcome,
+    classification: row.values.classification
+  }))).toEqual([
+    { sequence: 1, teamId: "legacy-team-alpha", playerId: "legacy-player-a1",
+      outcome: "make", classification: null },
+    { sequence: 2, teamId: "legacy-team-bravo", playerId: "legacy-player-b1",
+      outcome: "miss", classification: "tri" }
+  ]);
+  expect(boxScoreValue(podMatch, "legacy-player-a1", "makes")).toBe(1);
+  expect(boxScoreValue(podMatch, "legacy-player-b1", "tris")).toBe(1);
+  expect(boxScoreValue(podMatch, "legacy-player-a2", "voms")).toBe(1);
+
+  const playoff = matches.get("legacy-match-playoff-scored");
+  expect(playoff?.participants[0]?.players.map((player) => player.id)).toEqual([
+    "legacy-player-a-former",
+    "legacy-player-a2"
+  ]);
+  expect(boxScoreValue(playoff, "legacy-player-a-former", "makes")).toBe(1);
+  const final = matches.get("legacy-match-bracket-only-final");
+  expect(final).toMatchObject({
+    status: "final",
+    scoreAvailability: "unrecorded",
+    events: [],
+    boxScore: null,
+    scorecard: null
+  });
+  expect(final?.participants.map((participant) => ({
+    teamId: participant.team.id,
+    score: participant.score,
+    players: participant.players
+  }))).toEqual([
+    { teamId: "legacy-team-alpha", score: null, players: [] },
+    { teamId: "legacy-team-delta", score: null, players: [] }
+  ]);
+}
+
+function statisticValue(
+  statistics: CanonicalPublicTournament["statistics"],
+  stage: "playoffs" | null,
+  subjectId: string,
+  metric: string
+): number | null | undefined {
+  return statistics.find((statistic) =>
+    statistic.scope === "tournament" && statistic.stage === stage &&
+    statistic.subject?.id === subjectId
+  )?.values[metric];
+}
+
+function boxScoreValue(
+  match: CanonicalPublicMatch | undefined,
+  subjectId: string,
+  metric: string
+): number | null | undefined {
+  return match?.boxScore?.rows.find((row) =>
+    row.subject.id === subjectId
+  )?.values[metric];
+}
+
 async function seedLegacySource(
   database: PostgresDatabase,
   source: LegacyTournamentSource
@@ -251,6 +801,53 @@ async function seedLegacySource(
   );
   await database.query(
     `
+      INSERT INTO user_accounts (
+        id, display_name, normalized_display_name, provider, created_at, updated_at
+      ) VALUES
+        ('synthetic-account-author', 'Synthetic Author', 'synthetic author',
+         'local_account', $1, $1),
+        ('synthetic-account-reporter', 'Synthetic Reporter', 'synthetic reporter',
+         'game_center', $1, $1)
+    `,
+    [source.snapshotPublishedAt]
+  );
+  await database.query(
+    `INSERT INTO local_account_credentials (user_id, password_hash, updated_at)
+     VALUES ('synthetic-account-author', 'sanitized-fixture-hash', $1)`,
+    [source.snapshotPublishedAt]
+  );
+  await database.query(
+    `
+      INSERT INTO external_identities (
+        user_id, provider, provider_subject, metadata, created_at
+      ) VALUES (
+        'synthetic-account-reporter', 'game_center',
+        'synthetic-fixture-subject', '{"fixture":true}'::jsonb, $1
+      )
+    `,
+    [source.snapshotPublishedAt]
+  );
+  await database.query(
+    `
+      INSERT INTO auth_sessions (
+        id, user_id, token_hash, created_at, expires_at, last_seen_at
+      ) VALUES
+        ('synthetic-session-author', 'synthetic-account-author',
+         'synthetic-fixture-token-author', $1, $1::timestamptz + interval '1 year', $1),
+        ('synthetic-session-reporter', 'synthetic-account-reporter',
+         'synthetic-fixture-token-reporter', $1, $1::timestamptz + interval '1 year', $1)
+    `,
+    [source.snapshotPublishedAt]
+  );
+  await database.query(
+    `
+      INSERT INTO user_blocks (blocker_user_id, blocked_user_id, created_at)
+      VALUES ('synthetic-account-author', 'synthetic-account-reporter', $1)
+    `,
+    [source.snapshotPublishedAt]
+  );
+  await database.query(
+    `
       INSERT INTO tournaments (id, game_type, year, name)
       VALUES ($1, $2, $3, $4)
     `,
@@ -260,11 +857,11 @@ async function seedLegacySource(
     `
       INSERT INTO tournament_snapshot_versions (
         tournament_id, version, status, format, active_match_ids,
-        featured_match_ids, bracket, metadata, game_definition, validation,
-        source_id, generated_at, published_at, updated_at
+        featured_match_ids, bracket, statistics, metadata, game_definition,
+        validation, source_id, generated_at, published_at, updated_at
       ) VALUES (
         $1, $2, $3, $4::jsonb, $5::text[], '{}'::text[], $6::jsonb,
-        $7::jsonb, '{}'::jsonb, '{}'::jsonb, $8, $9, $9, $9
+        $7::jsonb, $8::jsonb, '{}'::jsonb, '{}'::jsonb, $9, $10, $10, $10
       )
     `,
     [
@@ -274,9 +871,53 @@ async function seedLegacySource(
       JSON.stringify(source.format),
       source.matches.map((match) => match.legacyMatchId),
       JSON.stringify(toLegacyBracket(source)),
+      JSON.stringify(toLegacyTournamentStatistics(source)),
       JSON.stringify(source.metadata),
       sourceId,
       source.snapshotPublishedAt
+    ]
+  );
+  await database.query(
+    `
+      INSERT INTO tournament_snapshot_versions (
+        tournament_id, version, status, format, active_match_ids,
+        featured_match_ids, bracket, statistics, metadata, game_definition,
+        validation, source_id, generated_at, published_at, updated_at
+      ) VALUES (
+        $1, $2, 'archived', $3::jsonb, '{}'::text[], '{}'::text[], NULL,
+        '[]'::jsonb, $4::jsonb, '{}'::jsonb, '{}'::jsonb, $5,
+        $6::timestamptz - interval '1 day',
+        $6::timestamptz - interval '1 day',
+        $6::timestamptz - interval '1 day'
+      )
+    `,
+    [
+      source.legacyTournamentId,
+      source.snapshotVersion - 1,
+      JSON.stringify(source.format),
+      JSON.stringify({ fixture: true, historical: true }),
+      sourceId,
+      source.snapshotPublishedAt
+    ]
+  );
+  await database.query(
+    `
+      INSERT INTO upload_reports (
+        id, game_type, source_id, status, validation, tournament_id,
+        snapshot_version, snapshot_published_at, previous_snapshot_version,
+        received_at, completed_at, metadata
+      ) VALUES (
+        'synthetic-upload-report', $1, $2, 'published', '{}'::jsonb, $3,
+        $4, $5, $6, $5, $5, '{"fixture":true}'::jsonb
+      )
+    `,
+    [
+      source.gameType,
+      sourceId,
+      source.legacyTournamentId,
+      source.snapshotVersion,
+      source.snapshotPublishedAt,
+      source.snapshotVersion - 1
     ]
   );
   await database.query(
@@ -384,7 +1025,7 @@ async function seedLegacySource(
           box_score, scorecard, events, domain_version, updated_at
         ) VALUES (
           $1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10,
-          $11::jsonb, '{}'::jsonb, '{}'::jsonb, '[]'::jsonb, 1, $12
+          $11::jsonb, $12::jsonb, $13::jsonb, $14::jsonb, 1, $15
         )
       `,
       [
@@ -419,6 +1060,62 @@ async function seedLegacySource(
             ? "bracket-only"
             : undefined
         }),
+        JSON.stringify({
+          matchId: match.legacyMatchId,
+          gameType: source.gameType,
+          rows: match.statistics.map((statistic) => ({
+            subject: {
+              type: statistic.subjectType,
+              teamId: statistic.legacyTeamId,
+              playerId: statistic.legacyPlayerId,
+              label: statistic.legacyPlayerId ?? statistic.legacyTeamId ?? "subject"
+            },
+            stats: statistic.metricValues
+          })),
+          totals: {}
+        }),
+        JSON.stringify({
+          definition: {
+            id: "synthetic-scorecard",
+            gameType: source.gameType,
+            name: "Synthetic scorecard",
+            columns: []
+          },
+          rows: match.scorecardRows.map((row, index) => ({
+            id: row.legacyScorecardRowId,
+            matchId: match.legacyMatchId,
+            sequence: row.sequence,
+            teamId: row.legacyTeamId,
+            playerId: row.legacyPlayerId,
+            eventIds: row.legacyEventIds,
+            values: row.values
+          }))
+        }),
+        JSON.stringify(match.events.map((event) => {
+          const scorecard = match.scorecardRows.find((row) =>
+            row.legacyEventIds.includes(event.legacyEventId)
+          );
+          return {
+            id: event.legacyEventId,
+            matchId: match.legacyMatchId,
+            tournamentId: source.legacyTournamentId,
+            gameType: source.gameType,
+            type: event.type,
+            sequence: event.sequence,
+            occurredAt: event.occurredAt,
+            phaseId: event.phase,
+            teamId: event.legacyTeamId,
+            playerId: event.legacyEventId === "pod-a-make"
+              ? undefined
+              : event.legacyPlayerId,
+            metadata: {
+              shooterName: scorecard?.values.shooter,
+              turnNumber: event.turnNumber,
+              teamTurnOrder: event.teamTurnOrder,
+              shotInTeamTurn: event.shotInTeamTurn
+            }
+          };
+        })),
         match.updatedAt
       ]
     );
@@ -471,8 +1168,12 @@ async function seedLegacySource(
       await database.query(
         `
           INSERT INTO comments (
-            id, match_id, author_kind, author_display_name, body, created_at
-          ) VALUES ($1, $2, 'guest', 'Synthetic Guest', 'Sanitized fixture', $3)
+            id, match_id, author_kind, author_display_name, author_user_id,
+            body, created_at
+          ) VALUES (
+            $1, $2, 'account', 'Synthetic Account',
+            'synthetic-account-author', 'Sanitized fixture', $3
+          )
         `,
         [commentId, identity.legacyMatchId, source.snapshotPublishedAt]
       );
@@ -481,9 +1182,12 @@ async function seedLegacySource(
       await database.query(
         `
           INSERT INTO comment_reports (
-            id, comment_id, reported_comment_id, match_id, reason, status,
-            created_at
-          ) VALUES ($1, $2, $2, $3, 'other', 'open', $4)
+            id, comment_id, reported_comment_id, match_id, reporter_user_id,
+            reason, status, created_at
+          ) VALUES (
+            $1, $2, $2, $3, 'synthetic-account-reporter',
+            'other', 'open', $4
+          )
         `,
         [
           reportId,
@@ -494,6 +1198,22 @@ async function seedLegacySource(
       );
     }
   }
+}
+
+function toLegacyTournamentStatistics(source: LegacyTournamentSource): unknown {
+  return source.tournamentStatistics.map((table) => ({
+    id: table.legacyTableId,
+    scope: table.scope,
+    subjectType: table.subjectType,
+    rows: table.rows.map((row) => ({
+      rank: row.rank,
+      subject: {
+        teamId: row.legacyTeamId,
+        playerId: row.legacyPlayerId
+      },
+      values: row.metricValues
+    }))
+  }));
 }
 
 function toLegacyBracket(source: LegacyTournamentSource): unknown {
