@@ -35,6 +35,16 @@ struct HomeView: View {
         .background(Color.appGroupedBackground)
         .navigationTitle(HomeCopy.navigationTitle)
         .appInlineNavigationTitle()
+        .toolbar {
+            ToolbarItem(placement: historyToolbarPlacement) {
+                Button {
+                    navigation.showTournamentHistory()
+                } label: {
+                    Label("Tournament history", systemImage: "clock.arrow.circlepath")
+                }
+                .accessibilityIdentifier("history.toolbar")
+            }
+        }
         .refreshable {
             await retry()
         }
@@ -47,5 +57,13 @@ struct HomeView: View {
 
     private func openMatch(_ match: MatchPreview, in detail: TournamentDetail) {
         navigation.showMatch(match, in: detail)
+    }
+
+    private var historyToolbarPlacement: ToolbarItemPlacement {
+        #if os(macOS)
+        .automatic
+        #else
+        .topBarLeading
+        #endif
     }
 }

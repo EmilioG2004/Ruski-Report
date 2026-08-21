@@ -97,6 +97,11 @@ struct AppRootView: View {
     @ViewBuilder
     private func destination(for route: AppRoute) -> some View {
         switch route {
+        case .tournamentHistory:
+            TournamentHistoryView(
+                tournaments: services.tournaments,
+                logger: services.logger
+            )
         case .tournament(let id):
             TournamentDetailView(
                 tournamentId: id,
