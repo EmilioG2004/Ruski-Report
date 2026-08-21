@@ -227,6 +227,18 @@ export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
 
     const podTeams = groupMembers(podTeamResult.rows);
     const podMatches = groupMembers(podMatchResult.rows);
+    const tournamentStatistics = readTournamentStatistics(header.statistics);
+    const matches = matchResult.rows.map(readMatch);
+    const currentPlayers = playerResult.rows.map((row) => ({
+      legacyPlayerId: row.player_id,
+      displayName: row.display_name
+    }));
+    const players = includeHistoricalPlayers({
+      currentPlayers,
+      matches,
+      tournamentStatistics,
+      matchRows: matchResult.rows
+    });
 
     return {
       legacyTournamentId: tournamentId,
@@ -238,7 +250,7 @@ export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
       status: header.status,
       format: readObject(header.format, "tournament format"),
       metadata: readObject(header.metadata, "tournament metadata"),
-      tournamentStatistics: readTournamentStatistics(header.statistics),
+      tournamentStatistics,
       teams: teamResult.rows.map((row) => {
         const seed = readOptionalObject(row.seed, "team seed");
         return {
@@ -249,10 +261,7 @@ export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
           overallSeed: readOptionalInteger(seed, "overall")
         };
       }),
-      players: playerResult.rows.map((row) => ({
-        legacyPlayerId: row.player_id,
-        displayName: row.display_name
-      })),
+      players,
       rosterMemberships: rosterResult.rows.map((row) => ({
         legacyTeamId: row.team_id,
         legacyPlayerId: row.player_id,
@@ -265,24 +274,7 @@ export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
         legacyTeamIds: podTeams.get(row.pod_id) ?? [],
         legacyMatchIds: podMatches.get(row.pod_id) ?? []
       })),
-      matches: matchResult.rows.map((row) => {
-        const participants = readParticipants(row.participants);
-        const scorecardRows = readScorecardRows(row.scorecard);
-        return {
-          legacyMatchId: row.match_id,
-          sequence: row.sequence,
-          status: readMatchStatus(row.status),
-          legacyPodId: row.pod_id ?? undefined,
-          legacyBracketMatchId: row.bracket_match_id ?? undefined,
-          participants,
-          score: readScore(row.score),
-          events: readEvents(row.events, participants, scorecardRows),
-          statistics: readStatistics(row.box_score),
-          scorecardRows,
-          detailAvailability: readDetailAvailability(row.metadata),
-          updatedAt: toISOString(row.updated_at)
-        };
-      }),
+      matches,
       standings: standingResult.rows.map((row) => {
         const record = readObject(row.record, "standing record");
         return {
@@ -306,6 +298,153 @@ export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
       }))
     };
   }
+}
+
+function readMatch(row: MatchRow): LegacyTournamentSource["matches"][number] {
+  const participants = readParticipants(row.participants);
+  const scorecardRows = readScorecardRows(row.scorecard);
+  return {
+    legacyMatchId: row.match_id,
+    sequence: row.sequence,
+    status: readMatchStatus(row.status),
+    legacyPodId: row.pod_id ?? undefined,
+    legacyBracketMatchId: row.bracket_match_id ?? undefined,
+    participants,
+    score: readScore(row.score),
+    events: readEvents(row.events, participants, scorecardRows),
+    statistics: readStatistics(row.box_score),
+    scorecardRows,
+    detailAvailability: readDetailAvailability(row.metadata),
+    updatedAt: toISOString(row.updated_at)
+  };
+}
+
+function includeHistoricalPlayers(input: {
+  currentPlayers: LegacyTournamentSource["players"];
+  matches: LegacyTournamentSource["matches"];
+  tournamentStatistics: LegacyTournamentSource["tournamentStatistics"];
+  matchRows: readonly MatchRow[];
+}): LegacyTournamentSource["players"] {
+  const referencedIds = new Set<string>();
+  for (const match of input.matches) {
+    for (const participant of match.participants) {
+      participant.legacyPlayerIds.forEach((playerId) =>
+        addReferencedPlayer(referencedIds, playerId)
+      );
+    }
+    match.events.forEach((event) =>
+      addReferencedPlayer(referencedIds, event.legacyPlayerId)
+    );
+    match.statistics.forEach((statistic) => {
+      if (statistic.legacyPlayerId !== undefined) {
+        addReferencedPlayer(referencedIds, statistic.legacyPlayerId);
+      }
+    });
+    match.scorecardRows.forEach((row) => {
+      if (row.legacyPlayerId !== undefined) {
+        addReferencedPlayer(referencedIds, row.legacyPlayerId);
+      }
+    });
+  }
+  for (const table of input.tournamentStatistics) {
+    for (const row of table.rows) {
+      if (row.legacyPlayerId !== undefined) {
+        addReferencedPlayer(referencedIds, row.legacyPlayerId);
+      }
+    }
+  }
+
+  const currentIds = new Set(
+    input.currentPlayers.map((player) => player.legacyPlayerId)
+  );
+  const labelEvidence = readHistoricalPlayerLabelEvidence(
+    input.matchRows,
+    input.matches
+  );
+  const historicalPlayers = [...referencedIds]
+    .filter((playerId) => !currentIds.has(playerId))
+    .sort()
+    .map((playerId) => {
+      const labels = labelEvidence.boxScore.get(playerId) ??
+        labelEvidence.scorecard.get(playerId) ??
+        new Set<string>();
+      if (labels.size === 0) {
+        throw new Error(
+          "Legacy historical player lacks an exact public display label."
+        );
+      }
+      if (labels.size !== 1) {
+        throw new Error(
+          "Legacy historical player has conflicting public display labels."
+        );
+      }
+      return {
+        legacyPlayerId: playerId,
+        displayName: [...labels][0] as string
+      };
+    });
+
+  return [...input.currentPlayers, ...historicalPlayers].sort((left, right) =>
+    left.legacyPlayerId.localeCompare(right.legacyPlayerId)
+  );
+}
+
+function addReferencedPlayer(players: Set<string>, playerId: string): void {
+  if (playerId.trim().length === 0) {
+    throw new Error("Legacy historical player identity is invalid.");
+  }
+  players.add(playerId);
+}
+
+function readHistoricalPlayerLabelEvidence(
+  rows: readonly MatchRow[],
+  matches: LegacyTournamentSource["matches"]
+): {
+  boxScore: Map<string, Set<string>>;
+  scorecard: Map<string, Set<string>>;
+} {
+  const boxScore = new Map<string, Set<string>>();
+  const scorecard = new Map<string, Set<string>>();
+  for (const row of rows) {
+    const boxScoreObject = readObject(row.box_score, "match box score");
+    const boxScoreRows = boxScoreObject.rows === undefined
+      ? []
+      : readArray(boxScoreObject.rows, "match box score rows");
+    for (const item of boxScoreRows) {
+      const subject = readObject(
+        readObject(item, "match box score row").subject,
+        "match box score subject"
+      );
+      if (subject.type !== "player") {
+        continue;
+      }
+      const playerId = readOptionalString(subject, "playerId");
+      if (playerId !== undefined) {
+        addExactLabel(boxScore, playerId, subject.label);
+      }
+    }
+  }
+  for (const match of matches) {
+    for (const row of match.scorecardRows) {
+      if (row.legacyPlayerId !== undefined) {
+        addExactLabel(scorecard, row.legacyPlayerId, row.values.shooter);
+      }
+    }
+  }
+  return { boxScore, scorecard };
+}
+
+function addExactLabel(
+  evidence: Map<string, Set<string>>,
+  playerId: string,
+  value: unknown
+): void {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return;
+  }
+  const labels = evidence.get(playerId) ?? new Set<string>();
+  labels.add(value);
+  evidence.set(playerId, labels);
 }
 
 interface LegacySnapshotExecutor {
