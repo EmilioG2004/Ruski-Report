@@ -8,6 +8,19 @@ import Foundation
 enum AppRoute: Hashable {
     case tournament(id: TournamentPreview.ID)
     case match(MatchRouteContext)
+    case canonicalTournament(PublicTournamentRouteContext)
+    case canonicalMatch(PublicMatchRouteContext)
+}
+
+nonisolated struct PublicTournamentRouteContext: Hashable {
+    let tournamentId: PublicTournamentSummary.ID
+    let projectionVersion: Int64?
+}
+
+nonisolated struct PublicMatchRouteContext: Hashable {
+    let matchId: PublicMatchSummary.ID
+    let tournamentId: PublicTournamentSummary.ID
+    let projectionVersion: Int64?
 }
 
 nonisolated struct MatchRouteContext: Hashable {

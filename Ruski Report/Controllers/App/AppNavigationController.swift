@@ -13,6 +13,17 @@ final class AppNavigationController: ObservableObject {
         path.append(AppRoute.tournament(id: tournament.id))
     }
 
+    func showTournament(_ tournament: PublicTournamentSummary) {
+        path.append(
+            AppRoute.canonicalTournament(
+                PublicTournamentRouteContext(
+                    tournamentId: tournament.id,
+                    projectionVersion: tournament.projection.version
+                )
+            )
+        )
+    }
+
     func showMatch(_ match: MatchPreview, in tournament: TournamentDetail) {
         showMatch(
             match,
@@ -48,6 +59,18 @@ final class AppNavigationController: ObservableObject {
                     title: title,
                     teamNames: teamNames,
                     playerNames: playerNames
+                )
+            )
+        )
+    }
+
+    func showMatch(_ match: PublicMatchSummary) {
+        path.append(
+            AppRoute.canonicalMatch(
+                PublicMatchRouteContext(
+                    matchId: match.id,
+                    tournamentId: match.tournamentId,
+                    projectionVersion: match.projection.version
                 )
             )
         )
