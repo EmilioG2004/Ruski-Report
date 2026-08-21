@@ -11,6 +11,8 @@ import Foundation
 nonisolated enum PublicDisplayFixtures {
     static let primaryTournamentId = "summer-classic-2027"
     static let secondaryTournamentId = "fall-invitational-2027"
+    static let completedTournamentId = "legacy-championship-2026"
+    static let archivedTournamentId = "archive-invitational-2025"
 
     static let primaryProjection = PublicProjectionReference(
         tournamentId: primaryTournamentId,
@@ -22,6 +24,18 @@ nonisolated enum PublicDisplayFixtures {
         tournamentId: secondaryTournamentId,
         version: 3,
         activatedAt: "2027-05-28T14:00:00.000Z"
+    )
+
+    static let completedProjection = PublicProjectionReference(
+        tournamentId: completedTournamentId,
+        version: 12,
+        activatedAt: "2026-07-12T22:00:00.000Z"
+    )
+
+    static let archivedProjection = PublicProjectionReference(
+        tournamentId: archivedTournamentId,
+        version: 4,
+        activatedAt: "2025-07-13T22:00:00.000Z"
     )
 
     static let redTeam = PublicTeamIdentity(id: "team-red", name: "Red Rockets")
@@ -138,6 +152,13 @@ nonisolated enum PublicDisplayFixtures {
             redResult: .win,
             blueResult: .loss,
             bracketMatchId: "bracket-completed",
+            correction: PublicMatchCorrection(
+                isCorrection: true,
+                reason: "Corrected from the audited final scorecard.",
+                previousRevision: 1,
+                replacesMatchId: "public-playoff-rematch-original",
+                replacedByMatchId: nil
+            ),
             startedAt: "2027-06-04T18:00:00.000Z",
             endedAt: "2027-06-04T18:25:00.000Z"
         )
@@ -225,6 +246,43 @@ nonisolated enum PublicDisplayFixtures {
         bracket: nil
     )
 
+    static let completedTournamentDetail = historicalTournamentDetail(
+        id: completedTournamentId,
+        year: 2026,
+        name: "2026 Championship",
+        lifecycle: .completed,
+        projection: completedProjection
+    )
+
+    static let archivedTournamentDetail = historicalTournamentDetail(
+        id: archivedTournamentId,
+        year: 2025,
+        name: "2025 Invitational Archive",
+        lifecycle: .archived,
+        projection: archivedProjection
+    )
+
+    static let history = [
+        completedTournamentDetail.summary,
+        archivedTournamentDetail.summary
+    ]
+
+    static let historicalMatchDetails = [
+        completedTournamentDetail,
+        archivedTournamentDetail
+    ].flatMap { tournament in
+        tournament.matches.map { summary in
+            PublicMatchDetail(
+                id: summary.id,
+                summary: summary,
+                events: [],
+                statistics: [],
+                boxScore: nil,
+                scorecard: nil
+            )
+        }
+    }
+
     static let homeZero = PublicHomeScreen(
         tournaments: [],
         detailsByTournamentId: [:]
@@ -238,6 +296,16 @@ nonisolated enum PublicDisplayFixtures {
         detailsByTournamentId: [
             tournamentDetail.id: tournamentDetail,
             secondaryTournamentDetail.id: secondaryTournamentDetail
+        ]
+    )
+
+    static let homePartialDetail = PublicHomeScreen(
+        tournaments: [
+            tournamentDetail.summary,
+            secondaryTournamentDetail.summary
+        ],
+        detailsByTournamentId: [
+            tournamentDetail.id: tournamentDetail
         ]
     )
 
@@ -534,9 +602,9 @@ nonisolated enum PublicDisplayFixtures {
                         id: "bracket-completed",
                         round: 2,
                         position: 2,
-                        status: .completed,
+                        status: .corrected,
                         matchId: "public-playoff-rematch",
-                        replacedMatchId: nil,
+                        replacedMatchId: "public-playoff-rematch-original",
                         slots: [.team(redTeam, seed: 4), .team(blueTeam, seed: 5)],
                         winner: redTeam
                     )
@@ -683,6 +751,13 @@ nonisolated enum PublicDisplayFixtures {
         redResult: PublicParticipantResult? = nil,
         blueResult: PublicParticipantResult? = nil,
         bracketMatchId: String? = nil,
+        correction: PublicMatchCorrection = PublicMatchCorrection(
+            isCorrection: false,
+            reason: nil,
+            previousRevision: nil,
+            replacesMatchId: nil,
+            replacedByMatchId: nil
+        ),
         scheduledAt: String? = nil,
         startedAt: String? = nil,
         endedAt: String? = nil
@@ -699,13 +774,7 @@ nonisolated enum PublicDisplayFixtures {
             revision: status == .scheduled || status == .postponed ? nil : 1,
             status: status,
             scoreAvailability: availability,
-            correction: PublicMatchCorrection(
-                isCorrection: false,
-                reason: nil,
-                previousRevision: nil,
-                replacesMatchId: nil,
-                replacedByMatchId: nil
-            ),
+            correction: correction,
             timestamps: PublicMatchTimestamps(
                 scheduledAt: scheduledAt,
                 startedAt: startedAt,
@@ -733,6 +802,95 @@ nonisolated enum PublicDisplayFixtures {
                 )
             ],
             winner: winner
+        )
+    }
+
+    private static func historicalTournamentDetail(
+        id: String,
+        year: Int,
+        name: String,
+        lifecycle: PublicTournamentLifecycle,
+        projection: PublicProjectionReference
+    ) -> PublicTournamentDetail {
+        func historicalId(_ sourceId: String) -> String {
+            "\(id)-\(sourceId)"
+        }
+        let projectedMatches = matches.map { source in
+            PublicMatchSummary(
+                id: historicalId(source.id),
+                tournamentId: id,
+                projection: projection,
+                stage: source.stage,
+                sequence: source.sequence,
+                podId: source.podId,
+                bracketMatchId: source.bracketMatchId.map(historicalId),
+                instance: source.instance,
+                revision: source.revision,
+                status: source.status,
+                scoreAvailability: source.scoreAvailability,
+                correction: PublicMatchCorrection(
+                    isCorrection: source.correction.isCorrection,
+                    reason: source.correction.reason,
+                    previousRevision: source.correction.previousRevision,
+                    replacesMatchId: source.correction.replacesMatchId.map(historicalId),
+                    replacedByMatchId: source.correction.replacedByMatchId.map(
+                        historicalId
+                    )
+                ),
+                timestamps: source.timestamps,
+                participants: source.participants,
+                winner: source.winner
+            )
+        }
+        let projectedBracket = PublicBracket(
+            id: historicalId(bracket.id),
+            name: bracket.name,
+            size: bracket.size,
+            rounds: bracket.rounds.map { round in
+                PublicBracketRound(
+                    id: historicalId(round.id),
+                    name: round.name,
+                    sequence: round.sequence,
+                    matches: round.matches.map { match in
+                        PublicBracketMatch(
+                            id: historicalId(match.id),
+                            round: match.round,
+                            position: match.position,
+                            status: match.status,
+                            matchId: match.matchId.map(historicalId),
+                            replacedMatchId: match.replacedMatchId.map(historicalId),
+                            slots: match.slots.map { slot in
+                                switch slot {
+                                case .team, .bye, .tbd:
+                                    slot
+                                case .matchWinner(let sourceId, let team, let seed):
+                                    .matchWinner(
+                                        sourceBracketMatchId: historicalId(sourceId),
+                                        team: team,
+                                        seed: seed
+                                    )
+                                }
+                            },
+                            winner: match.winner
+                        )
+                    }
+                )
+            }
+        )
+        return PublicTournamentDetail(
+            id: id,
+            gameType: "ruski",
+            year: year,
+            name: name,
+            lifecycle: lifecycle,
+            projection: projection,
+            format: format,
+            rosters: rosters,
+            pods: pods,
+            seeds: seeds,
+            statistics: tournamentStatistics,
+            matches: projectedMatches,
+            bracket: projectedBracket
         )
     }
 
