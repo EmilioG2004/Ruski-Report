@@ -62,6 +62,23 @@ implements PublicProjectionReadRepository {
   async listActiveTournaments(): Promise<
     readonly CanonicalTournamentDiscoveryItem[]
   > {
+    return this.listTournamentsByLifecycle([
+      "setup_published",
+      "pod_play",
+      "seeding_review",
+      "playoffs"
+    ]);
+  }
+
+  async listHistoricalTournaments(): Promise<
+    readonly CanonicalTournamentDiscoveryItem[]
+  > {
+    return this.listTournamentsByLifecycle(["completed", "archived"]);
+  }
+
+  private async listTournamentsByLifecycle(
+    lifecycles: readonly string[]
+  ): Promise<readonly CanonicalTournamentDiscoveryItem[]> {
     try {
       const result = await this.database.query<DiscoveryRow>(`
         SELECT payload.tournament_public_key,
@@ -77,13 +94,11 @@ implements PublicProjectionReadRepository {
          AND projection.version = payload.projection_version
          AND projection.status = 'active'
         WHERE payload.visibility = 'public'
-          AND payload.lifecycle IN (
-            'setup_published', 'pod_play', 'seeding_review', 'playoffs'
-          )
+          AND payload.lifecycle = ANY($1::text[])
         ORDER BY payload.year DESC,
                  active.activated_at DESC,
                  payload.tournament_public_key
-      `);
+      `, [lifecycles]);
 
       return result.rows.map((row) => ({
         projection: projectionRef(row),

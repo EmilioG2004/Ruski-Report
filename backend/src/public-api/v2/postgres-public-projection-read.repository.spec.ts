@@ -52,11 +52,33 @@ describe("PostgresPublicProjectionReadRepository", () => {
     ]);
     const sql = normalizedSql(database.query.mock.calls[0]?.[0]);
     expect(sql).toContain("payload.visibility = 'public'");
-    expect(sql).toContain("'setup_published', 'pod_play', 'seeding_review', 'playoffs'");
+    expect(sql).toContain("payload.lifecycle = ANY($1::text[])");
+    expect(database.query.mock.calls[0]?.[1]).toEqual([[
+      "setup_published", "pod_play", "seeding_review", "playoffs"
+    ]]);
     expect(sql).toContain(
       "ORDER BY payload.year DESC, active.activated_at DESC, payload.tournament_public_key"
     );
     expect(sql).not.toContain("engine_tournaments");
+  });
+
+  it("discovers completed and archived projections only through history", async () => {
+    const historical = {
+      ...createTournament(),
+      lifecycle: "completed" as const
+    };
+    const database = databaseStub([{
+      tournament_public_key: historical.id,
+      projection_version: "1",
+      activated_at: "2026-06-01T12:00:00.000Z",
+      tournament_summary: summary(historical)
+    }]);
+    const repository = new PostgresPublicProjectionReadRepository(database.value);
+
+    await expect(repository.listHistoricalTournaments()).resolves.toHaveLength(1);
+    expect(database.query.mock.calls[0]?.[1]).toEqual([[
+      "completed", "archived"
+    ]]);
   });
 
   it("excludes private materializations from tournament existence checks", async () => {

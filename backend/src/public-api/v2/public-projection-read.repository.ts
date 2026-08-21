@@ -17,6 +17,7 @@ export interface VisiblePublicMatchReference {
 
 export interface PublicProjectionReadRepository {
   listActiveTournaments(): Promise<readonly CanonicalTournamentDiscoveryItem[]>;
+  listHistoricalTournaments(): Promise<readonly CanonicalTournamentDiscoveryItem[]>;
   hasPublicTournament(tournamentId: string): Promise<boolean>;
   findTournament(
     tournamentId: string,
