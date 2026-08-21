@@ -31,6 +31,39 @@ import SwiftUI
     .previewDevice(PreviewDevice(rawValue: "iPhone 16 Pro Max"))
 }
 
+#Preview("Public Home · Partial Detail Failure") {
+    NavigationStack {
+        HomeView(
+            state: .canonicalLoaded(PublicDisplayFixtures.homePartialDetail),
+            retry: {}
+        )
+        .environmentObject(AppNavigationController())
+    }
+    .previewDevice(PreviewDevice(rawValue: "iPhone SE (3rd generation)"))
+}
+
+#Preview("Public Home · Offline") {
+    NavigationStack {
+        HomeView(
+            state: .failed(message: "The tournament service is temporarily unavailable."),
+            retry: {}
+        )
+        .environmentObject(AppNavigationController())
+    }
+    .previewDevice(PreviewDevice(rawValue: "iPhone 16 Pro Max"))
+}
+
+#Preview("Tournament History · Completed and Archived") {
+    NavigationStack {
+        TournamentHistoryView(
+            tournaments: PreviewTournamentRepository(),
+            logger: NoopAppLogger()
+        )
+        .environmentObject(AppNavigationController())
+    }
+    .previewDevice(PreviewDevice(rawValue: "iPhone SE (3rd generation)"))
+}
+
 #Preview("Public Tournament · All States") {
     PublicTournamentDisplayPreview(
         detail: PublicDisplayFixtures.tournamentDetail,
@@ -71,6 +104,13 @@ import SwiftUI
     if let detail = PublicDisplayFixtures.matchDetailsById["public-final-unrecorded"] {
         PublicMatchDisplayPreview(detail: detail)
             .environment(\.dynamicTypeSize, .accessibility5)
+            .previewDevice(PreviewDevice(rawValue: "iPhone 16 Pro Max"))
+    }
+}
+
+#Preview("Public Match · Corrected Playoff Result") {
+    if let detail = PublicDisplayFixtures.matchDetailsById["public-playoff-rematch"] {
+        PublicMatchDisplayPreview(detail: detail)
             .previewDevice(PreviewDevice(rawValue: "iPhone 16 Pro Max"))
     }
 }
