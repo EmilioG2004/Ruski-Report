@@ -30,6 +30,24 @@ struct TournamentDetailView: View {
         )
     }
 
+    init(
+        routeContext: PublicTournamentRouteContext,
+        tournaments: any TournamentRepository,
+        games: any GameRepository,
+        realtime: any RealtimeUpdateRepository,
+        logger: any AppLogger
+    ) {
+        _controller = StateObject(
+            wrappedValue: TournamentDetailController(
+                routeContext: routeContext,
+                tournaments: tournaments,
+                games: games,
+                realtime: realtime,
+                logger: logger
+            )
+        )
+    }
+
     var body: some View {
         Group {
             switch controller.state {
@@ -41,6 +59,11 @@ struct TournamentDetailView: View {
                     .accessibilityIdentifier("tournament.loading")
             case .loaded(let screen):
                 detailContent(screen)
+            case .canonicalLoaded(let detail):
+                PublicTournamentDetailContentView(
+                    detail: detail,
+                    selectedSection: $selectedSection
+                )
             case .failed(let message):
                 errorContent(message)
             }
