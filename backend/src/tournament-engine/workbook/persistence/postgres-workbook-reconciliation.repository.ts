@@ -14,6 +14,7 @@ import {
   EnginePersistenceInvariantError,
   EngineWriterLeaseConflictError
 } from "../../persistence/errors";
+import { PostgresCanonicalStatisticRepository } from "../../persistence/postgres-canonical-statistic.repository";
 import {
   engineExecutor,
   EnginePostgresExecutor,
@@ -26,8 +27,13 @@ import {
   assertEngineWriterFence,
   PostgresMatchWriterRepository
 } from "../../persistence/postgres-match-writer.repository";
+import { PostgresMatchRevisionRepository } from "../../persistence/postgres-match-revision.repository";
 import { TournamentEngineTransactionManager } from "../../persistence/engine-transaction.manager";
 import { createUuidV5 } from "../../scheduling/uuid-v5";
+import {
+  materializeWorkbookCandidate,
+  RUSKI_CANONICAL_SCORING_RULES_VERSION
+} from "../../scoring";
 import {
   ConfirmWorkbookImportInput,
   CreateWorkbookImportPreviewInput,
@@ -113,6 +119,7 @@ interface GenerationMatchRow {
   status: WorkbookGenerationSourceMatchRecord["status"];
   score_availability: WorkbookGenerationSourceMatchRecord["scoreAvailability"];
   metadata: Record<string, unknown>;
+  active_revision_id: string | null;
   side_one_team_id: string | null;
   side_two_team_id: string | null;
   source_state_version: string | number | null;
@@ -214,6 +221,28 @@ interface ImportObservationRow {
   candidate_base_source_state_version: string | number | null;
 }
 
+interface AcceptedCandidateReplayRow {
+  candidate_id: string;
+  batch_id: string;
+  observation_id: string;
+  previous_applied_candidate_id: string | null;
+  administrator_id: string;
+  reason: string | null;
+  decided_at: Date | string;
+  materialized_revision_id: string | null;
+}
+
+interface CandidateMaterializationContext {
+  candidate: WorkbookRevisionCandidateInput;
+  batchId: string;
+  observationId: string;
+  actorId: string;
+  createdAt: string;
+  confirmationDigest: string;
+  correctionReason?: string;
+  replayedPhaseThreeSource: boolean;
+}
+
 interface CandidateTeamRow {
   candidate_id: string;
   side_number: 1 | 2;
@@ -231,19 +260,49 @@ interface CandidatePlayerRow {
   display_name_at_import: string;
 }
 
+interface RevisionTeamRow {
+  revision_id: string;
+  side_number: 1 | 2;
+  team_id: string;
+  display_name_at_revision: string;
+  score: number | null;
+  result: "pending" | "win" | "loss" | "tie" | "cancelled" | "forfeited";
+}
+
+interface RevisionPlayerRow {
+  revision_id: string;
+  side_number: 1 | 2;
+  team_id: string;
+  player_id: string;
+  roster_membership_id: string;
+  roster_slot: number;
+  display_name_at_revision: string;
+}
+
 export class PostgresWorkbookReconciliationRepository {
   private readonly transactions: TournamentEngineTransactionManager;
   private readonly writers: PostgresMatchWriterRepository;
+  private readonly revisions: PostgresMatchRevisionRepository;
+  private readonly statistics: PostgresCanonicalStatisticRepository;
 
   constructor(
     private readonly database: PostgresDatabase,
     transactions?: TournamentEngineTransactionManager,
-    writers?: PostgresMatchWriterRepository
+    writers?: PostgresMatchWriterRepository,
+    revisions?: PostgresMatchRevisionRepository,
+    statistics?: PostgresCanonicalStatisticRepository
   ) {
     this.transactions = transactions ?? new TournamentEngineTransactionManager(database);
     this.writers = writers ?? new PostgresMatchWriterRepository(
       database,
       this.transactions
+    );
+    this.revisions = revisions ?? new PostgresMatchRevisionRepository(
+      database,
+      this.transactions
+    );
+    this.statistics = statistics ?? new PostgresCanonicalStatisticRepository(
+      database
     );
   }
 
@@ -391,6 +450,7 @@ export class PostgresWorkbookReconciliationRepository {
           SELECT match.id::text, match.stage, match.pod_id::text,
                  match.sequence, match.row_version, match.status,
                  match.score_availability, match.metadata,
+                 match.active_revision_id::text,
                  side_one.team_id::text AS side_one_team_id,
                  side_two.team_id::text AS side_two_team_id,
                  state.row_version AS source_state_version,
@@ -415,6 +475,9 @@ export class PostgresWorkbookReconciliationRepository {
     const activeCandidateIds = matchResult.rows.flatMap((match) =>
       match.active_candidate_id === null ? [] : [match.active_candidate_id]
     );
+    const activeRevisionIds = matchResult.rows.flatMap((match) =>
+      match.active_revision_id === null ? [] : [match.active_revision_id]
+    );
     let activeTeamRows: CandidateTeamRow[] = [];
     let activePlayerRows: CandidatePlayerRow[] = [];
     if (activeCandidateIds.length > 0) {
@@ -433,6 +496,25 @@ export class PostgresWorkbookReconciliationRepository {
         WHERE candidate_id = ANY($1::uuid[])
         ORDER BY candidate_id, side_number, roster_slot
       `, [activeCandidateIds])).rows;
+    }
+    let activeRevisionTeamRows: RevisionTeamRow[] = [];
+    let activeRevisionPlayerRows: RevisionPlayerRow[] = [];
+    if (activeRevisionIds.length > 0) {
+      activeRevisionTeamRows = (await executor.query<RevisionTeamRow>(`
+        SELECT revision_id::text, side_number, team_id::text,
+               display_name_at_revision, score, result
+        FROM engine_match_revision_teams
+        WHERE revision_id = ANY($1::uuid[])
+        ORDER BY revision_id, side_number
+      `, [activeRevisionIds])).rows;
+      activeRevisionPlayerRows = (await executor.query<RevisionPlayerRow>(`
+        SELECT revision_id::text, side_number, team_id::text,
+               player_id::text, roster_membership_id::text,
+               roster_slot, display_name_at_revision
+        FROM engine_match_revision_players
+        WHERE revision_id = ANY($1::uuid[])
+        ORDER BY revision_id, side_number, roster_slot
+      `, [activeRevisionIds])).rows;
     }
     const generationResult = await executor.query<{
       next_revision: string | number;
@@ -465,7 +547,9 @@ export class PostgresWorkbookReconciliationRepository {
       match,
       teamById,
       activeTeamRows,
-      activePlayerRows
+      activePlayerRows,
+      activeRevisionTeamRows,
+      activeRevisionPlayerRows
     ));
 
     return {
@@ -748,6 +832,7 @@ export class PostgresWorkbookReconciliationRepository {
     input: ConfirmWorkbookImportInput
   ): Promise<WorkbookImportConfirmationResult> {
     validateDigest(input.previewDigest, "Preview digest");
+    validateDigest(input.confirmationDigest, "Confirmation digest");
     assertUniqueIds(input.acceptedObservationIds, "Accepted observations");
     assertUniqueIds(input.skippedObservationIds, "Skipped observations");
     return this.transactions.run((transaction) =>
@@ -1292,6 +1377,22 @@ export class PostgresWorkbookReconciliationRepository {
       input.tournamentId,
       input.batchId
     );
+    const storedPreview = await this.findImportPreviewInTransaction(
+      executor,
+      input.tournamentId,
+      input.batchId
+    );
+    if (storedPreview === null) {
+      throw new EnginePersistenceInvariantError(
+        "Workbook import preview could not be reloaded for confirmation."
+      );
+    }
+    const storedObservationById = new Map(
+      storedPreview.observations.map((observation) => [
+        observation.observationId,
+        observation
+      ])
+    );
     const proposals = observations.filter((item) => item.disposition === "proposed");
     const accepted = new Set(input.acceptedObservationIds);
     const skipped = new Set(input.skippedObservationIds);
@@ -1338,6 +1439,39 @@ export class PostgresWorkbookReconciliationRepository {
     }
 
     const selected = proposals.filter((item) => accepted.has(item.id));
+    const expectedConfirmationDigest = digestWorkbookValue({
+      contract: "canonical-workbook-apply-v1",
+      previewDigest: input.previewDigest,
+      selected: [...selected]
+        .sort((first, second) =>
+          requiredMatchId(first).localeCompare(requiredMatchId(second))
+        )
+        .map((observation) => {
+          if (observation.candidate_id === null) {
+            throw new EnginePersistenceInvariantError(
+              "Selected workbook proposal is missing its candidate identity."
+            );
+          }
+          return {
+            observationId: observation.id,
+            candidateId: observation.candidate_id,
+            correctionReason:
+              input.correctionReasons?.[observation.id]?.trim() ?? null
+          };
+        })
+    });
+    if (expectedConfirmationDigest !== input.confirmationDigest) {
+      throw new EnginePersistenceConflictError(
+        "Workbook confirmation digest no longer matches the selected proposals."
+      );
+    }
+    if (selected.length > 0) {
+      await this.assertSelectedCandidateContinuity(
+        executor,
+        selected,
+        matchStates
+      );
+    }
     const acquiredLeases: Array<{
       matchId: string;
       holderId: string;
@@ -1359,14 +1493,14 @@ export class PostgresWorkbookReconciliationRepository {
       const reason = input.correctionReasons?.[observation.id]?.trim();
       const confirmationRequired = observation.requires_confirmation === true ||
         observation.reason === "correction";
-      if (confirmationRequired && (reason === undefined || reason.length === 0)) {
+      if (confirmationRequired && (reason === undefined || reason.length < 3)) {
         throw new EnginePersistenceInvariantError(
-          "Confirmed corrections require a nonempty reason."
+          "Confirmed corrections require a reason of at least 3 characters."
         );
       }
-      if (reason !== undefined && reason.length > 500) {
+      if (reason !== undefined && (reason.length < 3 || reason.length > 500)) {
         throw new EnginePersistenceInvariantError(
-          "Correction reason cannot exceed 500 characters."
+          "Correction reason must contain between 3 and 500 characters."
         );
       }
       if (Number(observation.source_revision_number) !==
@@ -1407,6 +1541,154 @@ export class PostgresWorkbookReconciliationRepository {
         holderId,
         fencingToken: lease.fencingToken
       });
+    }
+
+    const activatedCandidates: Array<{
+      matchId: string;
+      candidateId: string;
+      revisionId: string;
+      matchRowVersion: number;
+      writerFencingToken: number;
+      confirmationDigest: string;
+      materializedByAdminId: string;
+      replayedPhaseThreeSource: boolean;
+    }> = [];
+    for (const observation of [...selected].sort((first, second) =>
+      requiredMatchId(first).localeCompare(requiredMatchId(second))
+    )) {
+      const matchId = requiredMatchId(observation);
+      const lease = acquiredLeases.find((item) => item.matchId === matchId);
+      const state = matchStates.get(matchId);
+      const candidate = storedObservationById.get(observation.id)?.candidate;
+      if (lease === undefined || state === undefined || candidate === null ||
+          candidate === undefined) {
+        throw new EnginePersistenceInvariantError(
+          "Selected workbook candidate could not be materialized."
+        );
+      }
+      const predecessors = state.activeRevisionId === null &&
+        observation.previous_applied_candidate_id !== null
+        ? await this.readUnmaterializedPredecessorChain(
+          executor,
+          input.tournamentId,
+          observation.previous_applied_candidate_id
+        )
+        : [];
+      const materializationContexts: CandidateMaterializationContext[] = [
+        ...predecessors,
+        {
+          candidate,
+          batchId: input.batchId,
+          observationId: observation.id,
+          actorId: input.confirmedByAdminId,
+          createdAt: completedAt,
+          confirmationDigest: input.confirmationDigest,
+          ...(input.correctionReasons?.[observation.id] === undefined
+            ? {}
+            : {
+                correctionReason:
+                  input.correctionReasons[observation.id]?.trim()
+              }),
+          replayedPhaseThreeSource: false
+        }
+      ];
+      let activeRevision = state.activeRevisionId === null
+        ? undefined
+        : {
+            id: state.activeRevisionId as never,
+            revisionNumber: state.activeRevisionNumber
+          };
+      let expectedMatchRowVersion = state.matchRowVersion;
+      for (const context of materializationContexts) {
+        const replayCandidate = {
+          ...context.candidate,
+          expectedMatchRowVersion
+        };
+        const materialized = materializeWorkbookCandidate({
+          candidate: replayCandidate,
+          tournamentId: input.tournamentId,
+          batchId: context.batchId,
+          observationId: context.observationId,
+          actorId: context.actorId,
+          createdAt: context.createdAt,
+          confirmationDigest: context.confirmationDigest,
+          ...(context.correctionReason === undefined
+            ? {}
+            : { correctionReason: context.correctionReason }),
+          ...(activeRevision === undefined ? {} : { activeRevision })
+        });
+        const activated = await this.revisions.activateRevisionInTransaction({
+          ...materialized.activation,
+          writerFence: {
+            mode: "excel_import",
+            holderId: lease.holderId,
+            fencingToken: lease.fencingToken,
+            checkedAt: completedAt
+          },
+          audit: {
+            eventId: scopedId(
+              context.batchId,
+              context.replayedPhaseThreeSource
+                ? "phase4-replay-revision-audit"
+                : "revision-audit",
+              context.observationId
+            ),
+            commandType: context.replayedPhaseThreeSource
+              ? "phase3_workbook_source_materialized"
+              : "workbook_match_revision_activated",
+            actor: { kind: "administrator", id: context.actorId },
+            occurredAt: completedAt,
+            correlationId: input.audit.correlationId,
+            causationId: input.audit.causationId,
+            details: {
+              batchId: context.batchId,
+              observationId: context.observationId,
+              candidateId: context.candidate.candidateId,
+              confirmationDigest: context.confirmationDigest,
+              sourceRevisionNumber: context.candidate.sourceRevisionNumber,
+              eventCount: materialized.activation.events.length,
+              replayedPhaseThreeSource: context.replayedPhaseThreeSource
+            }
+          }
+        }, transaction);
+        activatedCandidates.push({
+          matchId,
+          candidateId: context.candidate.candidateId,
+          revisionId: activated.revisionId,
+          matchRowVersion: activated.matchRowVersion,
+          writerFencingToken: lease.fencingToken,
+          confirmationDigest: context.confirmationDigest,
+          materializedByAdminId: context.actorId,
+          replayedPhaseThreeSource: context.replayedPhaseThreeSource
+        });
+        activeRevision = {
+          id: activated.revisionId as never,
+          revisionNumber: materialized.activation.revision.revisionNumber
+        };
+        expectedMatchRowVersion = activated.matchRowVersion;
+      }
+    }
+
+    const statisticResult = activatedCandidates.length === 0
+      ? null
+      : await this.statistics.persistMaterializedBatchInTransaction({
+        tournamentId: input.tournamentId,
+        rulesVersion: RUSKI_CANONICAL_SCORING_RULES_VERSION,
+        calculatedAt: completedAt,
+        materializations: activatedCandidates.map((materialized) => ({
+          matchId: materialized.matchId,
+          revisionId: materialized.revisionId,
+          candidateId: materialized.candidateId,
+          confirmationDigest: materialized.confirmationDigest,
+          adapterVersion: 1,
+          materializedByAdminId: materialized.materializedByAdminId,
+          writerFencingToken: materialized.writerFencingToken,
+          materializedAt: completedAt
+        }))
+      }, transaction);
+
+    if (activatedCandidates.some((item) => !item.replayedPhaseThreeSource)) {
+      await this.startPodPlayIfNeeded(executor, input, completedAt);
     }
 
     const appliedMatchIds: string[] = [];
@@ -1531,12 +1813,26 @@ export class PostgresWorkbookReconciliationRepository {
       details: {
         batchId: input.batchId,
         previewDigest: input.previewDigest,
+        confirmationDigest: input.confirmationDigest,
         appliedCount: appliedMatchIds.length,
+        replayedPhaseThreeSourceCount: activatedCandidates.filter(
+          (item) => item.replayedPhaseThreeSource
+        ).length,
         skippedCount: skippedMatchIds.length,
         unchangedCount: unchangedMatchIds.length,
-        missingCount: missingMatchIds.length
+        missingCount: missingMatchIds.length,
+        tournamentStatisticRunId:
+          statisticResult?.tournamentStatisticRunId ?? null,
+        tournamentStatisticRunDigest:
+          statisticResult?.tournamentStatisticRunDigest ?? null
       }
     });
+    const matchStatisticRunByRevisionId = new Map(
+      statisticResult?.materialized.map((item) => [
+        item.revisionId,
+        item.matchStatisticRunId
+      ]) ?? []
+    );
     return {
       batchId: input.batchId,
       tournamentId: input.tournamentId,
@@ -1545,8 +1841,196 @@ export class PostgresWorkbookReconciliationRepository {
       skippedMatchIds,
       unchangedMatchIds,
       missingMatchIds,
+      materializedRevisions: activatedCandidates
+        .filter((materialized) => !materialized.replayedPhaseThreeSource)
+        .map((materialized) => {
+        const matchStatisticRunId = matchStatisticRunByRevisionId.get(
+          materialized.revisionId
+        );
+        if (matchStatisticRunId === undefined) {
+          throw new EnginePersistenceInvariantError(
+            "Materialized workbook revision is missing its statistic run."
+          );
+        }
+        return {
+          matchId: materialized.matchId,
+          candidateId: materialized.candidateId,
+          revisionId: materialized.revisionId,
+          matchStatisticRunId,
+          matchRowVersion: materialized.matchRowVersion
+        };
+      }),
+      tournamentStatisticRunId:
+        statisticResult?.tournamentStatisticRunId ?? null,
+      tournamentStatisticRunDigest:
+        statisticResult?.tournamentStatisticRunDigest ?? null,
       completedAt
     };
+  }
+
+  private async assertSelectedCandidateContinuity(
+    executor: EnginePostgresExecutor,
+    selected: readonly ImportObservationRow[],
+    matchStates: ReadonlyMap<string, LockedMatchState>
+  ): Promise<void> {
+    for (const observation of selected) {
+      const state = matchStates.get(requiredMatchId(observation));
+      if (observation.previous_applied_candidate_id === null ||
+          state?.activeRevisionId === null || state === undefined) {
+        continue;
+      }
+      const result = await executor.query(
+        `
+          SELECT 1
+          FROM engine_workbook_candidate_materializations
+          WHERE candidate_id = $1::uuid
+            AND match_id = $2::uuid
+            AND revision_id = $3::uuid
+        `,
+        [
+          observation.previous_applied_candidate_id,
+          requiredMatchId(observation),
+          state.activeRevisionId
+        ]
+      );
+      if (result.rows[0] === undefined) {
+        throw new EnginePersistenceConflictError(
+          "Workbook source and canonical scoring history have diverged."
+        );
+      }
+    }
+  }
+
+  private async readUnmaterializedPredecessorChain(
+    executor: EnginePostgresExecutor,
+    tournamentId: TournamentId,
+    latestCandidateId: string
+  ): Promise<CandidateMaterializationContext[]> {
+    const reversed: CandidateMaterializationContext[] = [];
+    const visited = new Set<string>();
+    let candidateId: string | null = latestCandidateId;
+    while (candidateId !== null) {
+      if (visited.has(candidateId)) {
+        throw new EnginePersistenceInvariantError(
+          "Workbook source candidate history contains a cycle."
+        );
+      }
+      visited.add(candidateId);
+      const rows: AcceptedCandidateReplayRow[] = (await executor.query<
+        AcceptedCandidateReplayRow
+      >(
+        `
+          SELECT candidate.id::text AS candidate_id,
+                 candidate.batch_id::text,
+                 candidate.observation_id::text,
+                 candidate.previous_applied_candidate_id::text,
+                 decision.administrator_id::text,
+                 decision.reason,
+                 decision.decided_at,
+                 materialization.revision_id::text
+                   AS materialized_revision_id
+          FROM engine_workbook_revision_candidates candidate
+          JOIN engine_workbook_import_decisions decision
+            ON decision.tournament_id = candidate.tournament_id
+           AND decision.batch_id = candidate.batch_id
+           AND decision.observation_id = candidate.observation_id
+           AND decision.candidate_id = candidate.id
+           AND decision.decision = 'accepted'
+           AND decision.actor_kind = 'administrator'
+          LEFT JOIN engine_workbook_candidate_materializations materialization
+            ON materialization.candidate_id = candidate.id
+          WHERE candidate.tournament_id = $1::uuid
+            AND candidate.id = $2::uuid
+          FOR KEY SHARE OF candidate, decision
+        `,
+        [tournamentId, candidateId]
+      )).rows;
+      const row: AcceptedCandidateReplayRow | undefined = rows[0];
+      if (row === undefined) {
+        throw new EnginePersistenceConflictError(
+          "An accepted Phase 3 workbook source is unavailable for replay."
+        );
+      }
+      if (row.materialized_revision_id !== null) {
+        throw new EnginePersistenceConflictError(
+          "Workbook source and canonical active revision are inconsistent."
+        );
+      }
+      const preview = await this.findImportPreviewInTransaction(
+        executor,
+        tournamentId,
+        row.batch_id
+      );
+      const storedObservation = preview?.observations.find(
+        (observation) => observation.observationId === row.observation_id
+      );
+      const candidate = storedObservation?.candidate;
+      if (candidate === null || candidate === undefined ||
+          candidate.candidateId !== row.candidate_id) {
+        throw new EnginePersistenceInvariantError(
+          "An accepted Phase 3 workbook candidate could not be reconstructed."
+        );
+      }
+      const correctionReason = candidate.reason === "correction"
+        ? row.reason?.trim()
+        : undefined;
+      if (candidate.reason === "correction" &&
+          (correctionReason === undefined || correctionReason.length < 3)) {
+        throw new EnginePersistenceInvariantError(
+          "A replayed Phase 3 correction requires its accepted reason."
+        );
+      }
+      reversed.push({
+        candidate,
+        batchId: row.batch_id,
+        observationId: row.observation_id,
+        actorId: row.administrator_id,
+        createdAt: toIso(row.decided_at),
+        confirmationDigest: digestWorkbookValue({
+          contract: "phase3-workbook-source-replay-v1",
+          batchId: row.batch_id,
+          observationId: row.observation_id,
+          candidateId: row.candidate_id
+        }),
+        ...(correctionReason === undefined ? {} : { correctionReason }),
+        replayedPhaseThreeSource: true
+      });
+      candidateId = row.previous_applied_candidate_id;
+    }
+    return reversed.reverse();
+  }
+
+  private async startPodPlayIfNeeded(
+    executor: EnginePostgresExecutor,
+    input: ConfirmWorkbookImportInput,
+    startedAt: string
+  ): Promise<void> {
+    const updated = await executor.query(
+      `
+        UPDATE engine_tournaments
+        SET lifecycle = 'pod_play',
+            row_version = row_version + 1,
+            updated_at = $2
+        WHERE id = $1::uuid AND lifecycle = 'setup_published'
+      `,
+      [input.tournamentId, startedAt]
+    );
+    if (updated.rowCount !== 1) {
+      return;
+    }
+    await writeEngineAuditEvent(executor, input.tournamentId, {
+      eventId: scopedId(
+        input.batchId,
+        "tournament-pod-play-started",
+        input.tournamentId
+      ),
+      commandType: "tournament_pod_play_started",
+      actor: { kind: "administrator", id: input.confirmedByAdminId },
+      occurredAt: startedAt,
+      correlationId: input.audit.correlationId,
+      causationId: input.audit.causationId,
+      details: { batchId: input.batchId }
+    });
   }
 
   private async assertPublishedTournamentVersion(
@@ -1640,6 +2124,8 @@ export class PostgresWorkbookReconciliationRepository {
   ): Promise<LockedMatchState> {
     const match = await executor.query<{
       row_version: string | number;
+      active_revision_id: string | null;
+      active_revision_number: number | null;
       active_candidate_id: string | null;
       active_fingerprint: string | null;
       participant_digest: string | null;
@@ -1647,6 +2133,8 @@ export class PostgresWorkbookReconciliationRepository {
     }>(
       `
         SELECT match.row_version,
+               match.active_revision_id::text,
+               revision.revision_number AS active_revision_number,
                state.active_candidate_id::text,
                state.active_fingerprint,
                state.participant_digest,
@@ -1655,6 +2143,8 @@ export class PostgresWorkbookReconciliationRepository {
         LEFT JOIN engine_match_workbook_source_states state
           ON state.tournament_id = match.tournament_id
          AND state.match_id = match.id
+        LEFT JOIN engine_match_revisions revision
+          ON revision.id = match.active_revision_id
         WHERE match.id = $1::uuid
           AND match.tournament_id = $2::uuid
           AND NOT match.identity_only
@@ -1681,6 +2171,8 @@ export class PostgresWorkbookReconciliationRepository {
     }
     return {
       matchRowVersion: Number(row.row_version),
+      activeRevisionId: row.active_revision_id,
+      activeRevisionNumber: Number(row.active_revision_number ?? 0),
       sourceStateVersion: Number(row.source_state_version ?? 0),
       activeCandidateId: row.active_candidate_id,
       activeFingerprint: row.active_fingerprint,
@@ -1857,6 +2349,8 @@ export class PostgresWorkbookReconciliationRepository {
 
 interface LockedMatchState {
   matchRowVersion: number;
+  activeRevisionId: string | null;
+  activeRevisionNumber: number;
   sourceStateVersion: number;
   activeCandidateId: string | null;
   activeFingerprint: string | null;
@@ -1878,7 +2372,9 @@ function mapGenerationMatch(
   row: GenerationMatchRow,
   teamById: ReadonlyMap<string, WorkbookGenerationSourceTeamRecord>,
   candidateTeams: readonly CandidateTeamRow[],
-  candidatePlayers: readonly CandidatePlayerRow[]
+  candidatePlayers: readonly CandidatePlayerRow[],
+  revisionTeams: readonly RevisionTeamRow[],
+  revisionPlayers: readonly RevisionPlayerRow[]
 ): WorkbookGenerationSourceMatchRecord {
   if (row.side_one_team_id === null || row.side_two_team_id === null) {
     throw new EnginePersistenceInvariantError(
@@ -1901,16 +2397,22 @@ function mapGenerationMatch(
       "Workbook source state is missing active candidate metadata."
     );
   }
-  const participantTeams = hasState
-    ? mapCandidateGenerationTeams(
+  const participantTeams = row.active_revision_id !== null
+    ? mapRevisionGenerationTeams(
+      row.active_revision_id,
+      revisionTeams,
+      revisionPlayers
+    )
+    : hasState
+      ? mapCandidateGenerationTeams(
       requiredString(row.active_candidate_id),
       candidateTeams,
       candidatePlayers
-    )
-    : mapCurrentGenerationTeams(
+      )
+      : mapCurrentGenerationTeams(
       [row.side_one_team_id, row.side_two_team_id],
       teamById
-    );
+      );
   return {
     matchId: row.id,
     stage: row.stage,
@@ -1924,6 +2426,9 @@ function mapGenerationMatch(
     sequenceInPod,
     roundNumber,
     gameNumberForPair,
+    activeScoringPreview: row.active_revision_id === null
+      ? null
+      : mapActiveScoringPreview(row.active_revision_id, revisionTeams),
     workbookState: !hasState ? null : {
       rowVersion: Number(row.source_state_version),
       sourceRevisionNumber: Number(row.source_revision_number),
@@ -2000,6 +2505,72 @@ function mapCandidateGenerationTeams(
     );
   }
   return [sideOne, sideTwo];
+}
+
+function mapRevisionGenerationTeams(
+  revisionId: string,
+  teams: readonly RevisionTeamRow[],
+  players: readonly RevisionPlayerRow[]
+): readonly [
+  WorkbookGenerationSourceMatchTeamRecord,
+  WorkbookGenerationSourceMatchTeamRecord
+] {
+  const mapped = teams.filter((team) => team.revision_id === revisionId)
+    .map((team) => ({
+      sideNumber: team.side_number,
+      teamId: team.team_id,
+      name: team.display_name_at_revision,
+      players: players.filter((player) =>
+        player.revision_id === revisionId &&
+        player.side_number === team.side_number
+      ).map((player) => ({
+        playerId: player.player_id,
+        rosterMembershipId: player.roster_membership_id,
+        rosterSlot: player.roster_slot,
+        displayName: player.display_name_at_revision
+      }))
+    }));
+  const sideOne = mapped[0];
+  const sideTwo = mapped[1];
+  if (mapped.length !== 2 || sideOne?.sideNumber !== 1 ||
+      sideTwo?.sideNumber !== 2) {
+    throw new EnginePersistenceInvariantError(
+      "Active canonical revision participant ledger is incomplete."
+    );
+  }
+  return [sideOne, sideTwo];
+}
+
+function mapActiveScoringPreview(
+  revisionId: string,
+  teams: readonly RevisionTeamRow[]
+): NonNullable<WorkbookGenerationSourceMatchRecord["activeScoringPreview"]> {
+  const revisionTeams = teams.filter((team) => team.revision_id === revisionId);
+  const sideOne = revisionTeams.find((team) => team.side_number === 1);
+  const sideTwo = revisionTeams.find((team) => team.side_number === 2);
+  if (revisionTeams.length !== 2 || sideOne === undefined || sideTwo === undefined) {
+    throw new EnginePersistenceInvariantError(
+      "Active canonical revision score ledger is incomplete."
+    );
+  }
+  return {
+    revisionId,
+    teams: [
+      {
+        sideNumber: 1,
+        teamId: sideOne.team_id,
+        score: sideOne.score,
+        result: sideOne.result
+      },
+      {
+        sideNumber: 2,
+        teamId: sideTwo.team_id,
+        score: sideTwo.score,
+        result: sideTwo.result
+      }
+    ],
+    winnerTeamId: revisionTeams.find((team) => team.result === "win")?.team_id ?? null
+  };
 }
 
 function mapConfiguration(row: ConfigurationRow) {
