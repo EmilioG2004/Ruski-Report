@@ -29,6 +29,31 @@ struct APIClientTests {
         #expect(MockURLProtocol.lastRequest?.url?.absoluteString == "http://localhost:3000/api/games")
     }
 
+    @Test func getPreservesProjectionVersionAsAQueryItem() async throws {
+        let client = makeClient { request in
+            MockURLProtocol.lastRequest = request
+            return (
+                HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!,
+                Data(#"{"name":"Ruski"}"#.utf8)
+            )
+        }
+
+        let response: TestResponseDTO = try await client.get(
+            "v2/tournaments/tournament-2027?projectionVersion=12"
+        )
+
+        #expect(response.name == "Ruski")
+        #expect(
+            MockURLProtocol.lastRequest?.url?.absoluteString ==
+                "http://localhost:3000/api/v2/tournaments/tournament-2027?projectionVersion=12"
+        )
+    }
+
     @Test func backendErrorResponseMapsToAppError() async throws {
         let client = makeClient { request in
             (
