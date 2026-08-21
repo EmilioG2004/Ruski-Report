@@ -173,6 +173,46 @@ struct MatchDetailControllerTests {
         #expect(matches.requests == [request])
     }
 
+    @Test func canonicalHistoryMatchRediscoversHistoryProjection() async {
+        let active = controllerTournamentSummary(version: 8)
+        let summary = PublicTournamentSummary(
+            id: active.id,
+            gameType: active.gameType,
+            year: 2026,
+            name: "Completed Tournament",
+            lifecycle: .completed,
+            projection: active.projection
+        )
+        let request = matchRequest(version: 8)
+        let tournaments = CanonicalControllerTournamentRepository(
+            discoveryResults: [.failure(
+                AppError.unsupported("Active discovery must not be used.")
+            )],
+            historyResults: [.success([summary])]
+        )
+        let matches = CanonicalControllerMatchRepository(
+            results: [request: .success(controllerMatchDetail(version: 8))]
+        )
+        let controller = MatchDetailController(
+            routeContext: PublicMatchRouteContext(
+                matchId: request.matchId,
+                tournamentId: request.tournamentId,
+                projectionVersion: nil,
+                discoveryScope: .history
+            ),
+            matches: matches,
+            tournaments: tournaments,
+            games: StubGameRepository(),
+            logger: NoopAppLogger()
+        )
+
+        await controller.loadMatch()
+
+        #expect(tournaments.historyRequestCount == 1)
+        #expect(tournaments.discoveryRequestCount == 0)
+        #expect(matches.requests == [request])
+    }
+
     @Test func canonicalMatchRealtimeIgnoresOldAndUsesNewOrAbsentVersions() async {
         let request7 = matchRequest(version: 7)
         let request8 = matchRequest(version: 8)

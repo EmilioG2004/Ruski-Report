@@ -18,6 +18,7 @@ final class MatchDetailController: ObservableObject {
     private let realtime: any RealtimeUpdateRepository
     private let logger: any AppLogger
     private let mode: Mode
+    private let discoveryScope: PublicTournamentDiscoveryScope
     private var requestedProjectionVersion: Int64?
     private var currentProjection: PublicProjectionReference?
     private var loadGeneration = 0
@@ -43,6 +44,7 @@ final class MatchDetailController: ObservableObject {
         self.realtime = realtime
         self.logger = logger
         self.mode = .legacy
+        self.discoveryScope = .active
         self.requestedProjectionVersion = nil
     }
 
@@ -62,6 +64,7 @@ final class MatchDetailController: ObservableObject {
         self.realtime = realtime
         self.logger = logger
         self.mode = .canonical
+        self.discoveryScope = routeContext.discoveryScope
         self.requestedProjectionVersion = routeContext.projectionVersion
     }
 
@@ -72,7 +75,7 @@ final class MatchDetailController: ObservableObject {
         case .canonical:
             await loadCanonical(
                 projectionVersion: requestedProjectionVersion,
-                discoverActive: requestedProjectionVersion == nil,
+                discoverCurrentProjection: requestedProjectionVersion == nil,
                 showLoading: true,
                 showFailure: true
             )
@@ -136,7 +139,7 @@ final class MatchDetailController: ObservableObject {
 
     private func loadCanonical(
         projectionVersion: Int64?,
-        discoverActive: Bool,
+        discoverCurrentProjection: Bool,
         showLoading: Bool,
         showFailure: Bool
     ) async {
@@ -144,8 +147,8 @@ final class MatchDetailController: ObservableObject {
 
         do {
             let version: Int64
-            if discoverActive || projectionVersion == nil {
-                version = try await activeProjectionVersion()
+            if discoverCurrentProjection || projectionVersion == nil {
+                version = try await discoveredProjectionVersion()
             } else if let projectionVersion {
                 version = projectionVersion
             } else {
@@ -211,7 +214,7 @@ final class MatchDetailController: ObservableObject {
         if update.type == .connectionReady {
             await loadCanonical(
                 projectionVersion: nil,
-                discoverActive: true,
+                discoverCurrentProjection: true,
                 showLoading: false,
                 showFailure: false
             )
@@ -225,7 +228,7 @@ final class MatchDetailController: ObservableObject {
         guard let version = update.projectionVersion else {
             await loadCanonical(
                 projectionVersion: nil,
-                discoverActive: true,
+                discoverCurrentProjection: true,
                 showLoading: false,
                 showFailure: false
             )
@@ -236,19 +239,25 @@ final class MatchDetailController: ObservableObject {
         }
         await loadCanonical(
             projectionVersion: version,
-            discoverActive: false,
+            discoverCurrentProjection: false,
             showLoading: false,
             showFailure: false
         )
     }
 
-    private func activeProjectionVersion() async throws -> Int64 {
+    private func discoveredProjectionVersion() async throws -> Int64 {
         guard let tournaments, let tournamentId else {
-            throw AppError.unsupported("Active match projection is unavailable.")
+            throw AppError.unsupported("Match projection is unavailable.")
         }
-        let active = try await tournaments.activeTournaments()
-        guard let summary = active.first(where: { $0.id == tournamentId }) else {
-            throw AppError.unsupported("Active match tournament is unavailable.")
+        let discovered: [PublicTournamentSummary]
+        switch discoveryScope {
+        case .active:
+            discovered = try await tournaments.activeTournaments()
+        case .history:
+            discovered = try await tournaments.historicalTournaments()
+        }
+        guard let summary = discovered.first(where: { $0.id == tournamentId }) else {
+            throw AppError.unsupported("Match tournament projection is unavailable.")
         }
         return summary.projection.version
     }
