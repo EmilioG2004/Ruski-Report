@@ -175,14 +175,34 @@ describe("PostgresLegacySnapshotReader", () => {
     ).readActiveSnapshot("legacy-tournament-2026");
 
     expect(source?.players).toEqual([
-      { legacyPlayerId: "player-current", displayName: "Current Player" },
-      { legacyPlayerId: "player-former", displayName: "Former Player" }
+      {
+        legacyPlayerId: "player-current",
+        displayName: "Current Player",
+        sourceSnapshotVersion: 4
+      },
+      {
+        legacyPlayerId: "player-former",
+        displayName: "Former Player",
+        sourceSnapshotVersion: 3
+      }
     ]);
-    expect(source?.rosterMemberships).toEqual([{
-      legacyTeamId: "team-current",
-      legacyPlayerId: "player-current",
-      sequence: 1
-    }]);
+    expect(source?.rosterMemberships).toEqual([
+      {
+        legacyTeamId: "team-current",
+        legacyPlayerId: "player-current",
+        sequence: 1,
+        sourceSnapshotVersion: 4
+      },
+      {
+        legacyTeamId: "team-former",
+        legacyPlayerId: "player-former",
+        sequence: 1,
+        sourceSnapshotVersion: 3,
+        effectiveFrom: "2026-06-21T00:00:00.000Z",
+        effectiveTo: "2026-06-22T00:00:00.000Z",
+        replacementReason: "legacy_historical_participation"
+      }
+    ]);
     expect(source?.matches[0]).toMatchObject({
       participants: [
         { legacyPlayerIds: ["player-former"] },
@@ -212,10 +232,29 @@ describe("PostgresLegacySnapshotReader", () => {
       })
     ).readActiveSnapshot("legacy-tournament-2026");
 
-    expect(source?.players).toContainEqual({
+    expect(source?.players).toContainEqual(expect.objectContaining({
+      legacyPlayerId: "player-former",
+      displayName: "Former Player"
+    }));
+  });
+
+  it("marks a frozen-participant identity without inventing snapshot provenance", async () => {
+    const source = await new PostgresLegacySnapshotReader(
+      historicalPlayerDatabase({
+        boxScoreLabel: "Former Player",
+        historicalProvenance: false
+      })
+    ).readActiveSnapshot("legacy-tournament-2026");
+
+    expect(source?.players.find((player) =>
+      player.legacyPlayerId === "player-former"
+    )).toEqual({
       legacyPlayerId: "player-former",
       displayName: "Former Player"
     });
+    expect(source?.rosterMemberships.find((membership) =>
+      membership.legacyPlayerId === "player-former"
+    )).not.toHaveProperty("sourceSnapshotVersion");
   });
 
   it("rejects conflicting exact box-score labels for one historical player ID", async () => {
@@ -233,6 +272,7 @@ function historicalPlayerDatabase(labels: {
   boxScoreLabel?: string;
   boxScoreLabels?: readonly string[];
   scorecardLabel?: string;
+  historicalProvenance?: boolean;
 }): PostgresDatabase {
   return {
     async query(text: string) {
@@ -260,11 +300,41 @@ function historicalPlayerDatabase(labels: {
           published_at: "2026-06-22T00:00:00.000Z"
         }]);
       }
+      if (text.includes("DISTINCT ON (player_id)")) {
+        return result([
+          {
+            player_id: "player-current",
+            display_name: "Current Player",
+            snapshot_version: 4
+          },
+          ...(labels.historicalProvenance === false ? [] : [{
+            player_id: "player-former",
+            display_name: "Former Player",
+            snapshot_version: 3
+          }])
+        ]);
+      }
       if (text.includes("FROM players")) {
         return result([{
           player_id: "player-current",
           display_name: "Current Player"
         }]);
+      }
+      if (text.includes("DISTINCT ON (team_id, player_id)")) {
+        return result([
+          {
+            team_id: "team-current",
+            player_id: "player-current",
+            sequence: 1,
+            snapshot_version: 4
+          },
+          ...(labels.historicalProvenance === false ? [] : [{
+            team_id: "team-former",
+            player_id: "player-former",
+            sequence: 1,
+            snapshot_version: 3
+          }])
+        ]);
       }
       if (text.includes("FROM team_players")) {
         return result([{

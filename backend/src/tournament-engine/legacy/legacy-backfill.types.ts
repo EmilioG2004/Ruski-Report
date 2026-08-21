@@ -36,12 +36,17 @@ export interface LegacyTeamSource {
 export interface LegacyPlayerSource {
   legacyPlayerId: string;
   displayName: string;
+  sourceSnapshotVersion?: number;
 }
 
 export interface LegacyRosterMembershipSource {
   legacyTeamId: string;
   legacyPlayerId: string;
   sequence: number;
+  sourceSnapshotVersion?: number;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  replacementReason?: string;
 }
 
 export interface LegacyPodSource {
@@ -265,6 +270,7 @@ export interface CanonicalLegacyPlayer {
   publicKey: string;
   legacyPlayerId: string;
   displayName: string;
+  sourceSnapshotVersion?: number;
 }
 
 export interface CanonicalLegacyRosterMembership {
@@ -275,7 +281,10 @@ export interface CanonicalLegacyRosterMembership {
   teamId: string;
   playerId: string;
   sequence: number;
+  sourceSnapshotVersion?: number;
   effectiveFrom: string;
+  effectiveTo?: string;
+  replacementReason?: string;
 }
 
 export interface CanonicalLegacyPod {

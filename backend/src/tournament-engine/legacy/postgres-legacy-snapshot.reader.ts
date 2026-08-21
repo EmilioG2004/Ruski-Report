@@ -38,10 +38,18 @@ interface PlayerRow extends QueryResultRow {
   display_name: string;
 }
 
+interface HistoricalPlayerRow extends PlayerRow {
+  snapshot_version: number;
+}
+
 interface RosterRow extends QueryResultRow {
   team_id: string;
   player_id: string;
   sequence: number;
+}
+
+interface HistoricalRosterRow extends RosterRow {
+  snapshot_version: number;
 }
 
 interface PodRow extends QueryResultRow {
@@ -128,7 +136,9 @@ export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
     const [
       teamResult,
       playerResult,
+      historicalPlayerResult,
       rosterResult,
+      historicalRosterResult,
       podResult,
       podTeamResult,
       podMatchResult,
@@ -150,11 +160,27 @@ export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
          ORDER BY player_id`,
         [tournamentId, version]
       ),
+      this.database.query<HistoricalPlayerRow>(
+        `SELECT DISTINCT ON (player_id)
+                player_id, display_name, snapshot_version
+         FROM players
+         WHERE tournament_id = $1 AND snapshot_version <= $2
+         ORDER BY player_id, snapshot_version DESC`,
+        [tournamentId, version]
+      ),
       this.database.query<RosterRow>(
         `SELECT team_id, player_id, sequence
          FROM team_players
          WHERE tournament_id = $1 AND snapshot_version = $2
          ORDER BY team_id, sequence, player_id`,
+        [tournamentId, version]
+      ),
+      this.database.query<HistoricalRosterRow>(
+        `SELECT DISTINCT ON (team_id, player_id)
+                team_id, player_id, sequence, snapshot_version
+         FROM team_players
+         WHERE tournament_id = $1 AND snapshot_version <= $2
+         ORDER BY team_id, player_id, snapshot_version DESC`,
         [tournamentId, version]
       ),
       this.database.query<PodRow>(
@@ -227,23 +253,38 @@ export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
 
     const podTeams = groupMembers(podTeamResult.rows);
     const podMatches = groupMembers(podMatchResult.rows);
+    const snapshotPublishedAt = toISOString(header.published_at);
     const tournamentStatistics = readTournamentStatistics(header.statistics);
     const matches = matchResult.rows.map(readMatch);
     const currentPlayers = playerResult.rows.map((row) => ({
       legacyPlayerId: row.player_id,
-      displayName: row.display_name
+      displayName: row.display_name,
+      sourceSnapshotVersion: version
     }));
     const players = includeHistoricalPlayers({
       currentPlayers,
       matches,
       tournamentStatistics,
-      matchRows: matchResult.rows
+      matchRows: matchResult.rows,
+      historicalPlayerRows: historicalPlayerResult.rows
+    });
+    const currentRosterMemberships = rosterResult.rows.map((row) => ({
+      legacyTeamId: row.team_id,
+      legacyPlayerId: row.player_id,
+      sequence: row.sequence,
+      sourceSnapshotVersion: version
+    }));
+    const rosterMemberships = includeHistoricalRosterMemberships({
+      currentRosterMemberships,
+      matches,
+      snapshotPublishedAt,
+      historicalRosterRows: historicalRosterResult.rows
     });
 
     return {
       legacyTournamentId: tournamentId,
       snapshotVersion: version,
-      snapshotPublishedAt: toISOString(header.published_at),
+      snapshotPublishedAt,
       year: header.year,
       name: header.name,
       gameType: header.game_type,
@@ -262,11 +303,7 @@ export class PostgresLegacySnapshotReader implements LegacySnapshotReader {
         };
       }),
       players,
-      rosterMemberships: rosterResult.rows.map((row) => ({
-        legacyTeamId: row.team_id,
-        legacyPlayerId: row.player_id,
-        sequence: row.sequence
-      })),
+      rosterMemberships,
       pods: podResult.rows.map((row) => ({
         legacyPodId: row.pod_id,
         name: row.name,
@@ -324,6 +361,7 @@ function includeHistoricalPlayers(input: {
   matches: LegacyTournamentSource["matches"];
   tournamentStatistics: LegacyTournamentSource["tournamentStatistics"];
   matchRows: readonly MatchRow[];
+  historicalPlayerRows: readonly HistoricalPlayerRow[];
 }): LegacyTournamentSource["players"] {
   const referencedIds = new Set<string>();
   for (const match of input.matches) {
@@ -361,10 +399,23 @@ function includeHistoricalPlayers(input: {
     input.matchRows,
     input.matches
   );
+  const historicalRows = new Map(
+    input.historicalPlayerRows.map((row) => [row.player_id, row])
+  );
   const historicalPlayers = [...referencedIds]
     .filter((playerId) => !currentIds.has(playerId))
     .sort()
     .map((playerId) => {
+      const sourceRow = historicalRows.get(playerId);
+      if (
+        sourceRow !== undefined &&
+        (!Number.isInteger(sourceRow.snapshot_version) ||
+          sourceRow.snapshot_version < 1)
+      ) {
+        throw new Error(
+          "Legacy historical player source snapshot provenance is invalid."
+        );
+      }
       const labels = labelEvidence.boxScore.get(playerId) ??
         labelEvidence.scorecard.get(playerId) ??
         new Set<string>();
@@ -380,7 +431,10 @@ function includeHistoricalPlayers(input: {
       }
       return {
         legacyPlayerId: playerId,
-        displayName: [...labels][0] as string
+        displayName: [...labels][0] as string,
+        ...(sourceRow === undefined
+          ? {}
+          : { sourceSnapshotVersion: sourceRow.snapshot_version })
       };
     });
 
@@ -394,6 +448,93 @@ function addReferencedPlayer(players: Set<string>, playerId: string): void {
     throw new Error("Legacy historical player identity is invalid.");
   }
   players.add(playerId);
+}
+
+function includeHistoricalRosterMemberships(input: {
+  currentRosterMemberships: LegacyTournamentSource["rosterMemberships"];
+  matches: LegacyTournamentSource["matches"];
+  snapshotPublishedAt: string;
+  historicalRosterRows: readonly HistoricalRosterRow[];
+}): LegacyTournamentSource["rosterMemberships"] {
+  const currentKeys = new Set(input.currentRosterMemberships.map(
+    (membership) => rosterMembershipKey(
+      membership.legacyTeamId,
+      membership.legacyPlayerId
+    )
+  ));
+  const historical = new Map<
+    string,
+    LegacyTournamentSource["rosterMemberships"][number]
+  >();
+  const historicalRows = new Map(input.historicalRosterRows.map((row) => [
+    rosterMembershipKey(row.team_id, row.player_id),
+    row
+  ]));
+  const closedAt = Date.parse(input.snapshotPublishedAt);
+
+  for (const match of input.matches) {
+    const openedAt = Date.parse(match.updatedAt);
+    for (const participant of match.participants) {
+      participant.legacyPlayerIds.forEach((playerId, playerIndex) => {
+        const key = rosterMembershipKey(participant.legacyTeamId, playerId);
+        if (currentKeys.has(key)) {
+          return;
+        }
+        if (!Number.isFinite(openedAt) || openedAt >= closedAt) {
+          throw new Error(
+            "Legacy historical roster evidence must predate snapshot publication."
+          );
+        }
+        const sourceRow = historicalRows.get(key);
+        if (
+          sourceRow !== undefined &&
+          (!Number.isInteger(sourceRow.snapshot_version) ||
+            sourceRow.snapshot_version < 1)
+        ) {
+          throw new Error(
+            "Legacy historical roster source provenance is invalid."
+          );
+        }
+        const sequence = sourceRow?.sequence ?? playerIndex + 1;
+        if (sequence !== playerIndex + 1) {
+          throw new Error(
+            "Legacy historical roster slot differs from frozen participation."
+          );
+        }
+        const existing = historical.get(key);
+        if (existing !== undefined && existing.sequence !== sequence) {
+          throw new Error(
+            "Legacy historical roster slot evidence is inconsistent."
+          );
+        }
+        historical.set(key, {
+          legacyTeamId: participant.legacyTeamId,
+          legacyPlayerId: playerId,
+          sequence,
+          ...(sourceRow === undefined
+            ? {}
+            : { sourceSnapshotVersion: sourceRow.snapshot_version }),
+          effectiveFrom: existing === undefined ||
+              Date.parse(existing.effectiveFrom as string) > openedAt
+            ? match.updatedAt
+            : existing.effectiveFrom,
+          effectiveTo: input.snapshotPublishedAt,
+          replacementReason: "legacy_historical_participation"
+        });
+      });
+    }
+  }
+
+  return [...input.currentRosterMemberships, ...historical.values()].sort(
+    (left, right) =>
+      left.legacyTeamId.localeCompare(right.legacyTeamId) ||
+      left.sequence - right.sequence ||
+      left.legacyPlayerId.localeCompare(right.legacyPlayerId)
+  );
+}
+
+function rosterMembershipKey(teamId: string, playerId: string): string {
+  return `${teamId}:${playerId}`;
 }
 
 function readHistoricalPlayerLabelEvidence(
