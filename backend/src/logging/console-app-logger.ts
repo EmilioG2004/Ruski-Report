@@ -62,8 +62,10 @@ export function createLogEntry(
 
 function serializeError(error: Error): LogEntry["error"] {
   return {
-    name: error.name,
-    message: error.message,
-    stack: error.stack
+    name: safeErrorName(error.name)
   };
+}
+
+function safeErrorName(value: string): string {
+  return /^[A-Za-z][A-Za-z0-9_.-]{0,79}$/u.test(value) ? value : "Error";
 }
