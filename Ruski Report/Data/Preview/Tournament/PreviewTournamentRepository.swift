@@ -7,13 +7,16 @@ import Foundation
 
 nonisolated final class PreviewTournamentRepository: TournamentRepository {
     private let detail: TournamentDetail
+    private let publicDetails: [PublicTournamentDetail]
     private let responseGate: PreviewTournamentResponseGate
 
     init(
         detail: TournamentDetail = PreviewData.tournamentDetail,
+        publicDetails: [PublicTournamentDetail] = [PublicDisplayFixtures.tournamentDetail],
         networkCondition: PreviewNetworkCondition = .available
     ) {
         self.detail = detail
+        self.publicDetails = publicDetails
         responseGate = PreviewTournamentResponseGate(
             condition: networkCondition
         )
@@ -43,6 +46,34 @@ nonisolated final class PreviewTournamentRepository: TournamentRepository {
         }
 
         return detail.matches
+    }
+
+    func activeTournaments() async throws -> [PublicTournamentSummary] {
+        try await responseGate.waitForResponse()
+        return publicDetails.map(\.summary)
+    }
+
+    func tournament(
+        id: PublicTournamentSummary.ID,
+        projectionVersion: Int64
+    ) async throws -> PublicTournamentDetail {
+        try await responseGate.waitForResponse()
+        guard let detail = publicDetails.first(where: {
+            $0.id == id && $0.projection.version == projectionVersion
+        }) else {
+            throw AppError.badStatus(code: 404, message: "Tournament not found.")
+        }
+        return detail
+    }
+
+    func matches(
+        tournamentId: PublicTournamentSummary.ID,
+        projectionVersion: Int64
+    ) async throws -> [PublicMatchSummary] {
+        try await tournament(
+            id: tournamentId,
+            projectionVersion: projectionVersion
+        ).matches
     }
 }
 
