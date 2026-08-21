@@ -1,60 +1,65 @@
-/**
- * Runs every deterministic local release gate. PostgreSQL is mandatory here;
- * the suite fails clearly instead of letting Jest silently skip integration.
- */
+/** Runs the ordered local manifest and returns deterministic gate evidence. */
 
 import { loadQualificationConfiguration } from "./configuration.mjs";
+import { readCandidateIdentity } from "./candidate-identity.mjs";
+import { requireDisposableDatabasePair } from "./database-guard.mjs";
+import {
+  blockedExternalGateResults,
+  createQualificationSummary,
+  EXTERNAL_RELEASE_GATES
+} from "./evidence.mjs";
+import { LOCAL_QUALIFICATION_GATES } from "./local-manifest.mjs";
 import { runCommand } from "./process-runner.mjs";
 
-export function runLocalQualification(environment = process.env) {
+export function runLocalQualification(
+  environment = process.env,
+  execute = runCommand
+) {
   const configuration = loadQualificationConfiguration(environment);
+  requireDisposableDatabasePair(environment);
+  const candidate = readCandidateIdentity(configuration.repositoryRoot);
   const backendDirectory = `${configuration.repositoryRoot}/backend`;
+  const results = LOCAL_QUALIFICATION_GATES.map((gate) => {
+    try {
+      execute(resolveCommand(gate.command, configuration.repositoryRoot), gate.args, {
+        cwd: gate.cwd === "backend"
+          ? backendDirectory
+          : configuration.repositoryRoot,
+        environment,
+        label: gate.label
+      });
+      return {
+        id: gate.id,
+        status: "passed",
+        evidenceCode: "command_completed"
+      };
+    } catch {
+      return {
+        id: gate.id,
+        status: "failed",
+        evidenceCode: "command_failed"
+      };
+    }
+  });
 
-  runCommand("npm", ["run", "lint"], {
-    cwd: backendDirectory,
-    environment,
-    label: "backend TypeScript lint"
-  });
-  runCommand("npm", ["run", "build"], {
-    cwd: backendDirectory,
-    environment,
-    label: "backend production build"
-  });
-  runCommand("npm", ["test"], {
-    cwd: backendDirectory,
-    environment,
-    label: "backend unit suite"
-  });
-
-  if (environment.TEST_DATABASE_URL === undefined) {
-    throw new Error(
-      "TEST_DATABASE_URL is required for the PostgreSQL integration gate."
-    );
-  }
-  runCommand("npm", ["run", "test:postgres"], {
-    cwd: backendDirectory,
-    environment,
-    label: "backend PostgreSQL integration suite"
-  });
-  runCommand("node", [
-    "--test",
-    "scripts/release-qualification/configuration.test.mjs",
-    "scripts/release-qualification/log-audit.test.mjs",
-    "scripts/release-qualification/production-write.test.mjs",
-    "backend/scripts/realtime-event-observer.test.mjs"
+  return createQualificationSummary("local", [
+    {
+      id: "candidate-worktree",
+      status: candidate.dirty ? "failed" : "passed",
+      evidenceCode: candidate.dirty ? "worktree_dirty" : "worktree_clean"
+    },
+    ...results,
+    ...blockedExternalGateResults()
   ], {
-    cwd: configuration.repositoryRoot,
-    environment,
-    label: "release qualification tool tests"
+    candidate,
+    requiredGateIds: [
+      "candidate-worktree",
+      ...LOCAL_QUALIFICATION_GATES.map((gate) => gate.id),
+      ...EXTERNAL_RELEASE_GATES.map((gate) => gate.id)
+    ]
   });
-  runCommand(`${configuration.repositoryRoot}/scripts/validate-ios-release.sh`, [], {
-    cwd: configuration.repositoryRoot,
-    environment,
-    label: "iOS release configuration"
-  });
-  runCommand("node", ["scripts/validate-policy-site.mjs"], {
-    cwd: configuration.repositoryRoot,
-    environment,
-    label: "public policy site"
-  });
+}
+
+function resolveCommand(command, repositoryRoot) {
+  return command.startsWith("scripts/") ? `${repositoryRoot}/${command}` : command;
 }

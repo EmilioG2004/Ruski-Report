@@ -10,8 +10,7 @@ const command = process.argv[2];
 
 switch (command) {
   case "local":
-    runLocalQualification();
-    console.log("\nLocal release qualification passed.");
+    printSummary(runLocalQualification());
     break;
   case "production-read": {
     const result = await runProductionReadQualification();
@@ -19,22 +18,18 @@ switch (command) {
     console.log(JSON.stringify(result, null, 2));
     break;
   }
-  case "production-write": {
-    const { runProductionWriteQualification } = await import(
-      "./production-write.mjs"
-    );
-    const result = await runProductionWriteQualification();
-    console.log("Production write qualification passed.");
-    console.log(JSON.stringify(result, null, 2));
-    break;
-  }
   case "logs": {
     const logPath = process.argv[3];
-    if (logPath === undefined) usage();
+    const canaryPath = process.argv[4];
+    if (logPath === undefined || canaryPath === undefined) usage();
     const { spawnSync } = await import("node:child_process");
     const result = spawnSync(
       process.execPath,
-      [fileURLToPath(new URL("log-audit.mjs", import.meta.url)), logPath],
+      [
+        fileURLToPath(new URL("log-audit.mjs", import.meta.url)),
+        logPath,
+        canaryPath
+      ],
       { stdio: "inherit" }
     );
     process.exit(result.status ?? 1);
@@ -46,7 +41,12 @@ switch (command) {
 function usage() {
   console.error(
     "Usage: node scripts/release-qualification/run.mjs " +
-      "<local|production-read|production-write|logs LOG_FILE>"
+      "<local|production-read|logs LOG_FILE CANARY_FILE>"
   );
   process.exit(2);
+}
+
+function printSummary(summary) {
+  console.log(JSON.stringify(summary, null, 2));
+  if (summary.counts.failed > 0) process.exitCode = 1;
 }
