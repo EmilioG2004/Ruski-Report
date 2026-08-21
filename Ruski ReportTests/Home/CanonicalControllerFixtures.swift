@@ -13,19 +13,23 @@ final class CanonicalControllerTournamentRepository: TournamentRepository {
     }
 
     var discoveryResults: [Result<[PublicTournamentSummary], Error>]
+    var historyResults: [Result<[PublicTournamentSummary], Error>]
     var discoveryDelays: [UInt64]
     var detailResults: [DetailRequest: Result<PublicTournamentDetail, Error>]
     var detailDelays: [DetailRequest: UInt64]
     private(set) var discoveryRequestCount = 0
+    private(set) var historyRequestCount = 0
     private(set) var detailRequests: [DetailRequest] = []
 
     init(
         discoveryResults: [Result<[PublicTournamentSummary], Error>] = [],
+        historyResults: [Result<[PublicTournamentSummary], Error>] = [],
         discoveryDelays: [UInt64] = [],
         detailResults: [DetailRequest: Result<PublicTournamentDetail, Error>] = [:],
         detailDelays: [DetailRequest: UInt64] = [:]
     ) {
         self.discoveryResults = discoveryResults
+        self.historyResults = historyResults
         self.discoveryDelays = discoveryDelays
         self.detailResults = detailResults
         self.detailDelays = detailDelays
@@ -53,6 +57,15 @@ final class CanonicalControllerTournamentRepository: TournamentRepository {
             return []
         }
         return try discoveryResults[min(index, discoveryResults.count - 1)].get()
+    }
+
+    func historicalTournaments() async throws -> [PublicTournamentSummary] {
+        let index = historyRequestCount
+        historyRequestCount += 1
+        guard !historyResults.isEmpty else {
+            return []
+        }
+        return try historyResults[min(index, historyResults.count - 1)].get()
     }
 
     func tournament(

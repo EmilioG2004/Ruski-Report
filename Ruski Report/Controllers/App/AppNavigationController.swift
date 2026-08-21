@@ -9,16 +9,24 @@ import SwiftUI
 final class AppNavigationController: ObservableObject {
     @Published var path = NavigationPath()
 
+    func showTournamentHistory() {
+        path.append(AppRoute.tournamentHistory)
+    }
+
     func showTournament(_ tournament: TournamentPreview) {
         path.append(AppRoute.tournament(id: tournament.id))
     }
 
-    func showTournament(_ tournament: PublicTournamentSummary) {
+    func showTournament(
+        _ tournament: PublicTournamentSummary,
+        discoveryScope: PublicTournamentDiscoveryScope = .active
+    ) {
         path.append(
             AppRoute.canonicalTournament(
                 PublicTournamentRouteContext(
                     tournamentId: tournament.id,
-                    projectionVersion: tournament.projection.version
+                    projectionVersion: tournament.projection.version,
+                    discoveryScope: discoveryScope
                 )
             )
         )
@@ -64,13 +72,17 @@ final class AppNavigationController: ObservableObject {
         )
     }
 
-    func showMatch(_ match: PublicMatchSummary) {
+    func showMatch(
+        _ match: PublicMatchSummary,
+        discoveryScope: PublicTournamentDiscoveryScope = .active
+    ) {
         path.append(
             AppRoute.canonicalMatch(
                 PublicMatchRouteContext(
                     matchId: match.id,
                     tournamentId: match.tournamentId,
-                    projectionVersion: match.projection.version
+                    projectionVersion: match.projection.version,
+                    discoveryScope: discoveryScope
                 )
             )
         )
