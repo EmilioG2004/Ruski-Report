@@ -9,6 +9,28 @@ nonisolated enum PublicTournamentMapper {
     static func activeTournaments(
         from envelope: PublicTournamentDiscoveryEnvelopeDTO
     ) throws -> [PublicTournamentSummary] {
+        try discoveryTournaments(
+            from: envelope,
+            allowedLifecycles: [.setupPublished, .podPlay, .seedingReview, .playoffs],
+            collectionName: "Active discovery"
+        )
+    }
+
+    static func historicalTournaments(
+        from envelope: PublicTournamentDiscoveryEnvelopeDTO
+    ) throws -> [PublicTournamentSummary] {
+        try discoveryTournaments(
+            from: envelope,
+            allowedLifecycles: [.completed, .archived],
+            collectionName: "History discovery"
+        )
+    }
+
+    private static func discoveryTournaments(
+        from envelope: PublicTournamentDiscoveryEnvelopeDTO,
+        allowedLifecycles: [PublicTournamentLifecycle],
+        collectionName: String
+    ) throws -> [PublicTournamentSummary] {
         try PublicContractMapper.validateContractVersion(envelope.contractVersion)
         try PublicContractMapper.requireUnique(
             envelope.tournaments.map(\.tournament.id),
@@ -21,10 +43,9 @@ nonisolated enum PublicTournamentMapper {
                 expectedTournamentId: item.tournament.id
             )
             let tournament = try summary(item.tournament, projection: projection)
-            guard [.setupPublished, .podPlay, .seedingReview, .playoffs]
-                .contains(tournament.lifecycle) else {
+            guard allowedLifecycles.contains(tournament.lifecycle) else {
                 throw PublicContractValidationError.incoherent(
-                    "Discovery may contain only active public tournaments."
+                    "\(collectionName) contained an unsupported tournament lifecycle."
                 )
             }
             return tournament

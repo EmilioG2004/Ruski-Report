@@ -36,6 +36,13 @@ nonisolated final class RemoteTournamentRepository: TournamentRepository {
         return try PublicTournamentMapper.activeTournaments(from: envelope)
     }
 
+    func historicalTournaments() async throws -> [PublicTournamentSummary] {
+        let envelope: PublicTournamentDiscoveryEnvelopeDTO = try await apiClient.get(
+            "v2/tournaments/history"
+        )
+        return try PublicTournamentMapper.historicalTournaments(from: envelope)
+    }
+
     func tournament(
         id: PublicTournamentSummary.ID,
         projectionVersion: Int64

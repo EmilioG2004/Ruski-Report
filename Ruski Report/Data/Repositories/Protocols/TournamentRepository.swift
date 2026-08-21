@@ -11,6 +11,7 @@ nonisolated protocol TournamentRepository {
     func matches(tournamentId: TournamentPreview.ID) async throws -> [MatchPreview]
 
     func activeTournaments() async throws -> [PublicTournamentSummary]
+    func historicalTournaments() async throws -> [PublicTournamentSummary]
     func tournament(
         id: PublicTournamentSummary.ID,
         projectionVersion: Int64
@@ -24,6 +25,10 @@ nonisolated protocol TournamentRepository {
 extension TournamentRepository {
     func activeTournaments() async throws -> [PublicTournamentSummary] {
         throw AppError.unsupported("Canonical tournament discovery is unavailable.")
+    }
+
+    func historicalTournaments() async throws -> [PublicTournamentSummary] {
+        throw AppError.unsupported("Canonical tournament history is unavailable.")
     }
 
     func tournament(

@@ -43,6 +43,39 @@ struct PublicRepositoryTests {
         #expect(tournaments.map(\.projection.version) == [7, 2])
     }
 
+    @Test func historyDiscoveryAcceptsCompletedAndArchivedOnly() throws {
+        let envelope = PublicTournamentDiscoveryEnvelopeDTO(
+            contractVersion: 2,
+            tournaments: [
+                PublicTournamentDiscoveryItemDTO(
+                    projection: publicProjectionDTO(),
+                    tournament: publicTournamentSummaryDTO(lifecycle: "completed")
+                ),
+                PublicTournamentDiscoveryItemDTO(
+                    projection: publicProjectionDTO(
+                        tournamentId: "tournament-public-2026-archive",
+                        version: 3
+                    ),
+                    tournament: publicTournamentSummaryDTO(
+                        id: "tournament-public-2026-archive",
+                        name: "Archived Tournament",
+                        lifecycle: "archived"
+                    )
+                )
+            ]
+        )
+
+        let tournaments = try PublicTournamentMapper.historicalTournaments(
+            from: envelope
+        )
+
+        #expect(tournaments.map(\.lifecycle) == [.completed, .archived])
+        #expect(tournaments.map(\.projection.version) == [7, 3])
+        #expect(throws: PublicContractValidationError.self) {
+            try PublicTournamentMapper.activeTournaments(from: envelope)
+        }
+    }
+
     @Test func detailRetainsCurrentAndHistoricalRostersAndBracketStates() throws {
         let detail = try PublicTournamentMapper.detail(
             from: PublicTournamentDetailEnvelopeDTO(
@@ -266,6 +299,16 @@ struct PublicRepositoryTests {
                 )
             ]
         )
+        apiClient.responses["v2/tournaments/history"] =
+            PublicTournamentDiscoveryEnvelopeDTO(
+                contractVersion: 2,
+                tournaments: [
+                    PublicTournamentDiscoveryItemDTO(
+                        projection: publicProjectionDTO(),
+                        tournament: publicTournamentSummaryDTO(lifecycle: "completed")
+                    )
+                ]
+            )
         let encodedTournament = "tournament%20%2F%20night"
         let tournamentPath = "v2/tournaments/\(encodedTournament)?projectionVersion=7"
         let matchesPath = "v2/tournaments/\(encodedTournament)/matches?projectionVersion=7"
@@ -282,6 +325,7 @@ struct PublicRepositoryTests {
         let tournamentRepository = RemoteTournamentRepository(apiClient: apiClient)
 
         _ = try await tournamentRepository.activeTournaments()
+        _ = try await tournamentRepository.historicalTournaments()
         _ = try await tournamentRepository.tournament(
             id: "tournament / night",
             projectionVersion: 7
@@ -307,6 +351,7 @@ struct PublicRepositoryTests {
 
         #expect(apiClient.requestedPaths == [
             "v2/tournaments",
+            "v2/tournaments/history",
             tournamentPath,
             matchesPath,
             matchPath

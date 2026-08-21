@@ -22,14 +22,15 @@ func publicProjectionDTO(
 
 func publicTournamentSummaryDTO(
     id: String = publicTournamentId,
-    name: String = "The Extremely Long Durham Ruski Invitational Name"
+    name: String = "The Extremely Long Durham Ruski Invitational Name",
+    lifecycle: String = "playoffs"
 ) -> PublicTournamentSummaryDTO {
     PublicTournamentSummaryDTO(
         id: id,
         gameType: "ruski",
         year: 2027,
         name: name,
-        lifecycle: "playoffs"
+        lifecycle: lifecycle
     )
 }
 
