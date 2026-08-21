@@ -8,13 +8,14 @@ import {
   POD_AND_SINGLE_ELIMINATION_FORMAT,
   TOURNAMENT_FORMAT_VERSION
 } from "../../configuration";
-import { TournamentId } from "../../domain";
+import { isStableUuid, parseStableUuid, TournamentId } from "../../domain";
 import {
   EnginePersistenceConflictError,
   EnginePersistenceInvariantError,
   EngineWriterLeaseConflictError
 } from "../../persistence/errors";
 import { PostgresCanonicalStatisticRepository } from "../../persistence/postgres-canonical-statistic.repository";
+import { PostgresTournamentProgressionRepository } from "../../persistence/postgres-tournament-progression.repository";
 import {
   engineExecutor,
   EnginePostgresExecutor,
@@ -34,6 +35,7 @@ import {
   materializeWorkbookCandidate,
   RUSKI_CANONICAL_SCORING_RULES_VERSION
 } from "../../scoring";
+import type { CanonicalWorkbookSourceRow } from "../generation";
 import {
   ConfirmWorkbookImportInput,
   CreateWorkbookImportPreviewInput,
@@ -128,6 +130,10 @@ interface GenerationMatchRow {
   participant_digest: string | null;
   source_revision_number: string | number | null;
   proposed_status: WorkbookGenerationSourceMatchRecord["status"] | null;
+  active_candidate_envelope: Record<string, unknown> | null;
+  bracket_match_id: string | null;
+  bracket_round_number: number | null;
+  sequence_in_round: string | number | null;
 }
 
 interface GeneratedWorkbookRow {
@@ -284,13 +290,15 @@ export class PostgresWorkbookReconciliationRepository {
   private readonly writers: PostgresMatchWriterRepository;
   private readonly revisions: PostgresMatchRevisionRepository;
   private readonly statistics: PostgresCanonicalStatisticRepository;
+  private readonly progression: PostgresTournamentProgressionRepository;
 
   constructor(
     private readonly database: PostgresDatabase,
     transactions?: TournamentEngineTransactionManager,
     writers?: PostgresMatchWriterRepository,
     revisions?: PostgresMatchRevisionRepository,
-    statistics?: PostgresCanonicalStatisticRepository
+    statistics?: PostgresCanonicalStatisticRepository,
+    progression?: PostgresTournamentProgressionRepository
   ) {
     this.transactions = transactions ?? new TournamentEngineTransactionManager(database);
     this.writers = writers ?? new PostgresMatchWriterRepository(
@@ -303,6 +311,10 @@ export class PostgresWorkbookReconciliationRepository {
     );
     this.statistics = statistics ?? new PostgresCanonicalStatisticRepository(
       database
+    );
+    this.progression = progression ?? new PostgresTournamentProgressionRepository(
+      database,
+      this.transactions
     );
   }
 
@@ -457,7 +469,14 @@ export class PostgresWorkbookReconciliationRepository {
                  state.active_candidate_id::text,
                  state.active_fingerprint, state.participant_digest,
                  active_candidate.source_revision_number,
-                 active_candidate.proposed_status
+                 active_candidate.proposed_status,
+                 active_candidate.envelope AS active_candidate_envelope,
+                 bracket_match.id::text AS bracket_match_id,
+                 bracket_round.sequence AS bracket_round_number,
+                 row_number() OVER (
+                   PARTITION BY bracket_round.id
+                   ORDER BY bracket_match.sequence
+                 ) AS sequence_in_round
           FROM engine_matches match
           LEFT JOIN engine_match_slots side_one
             ON side_one.match_id = match.id AND side_one.slot_number = 1
@@ -468,8 +487,18 @@ export class PostgresWorkbookReconciliationRepository {
            AND state.match_id = match.id
           LEFT JOIN engine_workbook_revision_candidates active_candidate
             ON active_candidate.id = state.active_candidate_id
+          LEFT JOIN engine_bracket_matches bracket_match
+            ON bracket_match.tournament_id = match.tournament_id
+           AND bracket_match.match_id = match.id
+          LEFT JOIN engine_bracket_rounds bracket_round
+            ON bracket_round.tournament_id = bracket_match.tournament_id
+           AND bracket_round.id = bracket_match.round_id
           WHERE match.tournament_id = $1::uuid
             AND NOT match.identity_only
+            AND (
+              match.stage = 'pod_play'
+              OR (bracket_match.id IS NOT NULL AND bracket_match.playable)
+            )
           ORDER BY match.stage, match.sequence
         `, [tournamentId]);
     const activeCandidateIds = matchResult.rows.flatMap((match) =>
@@ -576,7 +605,7 @@ export class PostgresWorkbookReconciliationRepository {
     };
   }
 
-  private async storeGeneratedWorkbookInTransaction(
+  async storeGeneratedWorkbookInTransaction(
     input: StoreGeneratedWorkbookInput,
     transaction: TransactionContext
   ): Promise<StoreGeneratedWorkbookResult> {
@@ -1439,6 +1468,30 @@ export class PostgresWorkbookReconciliationRepository {
     }
 
     const selected = proposals.filter((item) => accepted.has(item.id));
+    for (const [observationId, cascade] of Object.entries(
+      input.playoffCorrectionCascades ?? {}
+    )) {
+      const observation = selected.find((item) => item.id === observationId);
+      if (observation === undefined || observation.reason !== "correction" ||
+          observation.proposed_status !== "final") {
+        throw new EnginePersistenceInvariantError(
+          "Playoff cascade confirmations may reference only selected final corrections."
+        );
+      }
+      validateDigest(
+        cascade.confirmationDigest,
+        "Playoff cascade confirmation digest"
+      );
+      if (!isStableUuid(cascade.previousResolutionId) ||
+          !isStableUuid(cascade.correctedResolutionId) ||
+          !isStableUuid(cascade.correctedAdvancementId)) {
+        throw new EnginePersistenceInvariantError(
+          "Playoff cascade artifact identifiers must be stable UUIDs."
+        );
+      }
+      parseStableUuid(cascade.correctedBracketMatchId, "bracket_match");
+      parseStableUuid(cascade.correctedWinnerTeamId, "tournament_team");
+    }
     const expectedConfirmationDigest = digestWorkbookValue({
       contract: "canonical-workbook-apply-v1",
       previewDigest: input.previewDigest,
@@ -1544,6 +1597,7 @@ export class PostgresWorkbookReconciliationRepository {
     }
 
     const activatedCandidates: Array<{
+      observationId: string;
       matchId: string;
       candidateId: string;
       revisionId: string;
@@ -1652,6 +1706,7 @@ export class PostgresWorkbookReconciliationRepository {
           }
         }, transaction);
         activatedCandidates.push({
+          observationId: context.observationId,
           matchId,
           candidateId: context.candidate.candidateId,
           revisionId: activated.revisionId,
@@ -1687,8 +1742,64 @@ export class PostgresWorkbookReconciliationRepository {
         }))
       }, transaction);
 
+    const replacementMatchIds: string[] = [];
     if (activatedCandidates.some((item) => !item.replayedPhaseThreeSource)) {
       await this.startPodPlayIfNeeded(executor, input, completedAt);
+      for (const materialized of activatedCandidates.filter(
+        (item) => !item.replayedPhaseThreeSource
+      )) {
+        const cascade = input.playoffCorrectionCascades?.[
+          materialized.observationId
+        ];
+        if (cascade !== undefined) {
+          const currentVersion = await executor.query<{
+            row_version: string | number;
+          }>(`
+            SELECT row_version FROM engine_tournaments
+            WHERE id = $1::uuid FOR UPDATE
+          `, [input.tournamentId]);
+          const result = await this.progression
+            .replaceStartedDependentsForActiveCorrectionInTransaction({
+              tournamentId: input.tournamentId,
+              expectedTournamentRowVersion: Number(
+                currentVersion.rows[0]?.row_version
+              ),
+              previousResolutionId: cascade.previousResolutionId,
+              confirmationDigest: cascade.confirmationDigest,
+              administratorId: input.confirmedByAdminId,
+              occurredAt: completedAt,
+              correctedSource: {
+                resolutionId: cascade.correctedResolutionId,
+                advancementId: cascade.correctedAdvancementId,
+                bracketMatchId: parseStableUuid(
+                  cascade.correctedBracketMatchId,
+                  "bracket_match"
+                ),
+                matchId: parseStableUuid(materialized.matchId, "match"),
+                revisionId: parseStableUuid(
+                  materialized.revisionId,
+                  "match_revision"
+                ),
+                winnerTeamId: parseStableUuid(
+                  cascade.correctedWinnerTeamId,
+                  "tournament_team"
+                ),
+                matchStatus: "final"
+              },
+              replacements: cascade.replacements
+            }, transaction);
+          replacementMatchIds.push(...result.replacementMatchIds);
+          continue;
+        }
+        await this.progression.refreshProgressionAfterRevisionInTransaction({
+          tournamentId: input.tournamentId,
+          matchId: materialized.matchId as never,
+          revisionId: materialized.revisionId as never,
+          confirmationDigest: input.confirmationDigest,
+          actorId: input.confirmedByAdminId,
+          occurredAt: completedAt
+        }, transaction);
+      }
     }
 
     const appliedMatchIds: string[] = [];
@@ -1860,6 +1971,7 @@ export class PostgresWorkbookReconciliationRepository {
           matchRowVersion: materialized.matchRowVersion
         };
       }),
+      replacementMatchIds,
       tournamentStatisticRunId:
         statisticResult?.tournamentStatisticRunId ?? null,
       tournamentStatisticRunDigest:
@@ -2381,12 +2493,6 @@ function mapGenerationMatch(
       "Generated workbook match participants must be resolved."
     );
   }
-  const sequenceInPod = positiveMetadataInteger(row.metadata, "sequenceInPod");
-  const roundNumber = positiveMetadataInteger(row.metadata, "roundNumber");
-  const gameNumberForPair = positiveMetadataInteger(
-    row.metadata,
-    "gameNumberForPair"
-  );
   const hasState = row.source_state_version !== null;
   if (hasState && (
     row.active_candidate_id === null || row.active_fingerprint === null ||
@@ -2413,22 +2519,18 @@ function mapGenerationMatch(
       [row.side_one_team_id, row.side_two_team_id],
       teamById
       );
-  return {
+  const common = {
     matchId: row.id,
-    stage: row.stage,
-    podId: row.pod_id,
     sequence: row.sequence,
     rowVersion: Number(row.row_version),
     status: row.status,
     scoreAvailability: row.score_availability,
-    participantTeamIds: [row.side_one_team_id, row.side_two_team_id],
+    participantTeamIds: [row.side_one_team_id, row.side_two_team_id] as const,
     participantTeams,
-    sequenceInPod,
-    roundNumber,
-    gameNumberForPair,
     activeScoringPreview: row.active_revision_id === null
       ? null
       : mapActiveScoringPreview(row.active_revision_id, revisionTeams),
+    activeScorecardSource: mapActiveScorecardSource(row, participantTeams),
     workbookState: !hasState ? null : {
       rowVersion: Number(row.source_state_version),
       sourceRevisionNumber: Number(row.source_revision_number),
@@ -2439,6 +2541,42 @@ function mapGenerationMatch(
         "status"
       ]
     }
+  };
+  if (row.stage === "pod_play") {
+    if (row.pod_id === null) {
+      throw new EnginePersistenceInvariantError(
+        "Pod-play workbook match is missing its pod identity."
+      );
+    }
+    return {
+      ...common,
+      stage: "pod_play",
+      podId: row.pod_id,
+      bracketMatchId: null,
+      sequenceInPod: positiveMetadataInteger(row.metadata, "sequenceInPod"),
+      roundNumber: positiveMetadataInteger(row.metadata, "roundNumber"),
+      gameNumberForPair: positiveMetadataInteger(
+        row.metadata,
+        "gameNumberForPair"
+      ),
+      sequenceInRound: null
+    };
+  }
+  if (row.pod_id !== null || row.bracket_match_id === null ||
+      row.bracket_round_number === null || row.sequence_in_round === null) {
+    throw new EnginePersistenceInvariantError(
+      "Playoff workbook match is missing its bracket identity."
+    );
+  }
+  return {
+    ...common,
+    stage: "playoffs",
+    podId: null,
+    bracketMatchId: row.bracket_match_id,
+    sequenceInPod: null,
+    roundNumber: row.bracket_round_number,
+    gameNumberForPair: null,
+    sequenceInRound: Number(row.sequence_in_round)
   };
 }
 
@@ -2571,6 +2709,87 @@ function mapActiveScoringPreview(
     ],
     winnerTeamId: revisionTeams.find((team) => team.result === "win")?.team_id ?? null
   };
+}
+
+function mapActiveScorecardSource(
+  row: GenerationMatchRow,
+  teams: readonly [
+    WorkbookGenerationSourceMatchTeamRecord,
+    WorkbookGenerationSourceMatchTeamRecord
+  ]
+): WorkbookGenerationSourceMatchRecord["activeScorecardSource"] {
+  if ((row.status !== "in_progress" && row.status !== "final") ||
+      row.proposed_status !== row.status || row.active_candidate_envelope === null) {
+    return null;
+  }
+  const envelope = row.active_candidate_envelope;
+  if ((envelope.contract !== "workbook-match-revision-candidate-v1" &&
+       envelope.contract !== "workbook-match-revision-candidate-v2") ||
+      !Array.isArray(envelope.rows)) {
+    throw new EnginePersistenceInvariantError(
+      "Active workbook candidate source rows are invalid."
+    );
+  }
+  const playersBySideAndSlot = new Map<string, WorkbookGenerationSourcePlayerRecord>(teams.flatMap((team) =>
+    team.players.map((player) => [
+      `${team.sideNumber}:${player.rosterSlot}`,
+      player
+    ] as const)
+  ));
+  const rows = envelope.rows.map((value, index): CanonicalWorkbookSourceRow => {
+    if (!isJsonObject(value) || (value.sideNumber !== 1 && value.sideNumber !== 2) ||
+        !Number.isSafeInteger(value.worksheetRow) ||
+        Number(value.worksheetRow) < 10 || Number(value.worksheetRow) > 89 ||
+        !Number.isSafeInteger(value.rosterSlot) || Number(value.rosterSlot) < 1 ||
+        !(value.shotNumber === null || (
+          Number.isSafeInteger(value.shotNumber) && Number(value.shotNumber) > 0
+        )) || !isJsonObject(value.markers)) {
+      throw new EnginePersistenceInvariantError(
+        `Active workbook candidate source row ${index + 1} is invalid.`
+      );
+    }
+    const participant = playersBySideAndSlot.get(
+      `${value.sideNumber}:${Number(value.rosterSlot)}`
+    );
+    if (participant === undefined || value.playerId !== participant.playerId ||
+        value.rosterMembershipId !== participant.rosterMembershipId ||
+        value.teamId !== teams[value.sideNumber - 1].teamId) {
+      throw new EnginePersistenceInvariantError(
+        "Active workbook candidate source participant is invalid."
+      );
+    }
+    const markers = value.markers;
+    const markerKeys = [
+      "miss", "make", "splashOut", "guy", "tri", "di", "vom"
+    ] as const;
+    if (markerKeys.some((key) => typeof markers[key] !== "boolean")) {
+      throw new EnginePersistenceInvariantError(
+        "Active workbook candidate source markers are invalid."
+      );
+    }
+    return {
+      sideNumber: value.sideNumber as 1 | 2,
+      worksheetRow: Number(value.worksheetRow),
+      shotNumber: value.shotNumber === null ? null : Number(value.shotNumber),
+      playerId: participant.playerId as never,
+      rosterMembershipId: participant.rosterMembershipId as never,
+      rosterSlot: Number(value.rosterSlot),
+      markers: Object.fromEntries(markerKeys.map((key) => [key, markers[key]])) as {
+        miss: boolean;
+        make: boolean;
+        splashOut: boolean;
+        guy: boolean;
+        tri: boolean;
+        di: boolean;
+        vom: boolean;
+      }
+    };
+  });
+  return { status: row.status === "final" ? "FINAL" : "LIVE GAME", rows };
+}
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function mapConfiguration(row: ConfigurationRow) {

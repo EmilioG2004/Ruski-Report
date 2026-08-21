@@ -185,7 +185,7 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       FROM engine_tournaments
       WHERE id = $1::uuid
     `, [fixture.tournamentId])).toMatchObject({
-      rows: [{ lifecycle: "pod_play", row_version: "3" }]
+      rows: [{ lifecycle: "pod_play", row_version: "4" }]
     });
     expect(await database.query<{ count: string }>(`
       SELECT count(*)::text AS count
@@ -213,7 +213,8 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
         ),
         missingObservation(generation.sheets[3], fixture.matchIds[1])
       ],
-      3
+      (await repository.readGenerationSource(fixture.tournamentId))
+        ?.tournament.rowVersion ?? 4
     ));
     const noOp = await repository.confirmImport({
       tournamentId: fixture.tournamentId,
@@ -450,12 +451,22 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       confirmedByAdminId: fixture.adminId,
       audit: { eventId: randomUUID() }
     });
-    const firstCandidateId = (await repository.readGenerationSource(
+    const generatedSource = await repository.readGenerationSource(
       fixture.tournamentId
-    ))?.matches[0].workbookState?.activeCandidateId;
+    );
+    const firstCandidateId = generatedSource?.matches[0]
+      .workbookState?.activeCandidateId;
     if (firstCandidateId === undefined) {
       throw new Error("Initial workbook candidate was not active.");
     }
+    expect(generatedSource?.matches[0].activeScorecardSource?.status)
+      .toBe("LIVE GAME");
+    expect(generatedSource?.matches[0].activeScorecardSource?.rows)
+      .toEqual(expect.arrayContaining([expect.objectContaining({
+        sideNumber: 1,
+        worksheetRow: 10,
+        markers: expect.objectContaining({ make: true })
+      })]));
     const liveUpdate = candidateFor(fixture, 0, {
       sourceRevisionNumber: 2,
       fingerprint: digest("live-update"),
@@ -473,7 +484,7 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
         liveUpdate,
         1
       )],
-      3
+      generatedSource?.tournament.rowVersion ?? 4
     ));
     await expect(repository.confirmImport({
       tournamentId: fixture.tournamentId,
@@ -489,9 +500,11 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       audit: { eventId: randomUUID() }
     })).resolves.toMatchObject({ status: "applied" });
 
-    const secondCandidateId = (await repository.readGenerationSource(
+    const sourceAfterSecond = await repository.readGenerationSource(
       fixture.tournamentId
-    ))?.matches[0].workbookState?.activeCandidateId;
+    );
+    const secondCandidateId = sourceAfterSecond
+      ?.matches[0].workbookState?.activeCandidateId;
     if (secondCandidateId === undefined) {
       throw new Error("Live workbook candidate was not active.");
     }
@@ -510,7 +523,7 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
         correction,
         2
       )],
-      3
+      sourceAfterSecond?.tournament.rowVersion ?? 4
     ));
     await expect(repository.confirmImport({
       tournamentId: fixture.tournamentId,
@@ -1081,7 +1094,7 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
         changed,
         1
       )],
-      3
+      source?.tournament.rowVersion ?? 4
     ));
     await expect(repository.confirmImport({
       tournamentId: fixture.tournamentId,
@@ -1108,7 +1121,7 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       fixture,
       generation,
       [missingObservation(generation.sheets[3], fixture.matchIds[1])],
-      3
+      source?.tournament.rowVersion ?? 4
     );
     expiredInput.receivedAt = new Date(old.getTime() - 60_000).toISOString();
     expiredInput.previewedAt = old.toISOString();
