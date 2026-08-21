@@ -18,6 +18,12 @@ import {
   createLegacyIdentity,
   DeterministicLegacyIdentity
 } from "./legacy-determinism";
+import {
+  calculateCanonicalAggregateStatistics,
+  calculateCanonicalMatchStatistics,
+  CanonicalStatisticRevision,
+  CanonicalStatisticUniverse
+} from "../statistics";
 
 export class LegacyBackfillPlanningError extends Error {
   constructor(readonly issues: LegacyBackfillIssue[]) {
@@ -34,7 +40,7 @@ export class LegacyBackfillPlanner {
       throw new LegacyBackfillPlanningError(issues);
     }
 
-    const sourceDigest = createDigest(source);
+    const sourceDigest = createDigest(sourceForStableDigest(source));
     const identities = new IdentityCatalog(source.legacyTournamentId);
     const tournamentIdentity = identities.create(
       "tournament",
@@ -274,7 +280,25 @@ export class LegacyBackfillPlanner {
               teamIdentities,
               match.score.legacyWinnerTeamId
             ).id,
-        isFinal: match.score.isFinal
+        isFinal: match.score.isFinal,
+        events: match.events.map((event) => {
+          const identity = identities.create(
+            "scoring_event",
+            [match.legacyMatchId, event.legacyEventId, event.sequence, event.type]
+          );
+          return mapLegacyEvent(event, identity, teamIdentities, playerIdentities);
+        }),
+        sourceStatistics: match.statistics.map((statistic) => ({
+          subjectType: statistic.subjectType,
+          teamId: statistic.legacyTeamId === undefined
+            ? undefined
+            : requireIdentity(teamIdentities, statistic.legacyTeamId).id,
+          playerId: statistic.legacyPlayerId === undefined
+            ? undefined
+            : requireIdentity(playerIdentities, statistic.legacyPlayerId).id,
+          metricValues: statistic.metricValues
+        })),
+        sourceScorecardRows: match.scorecardRows
       };
     });
     for (const bracketSource of bracketSources.filter(
@@ -329,7 +353,10 @@ export class LegacyBackfillPlanner {
               teamIdentities,
               bracketSource.legacyWinnerTeamId
             ).id,
-        isFinal: bracketSource.status === "completed"
+        isFinal: bracketSource.status === "completed",
+        events: [],
+        sourceStatistics: [],
+        sourceScorecardRows: []
       });
     }
     matchRevisions.sort((left, right) => left.matchId.localeCompare(right.matchId));
@@ -450,12 +477,13 @@ export class LegacyBackfillPlanner {
         matchIdentities,
         reference.legacyMatchId
       ).id,
-      commentCount: reference.commentIds.length,
-      reportCount: reference.reportIds.length
+      commentIds: reference.commentIds,
+      reportIds: reference.reportIds
     }));
     const mappings = identities.mappings();
     const mappingDigest = createDigest(mappings);
     const counts = createCounts({
+      tournamentId: tournamentIdentity.id,
       teams,
       players,
       rosterMemberships,
@@ -480,7 +508,8 @@ export class LegacyBackfillPlanner {
       lifecycle: "completed" as const,
       visibility: "public" as const,
       format: source.format,
-      configuration: deriveConfiguration(source)
+      configuration: deriveConfiguration(source),
+      sourceStatistics: source.tournamentStatistics
     };
     const planContent = {
       schemaVersion: LEGACY_BACKFILL_SCHEMA_VERSION,
@@ -509,7 +538,13 @@ export class LegacyBackfillPlanner {
 
     return {
       ...planContent,
-      planDigest: createDigest(planContent)
+      planDigest: createDigest({
+        ...planContent,
+        identityReferences: identityReferences.map((reference) => ({
+          legacyMatchId: reference.legacyMatchId,
+          canonicalMatchId: reference.canonicalMatchId
+        }))
+      })
     };
   }
 }
@@ -789,6 +824,7 @@ function mapBracketMatch(
 }
 
 function createCounts(input: {
+  tournamentId: string;
   teams: LegacyBackfillPlan["teams"];
   players: LegacyBackfillPlan["players"];
   rosterMemberships: LegacyBackfillPlan["rosterMemberships"];
@@ -805,6 +841,14 @@ function createCounts(input: {
 }): LegacyBackfillCounts {
   const bracketRounds = input.bracket?.rounds ?? [];
   const bracketMatches = bracketRounds.flatMap((round) => round.matches);
+  const scoringEvents = input.matchRevisions.reduce(
+    (count, revision) => count + revision.events.length,
+    0
+  );
+  const statisticCounts = canonicalStatisticCounts(input);
+  const completedBracketMatches = bracketMatches.filter(
+    (match) => match.status === "completed" && match.winnerTeamId !== undefined
+  ).length;
   return {
     tournaments: 1,
     teams: input.teams.length,
@@ -819,8 +863,15 @@ function createCounts(input: {
       0
     ),
     standingCalculations: input.standingCalculations.length,
+    standingCalculationMatches: input.standingCalculations.reduce(
+      (count, calculation) => count + input.matches.filter((match) =>
+        !match.identityOnly && match.podId === calculation.podId
+      ).length,
+      0
+    ),
     standings: input.standings.length,
     podFinalizations: input.podFinalizations.length,
+    podFinalizationProvenance: input.podFinalizations.length,
     seedCalculations: input.seedCalculation === undefined ? 0 : 1,
     seeds: input.seeds.length,
     brackets: input.bracket === undefined ? 0 : 1,
@@ -830,14 +881,193 @@ function createCounts(input: {
       (count, match) => count + match.slots.length,
       0
     ),
-    commentReferences: input.identityReferences.reduce(
-      (count, reference) => count + reference.commentCount,
+    scoringEvents,
+    shotAttempts: input.matchRevisions.reduce(
+      (count, revision) => count + revision.events.filter(
+        (event) => event.type === "shot_attempt"
+      ).length,
       0
     ),
-    reportReferences: input.identityReferences.reduce(
-      (count, reference) => count + reference.reportCount,
+    shotClassifications: input.matchRevisions.reduce(
+      (count, revision) => count + revision.events.filter(
+        (event) => event.shotAttempt?.classification !== undefined
+      ).length,
       0
-    )
+    ),
+    statisticRuns: statisticCounts.runs,
+    statisticValues: statisticCounts.values,
+    activeStatisticRuns: statisticCounts.runs === 0 ? 0 : 1,
+    activePodStandingCalculations: input.standingCalculations.filter(
+      (calculation) => calculation.scope === "pod"
+    ).length,
+    activeTournamentStandingCalculations: input.standingCalculations.some(
+      (calculation) => calculation.scope === "tournament"
+    ) ? 1 : 0,
+    seedCalculationFinalizations: input.seedCalculation === undefined
+      ? 0
+      : input.podFinalizations.length,
+    activeSeedCalculations: input.seedCalculation === undefined ? 0 : 1,
+    bracketPublications: input.bracket === undefined ? 0 : 1,
+    activeBrackets: input.bracket === undefined ? 0 : 1,
+    bracketResolutions: completedBracketMatches,
+    activeBracketResolutions: completedBracketMatches,
+    bracketAdvancements: bracketMatches.reduce(
+      (count, match) => count + match.slots.filter(
+        (slot) => slot.sourceType === "match-winner"
+      ).length,
+      0
+    ),
+    projectionVersions: 1,
+    tournamentProjectionPayloads: 1,
+    matchProjectionPayloads: input.matches.filter(
+      (match) => !match.identityOnly
+    ).length,
+    projectionActivations: 1
+  };
+}
+
+function canonicalStatisticCounts(input: {
+  tournamentId: string;
+  teams: LegacyBackfillPlan["teams"];
+  rosterMemberships: LegacyBackfillPlan["rosterMemberships"];
+  pods: LegacyBackfillPlan["pods"];
+  matches: LegacyBackfillPlan["matches"];
+  matchRevisions: LegacyBackfillPlan["matchRevisions"];
+}): { runs: number; values: number } {
+  const matchById = new Map(input.matches.map((match) => [match.id, match]));
+  const membershipByTeamPlayer = new Map(
+    input.rosterMemberships.map((membership) => [
+      `${membership.teamId}:${membership.playerId}`,
+      membership
+    ])
+  );
+  const revisions = input.matchRevisions.flatMap((revision) => {
+    const match = requireMapValue(matchById, revision.matchId);
+    if (match.identityOnly) {
+      return [];
+    }
+    return [{
+      tournamentId: input.tournamentId,
+      matchId: revision.matchId,
+      revisionId: revision.id,
+      stage: match.stage,
+      ...(match.podId === undefined ? {} : { podId: match.podId }),
+      teams: revision.participants.map((participant, index) => ({
+        sideNumber: index + 1,
+        teamId: participant.teamId,
+        players: participant.playerIds.map((playerId, playerIndex) => ({
+          playerId,
+          rosterMembershipId: membershipByTeamPlayer.get(
+            `${participant.teamId}:${playerId}`
+          )?.id ?? null,
+          rosterSlot: playerIndex + 1
+        }))
+      })),
+      events: revision.events.map((event) => ({
+        eventId: event.id,
+        sequence: event.sequence,
+        type: event.type,
+        teamId: event.teamId,
+        playerId: event.playerId,
+        ...(event.shotAttempt === undefined
+          ? {}
+          : { shotAttempt: event.shotAttempt })
+      }))
+    } as CanonicalStatisticRevision];
+  });
+  if (revisions.length === 0) {
+    return { runs: 0, values: 0 };
+  }
+  const podByTeam = new Map(
+    input.pods.flatMap((pod) => pod.teamIds.map((teamId) => [teamId, pod.id]))
+  );
+  const universe: CanonicalStatisticUniverse = {
+    tournamentId: input.tournamentId,
+    teams: input.teams.map((team) => ({
+      teamId: team.id,
+      podId: requireMapValue(podByTeam, team.id),
+      playerIds: input.rosterMemberships
+        .filter((membership) => membership.teamId === team.id)
+        .sort((left, right) => left.sequence - right.sequence)
+        .map((membership) => membership.playerId)
+    }))
+  };
+  const matchValueCount = revisions.reduce(
+    (count, revision) =>
+      count + calculateCanonicalMatchStatistics(revision, 1).values.length,
+    0
+  );
+  return {
+    runs: revisions.length + 1,
+    values: matchValueCount +
+      calculateCanonicalAggregateStatistics(revisions, 1, universe).values.length
+  };
+}
+
+function mapLegacyEvent(
+  event: LegacyTournamentSource["matches"][number]["events"][number],
+  identity: DeterministicLegacyIdentity,
+  teamIdentities: ReadonlyMap<string, DeterministicLegacyIdentity>,
+  playerIdentities: ReadonlyMap<string, DeterministicLegacyIdentity>
+): LegacyBackfillPlan["matchRevisions"][number]["events"][number] {
+  const common = {
+    id: identity.id,
+    publicKey: identity.publicKey,
+    legacyEventId: event.legacyEventId,
+    legacyScorecardRowId: event.legacyScorecardRowId,
+    attributionMethod: event.attributionMethod,
+    sequence: event.sequence,
+    teamId: requireIdentity(teamIdentities, event.legacyTeamId).id,
+    playerId: requireIdentity(playerIdentities, event.legacyPlayerId).id,
+    occurredAt: event.occurredAt,
+    sourceReference: `legacy-event:${event.legacyEventId}`
+  };
+  if (event.type === "vom") {
+    return { ...common, type: "vom" };
+  }
+  const classification = event.type === "splash-out"
+    ? "splash_out" as const
+    : event.type === "guy" ? "guy" as const
+    : event.type === "tri" ? "tri" as const
+    : event.type === "di" ? "di" as const
+    : undefined;
+  const outcome = event.type === "make" ? "make" as const : "miss" as const;
+  return {
+    ...common,
+    type: "shot_attempt",
+    shotAttempt: {
+      outcome,
+      ...(classification === undefined ? {} : { classification }),
+      cupDelta: outcome === "make" ? 1
+        : classification === "di" ? 2
+        : classification === "tri" ? 3
+        : 0,
+      ...(event.phase === undefined ? {} : { phase: event.phase }),
+      ...(event.turnNumber === undefined ? {} : { turnNumber: event.turnNumber }),
+      ...(event.teamTurnOrder === undefined
+        ? {}
+        : { teamTurnOrder: event.teamTurnOrder }),
+      ...(event.shotInTeamTurn === undefined
+        ? {}
+        : { shotInTeamTurn: event.shotInTeamTurn })
+    }
+  };
+}
+
+function sourceForStableDigest(source: LegacyTournamentSource): unknown {
+  return {
+    ...source,
+    tournamentStatistics: [...source.tournamentStatistics]
+      .sort((left, right) => left.legacyTableId.localeCompare(right.legacyTableId))
+      .map((table) => ({
+        ...table,
+        rows: [...table.rows]
+          .sort((left, right) => left.rank - right.rank)
+          .map((row) => ({ ...row, metricValues: { ...row.metricValues } }))
+      })),
+    matchIdentities: source.matchIdentities.map((identity) => ({
+      legacyMatchId: identity.legacyMatchId
+    }))
   };
 }
 
@@ -1083,6 +1313,10 @@ function validateSource(source: LegacyTournamentSource): LegacyBackfillIssue[] {
       .flatMap((round) => round.matches)
       .map((match) => match.legacyBracketMatchId)
   );
+  const bracketMatchesById = new Map(
+    (source.bracket?.rounds ?? []).flatMap((round) => round.matches)
+      .map((match) => [match.legacyBracketMatchId, match])
+  );
 
   for (const membership of source.rosterMemberships) {
     requireReference(teamIds, membership.legacyTeamId, "ROSTER_TEAM", issues);
@@ -1108,10 +1342,10 @@ function validateSource(source: LegacyTournamentSource): LegacyBackfillIssue[] {
         actual: match.legacyMatchId
       });
     }
-    if (match.participants.length > 2) {
+    if (match.participants.length !== 2) {
       issues.push({
         code: "LEGACY_MATCH_PARTICIPANTS_INVALID",
-        message: "Canonical legacy matches support at most two team participants.",
+        message: "Every published legacy match requires exactly two team participants.",
         actual: match.legacyMatchId
       });
     }
@@ -1135,6 +1369,81 @@ function validateSource(source: LegacyTournamentSource): LegacyBackfillIssue[] {
     for (const score of match.score.participants) {
       requireReference(teamIds, score.legacyTeamId, "SCORE_TEAM", issues);
     }
+    const participantTeams = new Set(
+      match.participants.map((participant) => participant.legacyTeamId)
+    );
+    const participantPlayers = new Set(
+      match.participants.flatMap((participant) => participant.legacyPlayerIds)
+    );
+    checkUnique(match.events, (event) => event.legacyEventId, "MATCH_EVENT", issues);
+    checkUnique(
+      match.events,
+      (event) => String(event.sequence),
+      "MATCH_EVENT_SEQUENCE",
+      issues
+    );
+    checkUnique(
+      match.scorecardRows,
+      (row) => row.legacyScorecardRowId,
+      "SCORECARD_ROW",
+      issues
+    );
+    for (const event of match.events) {
+      requireReference(teamIds, event.legacyTeamId, "EVENT_TEAM", issues);
+      requireReference(playerIds, event.legacyPlayerId, "EVENT_PLAYER", issues);
+      if (!participantTeams.has(event.legacyTeamId) ||
+          !participantPlayers.has(event.legacyPlayerId)) {
+        issues.push({
+          code: "LEGACY_EVENT_PARTICIPANT_MISMATCH",
+          message: "Legacy scoring events must reference frozen match participants.",
+          actual: event.legacyEventId
+        });
+      }
+      if (event.attributionMethod !== "source_event_player_id") {
+        const evidence = match.scorecardRows.find((row) =>
+          row.legacyScorecardRowId === event.legacyScorecardRowId &&
+          row.legacyEventIds.includes(event.legacyEventId)
+        );
+        const scorecardKey = event.type === "splash-out"
+          ? "splashOut"
+          : event.type;
+        if (
+          evidence === undefined ||
+          evidence.legacyTeamId !== event.legacyTeamId ||
+          evidence.values[scorecardKey] !== true ||
+          (evidence.legacyPlayerId !== undefined &&
+            evidence.legacyPlayerId !== event.legacyPlayerId) ||
+          typeof evidence.values.shooter !== "string"
+        ) {
+          issues.push({
+            code: "LEGACY_EVENT_ATTRIBUTION_EVIDENCE_MISSING",
+            message: "Compatibility-attributed events require matching stable scorecard chronology.",
+            actual: event.legacyEventId
+          });
+        }
+      }
+    }
+    for (const statistic of match.statistics) {
+      if (statistic.legacyTeamId !== undefined) {
+        requireReference(teamIds, statistic.legacyTeamId, "STATISTIC_TEAM", issues);
+      }
+      if (statistic.legacyPlayerId !== undefined) {
+        requireReference(
+          playerIds,
+          statistic.legacyPlayerId,
+          "STATISTIC_PLAYER",
+          issues
+        );
+      }
+    }
+    for (const row of match.scorecardRows) {
+      if (row.legacyTeamId !== undefined) {
+        requireReference(teamIds, row.legacyTeamId, "SCORECARD_TEAM", issues);
+      }
+      if (row.legacyPlayerId !== undefined) {
+        requireReference(playerIds, row.legacyPlayerId, "SCORECARD_PLAYER", issues);
+      }
+    }
     if (match.score.legacyWinnerTeamId !== undefined) {
       requireReference(
         teamIds,
@@ -1148,6 +1457,37 @@ function validateSource(source: LegacyTournamentSource): LegacyBackfillIssue[] {
     requireReference(teamIds, standing.legacyTeamId, "STANDING_TEAM", issues);
     if (standing.legacyPodId !== undefined) {
       requireReference(podIds, standing.legacyPodId, "STANDING_POD", issues);
+    }
+  }
+  for (const table of source.tournamentStatistics) {
+    for (const row of table.rows) {
+      if (table.subjectType === "team") {
+        if (row.legacyTeamId === undefined) {
+          issues.push({
+            code: "LEGACY_TOURNAMENT_STATISTIC_SUBJECT_MISSING",
+            message: "Legacy team statistics require stable team identity."
+          });
+        } else {
+          requireReference(
+            teamIds,
+            row.legacyTeamId,
+            "TOURNAMENT_STATISTIC_TEAM",
+            issues
+          );
+        }
+      } else if (row.legacyPlayerId === undefined) {
+        issues.push({
+          code: "LEGACY_TOURNAMENT_STATISTIC_SUBJECT_MISSING",
+          message: "Legacy player statistics require stable player identity."
+        });
+      } else {
+        requireReference(
+          playerIds,
+          row.legacyPlayerId,
+          "TOURNAMENT_STATISTIC_PLAYER",
+          issues
+        );
+      }
     }
   }
   for (const match of (source.bracket?.rounds ?? []).flatMap(
@@ -1176,6 +1516,28 @@ function validateSource(source: LegacyTournamentSource): LegacyBackfillIssue[] {
         issues.push({
           code: "LEGACY_BRACKET_MATCH_LOSER_UNSUPPORTED",
           message: "The approved single-elimination backfill cannot use match-loser slots."
+        });
+      }
+      if (slot.sourceType === "match-winner") {
+        const sourceMatch = slot.legacySourceBracketMatchId === undefined
+          ? undefined
+          : bracketMatchesById.get(slot.legacySourceBracketMatchId);
+        if (
+          sourceMatch?.status !== "completed" ||
+          sourceMatch.legacyWinnerTeamId === undefined ||
+          sourceMatch.legacyWinnerTeamId !== slot.legacyTeamId
+        ) {
+          issues.push({
+            code: "LEGACY_BRACKET_ADVANCEMENT_EVIDENCE_INVALID",
+            message:
+              "Legacy winner-source slots require a completed matching winner."
+          });
+        }
+      }
+      if (slot.sourceType === "bye") {
+        issues.push({
+          code: "LEGACY_BRACKET_BYE_UNSUPPORTED",
+          message: "The 2026 v1 compatibility backfill does not permit bracket byes."
         });
       }
       if (slot.legacyTeamId !== undefined) {
@@ -1289,6 +1651,20 @@ function requireMapValue<T>(values: ReadonlyMap<string, T>, key: string): T {
 function normalizeSource(source: LegacyTournamentSource): LegacyTournamentSource {
   return {
     ...source,
+    tournamentStatistics: [...source.tournamentStatistics]
+      .sort((left, right) => left.legacyTableId.localeCompare(right.legacyTableId))
+      .map((table) => ({
+        ...table,
+        rows: [...table.rows].sort((left, right) =>
+          left.rank - right.rank ||
+          (left.legacyPlayerId ?? left.legacyTeamId ?? "").localeCompare(
+            right.legacyPlayerId ?? right.legacyTeamId ?? ""
+          )
+        ).map((row) => ({
+          ...row,
+          metricValues: { ...row.metricValues }
+        }))
+      })),
     teams: [...source.teams].sort(
       (left, right) => left.sequence - right.sequence ||
         left.legacyTeamId.localeCompare(right.legacyTeamId)
@@ -1320,6 +1696,21 @@ function normalizeSource(source: LegacyTournamentSource): LegacyTournamentSource
       .map((match) => ({
         ...match,
         participants: [...match.participants],
+        events: [...match.events].sort(
+          (left, right) => left.sequence - right.sequence ||
+            left.legacyEventId.localeCompare(right.legacyEventId)
+        ),
+        statistics: [...match.statistics].map((statistic) => ({
+          ...statistic,
+          metricValues: { ...statistic.metricValues }
+        })),
+        scorecardRows: [...match.scorecardRows]
+          .sort((left, right) => left.sequence - right.sequence)
+          .map((row) => ({
+            ...row,
+            legacyEventIds: [...row.legacyEventIds].sort(),
+            values: { ...row.values }
+          })),
         score: {
           ...match.score,
           participants: [...match.score.participants]
