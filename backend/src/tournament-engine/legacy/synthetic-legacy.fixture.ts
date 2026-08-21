@@ -18,6 +18,41 @@ const fixture: LegacyTournamentSource = {
     fixture: "sanitized",
     locationName: "Synthetic Club"
   },
+  tournamentStatistics: [
+    {
+      legacyTableId: "synthetic-season-player-statistics",
+      scope: "season",
+      subjectType: "player",
+      rows: [
+        tournamentStatistic(1, "legacy-player-a1", {
+          makes: 1, misses: 0, shootingPercentage: 1
+        }),
+        tournamentStatistic(2, "legacy-player-a-former", {
+          makes: 1, misses: 0, shootingPercentage: 1
+        }),
+        tournamentStatistic(3, "legacy-player-b1", {
+          makes: 0, misses: 1, tris: 1, shootingPercentage: 0
+        }),
+        tournamentStatistic(4, "legacy-player-c1", {
+          makes: 0, misses: 1, guys: 1, shootingPercentage: 0
+        }),
+        tournamentStatistic(5, "legacy-player-a2", { voms: 1 })
+      ]
+    },
+    {
+      legacyTableId: "synthetic-playoff-player-statistics",
+      scope: "playoffs",
+      subjectType: "player",
+      rows: [
+        tournamentStatistic(1, "legacy-player-a-former", {
+          makes: 1, misses: 0, shootingPercentage: 1
+        }),
+        tournamentStatistic(2, "legacy-player-c1", {
+          makes: 0, misses: 1, guys: 1, shootingPercentage: 0
+        })
+      ]
+    }
+  ],
   teams: [
     team("legacy-team-alpha", "Synthetic Alpha", 1, 1, 1),
     team("legacy-team-bravo", "Synthetic Bravo", 2, 2, 4),
@@ -90,6 +125,38 @@ const fixture: LegacyTournamentSource = {
         7,
         "legacy-team-alpha"
       ),
+      events: [
+        legacyEvent("pod-a-make", 1, "make", "legacy-team-alpha", "legacy-player-a1"),
+        legacyEvent("pod-a-tri", 2, "tri", "legacy-team-bravo", "legacy-player-b1"),
+        legacyEvent("pod-a-vom", 3, "vom", "legacy-team-alpha", "legacy-player-a2")
+      ],
+      statistics: [
+        matchStatistic("legacy-team-alpha", "legacy-player-a1", {
+          makes: 1, misses: 0, shootingPercentage: 1
+        }),
+        matchStatistic("legacy-team-bravo", "legacy-player-b1", {
+          makes: 0, misses: 1, tris: 1, shootingPercentage: 0
+        }),
+        matchStatistic("legacy-team-alpha", "legacy-player-a2", { voms: 1 })
+      ],
+      scorecardRows: [
+        scorecardRow(
+          "legacy-scorecard-pod-a-make",
+          1,
+          "legacy-team-alpha",
+          "legacy-player-a1",
+          "pod-a-make",
+          { shooter: "Alpha One", make: true }
+        ),
+        scorecardRow(
+          "legacy-scorecard-pod-a-tri",
+          2,
+          "legacy-team-bravo",
+          "legacy-player-b1",
+          "pod-a-tri",
+          { shooter: "Bravo One", tri: true }
+        )
+      ],
       updatedAt: "2026-06-20T16:00:00.000Z"
     },
     {
@@ -120,6 +187,48 @@ const fixture: LegacyTournamentSource = {
         8,
         "legacy-team-alpha"
       ),
+      events: [
+        legacyEvent(
+          "playoff-make",
+          1,
+          "make",
+          "legacy-team-alpha",
+          "legacy-player-a-former"
+        ),
+        legacyEvent(
+          "playoff-guy",
+          2,
+          "guy",
+          "legacy-team-charlie",
+          "legacy-player-c1"
+        )
+      ],
+      statistics: [
+        matchStatistic("legacy-team-alpha", "legacy-player-a-former", {
+          makes: 1, misses: 0, shootingPercentage: 1
+        }),
+        matchStatistic("legacy-team-charlie", "legacy-player-c1", {
+          makes: 0, misses: 1, guys: 1, shootingPercentage: 0
+        })
+      ],
+      scorecardRows: [
+        scorecardRow(
+          "legacy-scorecard-playoff-make",
+          1,
+          "legacy-team-alpha",
+          "legacy-player-a-former",
+          "playoff-make",
+          { shooter: "Alpha Former", make: true }
+        ),
+        scorecardRow(
+          "legacy-scorecard-playoff-guy",
+          2,
+          "legacy-team-charlie",
+          "legacy-player-c1",
+          "playoff-guy",
+          { shooter: "Charlie One", guy: true }
+        )
+      ],
       updatedAt: "2026-06-21T19:00:00.000Z"
     },
     {
@@ -137,6 +246,9 @@ const fixture: LegacyTournamentSource = {
         isFinal: true,
         availability: "unrecorded"
       },
+      events: [],
+      statistics: [],
+      scorecardRows: [],
       detailAvailability: "unrecorded",
       updatedAt: "2026-06-21T22:00:00.000Z"
     }
@@ -324,5 +436,65 @@ function bracketTeamSlot(
     seed,
     legacyTeamId,
     sourceType: "team" as const
+  };
+}
+
+function legacyEvent(
+  legacyEventId: string,
+  sequence: number,
+  type: "make" | "miss" | "splash-out" | "guy" | "tri" | "di" | "vom",
+  legacyTeamId: string,
+  legacyPlayerId: string
+) {
+  return {
+    legacyEventId,
+    sequence,
+    type,
+    legacyTeamId,
+    legacyPlayerId,
+    attributionMethod: "source_event_player_id" as const,
+    phase: "normal",
+    turnNumber: sequence,
+    teamTurnOrder: sequence % 2 === 0 ? 2 : 1,
+    shotInTeamTurn: 1
+  };
+}
+
+function tournamentStatistic(
+  rank: number,
+  legacyPlayerId: string,
+  metricValues: Record<string, number | null>
+) {
+  return { rank, legacyPlayerId, metricValues };
+}
+
+function matchStatistic(
+  legacyTeamId: string,
+  legacyPlayerId: string,
+  metricValues: Record<string, number | null>
+) {
+  return {
+    subjectType: "player" as const,
+    legacyTeamId,
+    legacyPlayerId,
+    metricValues
+  };
+}
+
+function scorecardRow(
+  legacyScorecardRowId: string,
+  sequence: number,
+  legacyTeamId: string,
+  legacyPlayerId: string,
+  legacyEventId: string,
+  values: Record<string, boolean | number | string | null>
+) {
+  return {
+    legacyScorecardRowId,
+    sequence,
+    legacyTeamId,
+    legacyPlayerId,
+    legacyEventIds: [legacyEventId],
+    values
   };
 }
