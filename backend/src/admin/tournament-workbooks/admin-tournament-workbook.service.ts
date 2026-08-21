@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { HttpStatus, Injectable } from "@nestjs/common";
+import { HttpStatus, Injectable, Optional } from "@nestjs/common";
 
 import { AppError } from "../../errors";
 import {
@@ -17,11 +17,13 @@ import {
   CANONICAL_WORKBOOK_MAGIC,
   CANONICAL_WORKBOOK_SCHEMA_VERSION,
   CanonicalMatchReconciliationScope,
+  CanonicalWorkbookMatchInput,
   CanonicalWorkbookGenerationError,
   CanonicalWorkbookParser,
   CanonicalWorkbookScope,
   canonicalSha256,
   compareWorkbookFormulaSummaries,
+  ConfirmWorkbookImportInput,
   createWorkbookReconciliationPreview,
   deriveWorkbookFormulaScoringImpact,
   digestWorkbookParticipants,
@@ -53,6 +55,7 @@ import {
   EnginePersistenceInvariantError,
   EngineWriterLeaseConflictError
 } from "../../tournament-engine/persistence";
+import { PostgresTournamentProgressionRepository } from "../../tournament-engine/persistence";
 import { AdministratorPrincipal } from "../security";
 import {
   AdminTournamentWorkbookGenerationResponse,
@@ -68,6 +71,7 @@ import {
   parseWorkbookApplyRequest,
   parseWorkbookAssignmentsRequest
 } from "./admin-tournament-workbook.validator";
+import { prepareBracketCorrectionPlan } from "../tournament-progression/admin-bracket-correction.plan";
 
 const XLSX_MIME =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -78,7 +82,9 @@ export class AdminTournamentWorkbookService {
   private readonly parser = new CanonicalWorkbookParser();
 
   constructor(
-    private readonly repository: PostgresWorkbookReconciliationRepository
+    private readonly repository: PostgresWorkbookReconciliationRepository,
+    @Optional()
+    private readonly progression?: PostgresTournamentProgressionRepository
   ) {}
 
   async listGenerations(
@@ -143,11 +149,14 @@ export class AdminTournamentWorkbookService {
           displayName: player.displayName
         }))
       })),
-      matches: source.matches.flatMap((match) => {
-        if (match.stage !== "pod_play" || match.podId === null) {
-          return [];
-        }
-        return [{
+      matches: source.matches.flatMap<CanonicalWorkbookMatchInput>((match) => {
+        if (!includeGeneratedScorecard(match)) return [];
+        const participants = [
+          generationRoster(match.participantTeams[0]),
+          generationRoster(match.participantTeams[1])
+        ] as const;
+        if (match.stage === "pod_play") {
+          return [{
           id: parseStableUuid(match.matchId, "match"),
           podId: parseStableUuid(match.podId, "pod"),
           stage: "pod_play" as const,
@@ -159,10 +168,27 @@ export class AdminTournamentWorkbookService {
             parseStableUuid(match.participantTeamIds[0], "tournament_team"),
             parseStableUuid(match.participantTeamIds[1], "tournament_team")
           ] as const,
-          participantRosters: [
-            generationRoster(match.participantTeams[0]),
-            generationRoster(match.participantTeams[1])
-          ]
+          participantRosters: participants,
+          ...(match.activeScorecardSource === null
+            ? {}
+            : { scorecardSource: match.activeScorecardSource })
+          }];
+        }
+        return [{
+          id: parseStableUuid(match.matchId, "match"),
+          bracketMatchId: parseStableUuid(match.bracketMatchId, "bracket_match"),
+          stage: "playoffs" as const,
+          sequence: match.sequence,
+          roundNumber: match.roundNumber,
+          sequenceInRound: match.sequenceInRound,
+          participantTeamIds: [
+            parseStableUuid(match.participantTeamIds[0], "tournament_team"),
+            parseStableUuid(match.participantTeamIds[1], "tournament_team")
+          ] as const,
+          participantRosters: participants,
+          ...(match.activeScorecardSource === null
+            ? {}
+            : { scorecardSource: match.activeScorecardSource })
         }];
       })
       });
@@ -176,7 +202,9 @@ export class AdminTournamentWorkbookService {
         tournamentId,
         generationRevision: source.nextGenerationRevision,
         workbookSchemaVersion: CANONICAL_WORKBOOK_SCHEMA_VERSION,
-        generationKind: "setup",
+        generationKind: source.matches.some((match) => match.stage === "playoffs")
+          ? "playoffs_cumulative"
+          : "setup",
         sourceTournamentRowVersion: source.tournament.rowVersion,
         sourceDigest,
         artifact: generated.buffer,
@@ -291,7 +319,10 @@ export class AdminTournamentWorkbookService {
     let preview;
     try {
       parsed = await this.parser.parse({ buffer: file.buffer, scope });
-      preview = createWorkbookReconciliationPreview({ parsed, scope });
+      preview = enforcePodCorrectionPolicy(
+        createWorkbookReconciliationPreview({ parsed, scope }),
+        source
+      );
     } catch (error) {
       throw mapWorkbookError(error);
     }
@@ -313,7 +344,7 @@ export class AdminTournamentWorkbookService {
     }).catch((error) => {
       throw mapWorkbookError(error);
     });
-    return mapPreview(stored, source);
+    return this.mapPreviewWithProgression(stored, source);
   }
 
   async findPreview(
@@ -323,7 +354,7 @@ export class AdminTournamentWorkbookService {
     const tournamentId = tournamentIdValueOf(tournamentIdValue);
     const batch = await this.requirePreview(tournamentId, batchIdValue);
     const source = await this.requireSource(tournamentId);
-    return mapPreview(batch, source);
+    return this.mapPreviewWithProgression(batch, source);
   }
 
   async assign(
@@ -344,11 +375,10 @@ export class AdminTournamentWorkbookService {
     const scope = reconciliationScope(source, artifact);
     const parsed = reconstructParsedWorkbook(prior, artifact, source);
     const assignments = resolveAssignments(prior, parsedRequest.assignments);
-    const preview = createWorkbookReconciliationPreview({
-      parsed,
-      scope,
-      assignments
-    });
+    const preview = enforcePodCorrectionPolicy(
+      createWorkbookReconciliationPreview({ parsed, scope, assignments }),
+      source
+    );
     const stored = await this.repository.reviseImportPreview({
       batchId: randomUUID(),
       tournamentId,
@@ -367,7 +397,7 @@ export class AdminTournamentWorkbookService {
     }).catch((error) => {
       throw mapWorkbookError(error);
     });
-    return mapPreview(stored, source);
+    return this.mapPreviewWithProgression(stored, source);
   }
 
   async apply(
@@ -397,6 +427,12 @@ export class AdminTournamentWorkbookService {
           "WORKBOOK_SELECTION_INCOMPLETE"
         );
       }
+      const playoffCorrectionCascades = await this.preparePlayoffCascades(
+        source,
+        batch,
+        plan,
+        parsed.cascadeConfirmationDigests
+      );
       const result = await this.repository.confirmImport({
         tournamentId,
         batchId: batch.batchId,
@@ -405,6 +441,9 @@ export class AdminTournamentWorkbookService {
         acceptedObservationIds: parsed.acceptedObservationIds,
         skippedObservationIds: parsed.skippedObservationIds,
         correctionReasons: parsed.correctionReasons,
+        ...(Object.keys(playoffCorrectionCascades).length === 0
+          ? {}
+          : { playoffCorrectionCascades }),
         confirmedByAdminId: principal.administratorId,
         audit: { eventId: randomUUID() }
       });
@@ -417,6 +456,7 @@ export class AdminTournamentWorkbookService {
         unchangedCount: result.unchangedMatchIds.length,
         missingNonDestructiveCount: result.missingMatchIds.length,
         materializedRevisions: result.materializedRevisions,
+        replacementMatchIds: result.replacementMatchIds,
         tournamentStatisticRunId: result.tournamentStatisticRunId,
         tournamentStatisticRunDigest: result.tournamentStatisticRunDigest,
         appliedAt: result.completedAt
@@ -424,6 +464,201 @@ export class AdminTournamentWorkbookService {
     } catch (error) {
       throw mapWorkbookError(error);
     }
+  }
+
+  private async preparePlayoffCascades(
+    source: WorkbookGenerationSourceRecord,
+    batch: WorkbookImportPreviewRecord,
+    plan: ReturnType<typeof planWorkbookImportApply>,
+    suppliedDigests: Readonly<Record<string, string>>
+  ): Promise<NonNullable<ConfirmWorkbookImportInput["playoffCorrectionCascades"]>> {
+    const selectedIds = new Set(plan.selected.map((item) => item.observationId));
+    for (const observationId of Object.keys(suppliedDigests)) {
+      if (!selectedIds.has(observationId)) {
+        throw validation(
+          "A playoff cascade confirmation was supplied for an unselected scorecard.",
+          "WORKBOOK_CASCADE_CONFIRMATION_UNEXPECTED"
+        );
+      }
+    }
+    const playoffCorrections = plan.selected.flatMap((selected) => {
+      const observation = batch.observations.find((item) =>
+        item.observationId === selected.observationId
+      );
+      const match = source.matches.find((item) =>
+        item.matchId === selected.candidate.matchId
+      );
+      return observation?.candidate?.reason === "correction" &&
+        match?.stage === "playoffs"
+        ? [{ selected, candidate: observation.candidate, match }]
+        : [];
+    });
+    if (playoffCorrections.length === 0) {
+      if (Object.keys(suppliedDigests).length > 0) {
+        throw validation(
+          "A playoff cascade confirmation was supplied without a playoff correction.",
+          "WORKBOOK_CASCADE_CONFIRMATION_UNEXPECTED"
+        );
+      }
+      return {};
+    }
+    if (this.progression === undefined) {
+      throw conflict(
+        "Playoff correction impact is unavailable.",
+        "PLAYOFF_CORRECTION_IMPACT_UNAVAILABLE"
+      );
+    }
+    const progression = await this.progression.readProgression(
+      source.tournament.tournamentId
+    );
+    if (progression === null) {
+      throw conflict(
+        "Playoff correction impact is unavailable.",
+        "PLAYOFF_CORRECTION_IMPACT_UNAVAILABLE"
+      );
+    }
+    const cascades: Record<string, NonNullable<
+      ConfirmWorkbookImportInput["playoffCorrectionCascades"]
+    >[string]> = {};
+    const requiredDigests = new Set<string>();
+    for (const { selected, candidate } of playoffCorrections) {
+      const scoring = previewWorkbookCandidate(candidate);
+      if (scoring.status !== "final" || scoring.winnerTeamId === undefined) {
+        if (suppliedDigests[selected.observationId] !== undefined) {
+          throw validation(
+            "A playoff cascade confirmation was supplied for a non-final result.",
+            "WORKBOOK_CASCADE_CONFIRMATION_UNEXPECTED"
+          );
+        }
+        continue;
+      }
+      const prepared = prepareBracketCorrectionPlan({
+        progression,
+        source,
+        correctedMatchId: parseStableUuid(selected.candidate.matchId, "match"),
+        correctedWinnerTeamId: scoring.winnerTeamId,
+        reason: selected.correctionReason ?? "Workbook playoff correction"
+      });
+      if (!prepared.impact.requiresConfirmation) {
+        if (suppliedDigests[selected.observationId] !== undefined) {
+          throw validation(
+            "A playoff cascade confirmation was supplied when no cascade is required.",
+            "WORKBOOK_CASCADE_CONFIRMATION_UNEXPECTED"
+          );
+        }
+        continue;
+      }
+      requiredDigests.add(selected.observationId);
+      if (suppliedDigests[selected.observationId] !==
+          prepared.impact.confirmationDigest) {
+        throw conflict(
+          "The playoff cascade confirmation is stale.",
+          "PLAYOFF_CASCADE_CONFIRMATION_MISMATCH"
+        );
+      }
+      cascades[selected.observationId] = {
+        previousResolutionId: prepared.previousResolutionId,
+        correctedResolutionId: createUuidV5(
+          selected.candidate.matchId,
+          `workbook-cascade-resolution|${plan.confirmationDigest}|${prepared.impact.confirmationDigest}`
+        ),
+        correctedAdvancementId: createUuidV5(
+          selected.candidate.matchId,
+          `workbook-cascade-advancement|${plan.confirmationDigest}|${prepared.impact.confirmationDigest}`
+        ),
+        correctedBracketMatchId: prepared.impact.correctedBracketMatchId,
+        correctedWinnerTeamId: scoring.winnerTeamId,
+        confirmationDigest: prepared.impact.confirmationDigest,
+        replacements: prepared.replacements
+      };
+    }
+    for (const observationId of Object.keys(suppliedDigests)) {
+      if (!requiredDigests.has(observationId)) {
+        throw validation(
+          "A playoff cascade confirmation was supplied when no cascade is required.",
+          "WORKBOOK_CASCADE_CONFIRMATION_UNEXPECTED"
+        );
+      }
+    }
+    return cascades;
+  }
+
+  private async mapPreviewWithProgression(
+    batch: WorkbookImportPreviewRecord,
+    source: WorkbookGenerationSourceRecord
+  ): Promise<AdminTournamentWorkbookImportPreviewResponse> {
+    const response = mapPreview(batch, source);
+    if (this.progression === undefined || !batch.observations.some((observation) => {
+      const match = observation.matchId === null
+        ? undefined
+        : source.matches.find((item) => item.matchId === observation.matchId);
+      return observation.candidate?.reason === "correction" &&
+        match?.stage === "playoffs";
+    })) {
+      return response;
+    }
+    const progression = await this.progression.readProgression(
+      source.tournament.tournamentId
+    );
+    if (progression === null) return response;
+    const observations = response.observations.map((observation) => {
+      if (!observation.correction || observation.matchId === null ||
+          observation.proposedImpact?.winnerTeamId === null ||
+          observation.proposedImpact?.winnerTeamId === undefined) {
+        return observation;
+      }
+      const match = source.matches.find((item) =>
+        item.matchId === observation.matchId
+      );
+      if (match?.stage !== "playoffs") return observation;
+      try {
+        const prepared = prepareBracketCorrectionPlan({
+          progression,
+          source,
+          correctedMatchId: parseStableUuid(observation.matchId, "match"),
+          correctedWinnerTeamId: parseStableUuid(
+            observation.proposedImpact.winnerTeamId,
+            "tournament_team"
+          ),
+          reason: "Workbook correction preview"
+        });
+        return {
+          ...observation,
+          playoffCorrectionImpact: {
+            confirmationDigest: prepared.impact.confirmationDigest,
+            requiresCascade: prepared.impact.requiresConfirmation,
+            actionCount: prepared.impact.actions.length,
+            replacementCount: prepared.replacements.length,
+            actions: prepared.impact.actions.map((action) => ({
+              bracketMatchId: action.bracketMatchId,
+              action: action.action,
+              previousMatchId: action.preservedMatchId,
+              replacementMatchId: action.replacement?.matchId ?? null
+            }))
+          }
+        };
+      } catch {
+        return {
+          ...observation,
+          issues: [...observation.issues, {
+            code: "PLAYOFF_CORRECTION_IMPACT_UNAVAILABLE",
+            severity: "error" as const,
+            message: "The downstream playoff correction impact could not be prepared.",
+            observationId: observation.id
+          }]
+        };
+      }
+    });
+    const impactUnavailable = observations.some((observation) =>
+      observation.issues.some((issue) =>
+        issue.code === "PLAYOFF_CORRECTION_IMPACT_UNAVAILABLE"
+      )
+    );
+    return {
+      ...response,
+      ...(impactUnavailable ? { status: "preview_rejected" as const } : {}),
+      observations
+    };
   }
 
   private async requireSource(
@@ -554,6 +789,14 @@ function reconciliationMatches(
       ...(match.podId === null
         ? {}
         : { podId: parseStableUuid(match.podId, "pod") }),
+      ...(match.bracketMatchId === null
+        ? {}
+        : {
+            bracketMatchId: parseStableUuid(
+              match.bracketMatchId,
+              "bracket_match"
+            )
+          }),
       teamIds: [
         parseStableUuid(match.participantTeamIds[0], "tournament_team"),
         parseStableUuid(match.participantTeamIds[1], "tournament_team")
@@ -605,6 +848,14 @@ function trustedManifest(
       ...(match.podId === null
         ? {}
         : { podId: parseStableUuid(match.podId, "pod") }),
+      ...(match.bracketMatchId === null
+        ? {}
+        : {
+            bracketMatchId: parseStableUuid(
+              match.bracketMatchId,
+              "bracket_match"
+            )
+          }),
       teamIds: [
         parseStableUuid(sheet.participantTeamIds[0], "tournament_team"),
         parseStableUuid(sheet.participantTeamIds[1], "tournament_team")
@@ -653,6 +904,57 @@ function generationRoster(
       rosterSlot: player.rosterSlot,
       displayName: player.displayName
     }))
+  };
+}
+
+function includeGeneratedScorecard(
+  match: WorkbookGenerationSourceRecord["matches"][number]
+): boolean {
+  return match.activeScorecardSource !== null ||
+    (match.status === "scheduled" && match.workbookState === null);
+}
+
+function enforcePodCorrectionPolicy(
+  preview: WorkbookReconciliationPreview,
+  source: WorkbookGenerationSourceRecord
+): WorkbookReconciliationPreview {
+  if (source.tournament.lifecycle !== "playoffs" &&
+      source.tournament.lifecycle !== "completed") {
+    return preview;
+  }
+  let blocked = false;
+  const observations = preview.observations.map((observation) => {
+    const match = observation.matchId === undefined
+      ? undefined
+      : source.matches.find((item) => item.matchId === observation.matchId);
+    if (observation.candidate?.reason !== "correction" ||
+        match?.stage !== "pod_play") {
+      return observation;
+    }
+    blocked = true;
+    const { candidate: _candidate, ...withoutCandidate } = observation;
+    return {
+      ...withoutCandidate,
+      decision: "invalid" as const,
+      issues: [...observation.issues, {
+        code: "POD_CORRECTION_AFTER_BRACKET_REQUIRES_ROLLBACK",
+        severity: "error" as const,
+        message: "A published bracket must be rolled back explicitly before correcting finalized pod play."
+      }]
+    };
+  });
+  if (!blocked) return preview;
+  return {
+    ...preview,
+    observations,
+    previewDigest: canonicalSha256({
+      contract: "canonical-workbook-preview-v1",
+      checksum: preview.checksum,
+      tournamentId: preview.tournamentId,
+      generation: preview.generation,
+      observations
+    }),
+    applicable: false
   };
 }
 
@@ -1050,6 +1352,7 @@ function mapPreview(
         currentImpact: match?.activeScoringPreview ?? null,
         proposedImpact,
         correction: observation.candidate?.reason === "correction",
+        playoffCorrectionImpact: null,
         issues: observation.validationIssues.map((issue) => ({
           ...issue,
           observationId: observation.observationId
