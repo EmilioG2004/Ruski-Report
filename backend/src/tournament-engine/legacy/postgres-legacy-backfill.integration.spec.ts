@@ -427,6 +427,120 @@ postgresDescribe("PostgreSQL 2026 legacy backfill rehearsal", () => {
     }]);
   });
 
+  it("records stale tournament summaries while keeping event-derived statistics", async () => {
+    const source = syntheticPopulatedLegacySource();
+    const staleRow = source.tournamentStatistics[0]?.rows[0];
+    if (staleRow === undefined) {
+      throw new Error("Synthetic tournament statistic fixture is missing.");
+    }
+    staleRow.metricValues.makes = 99;
+    await seedLegacySource(database, source);
+
+    const result = await runLegacy2026Backfill({
+      database,
+      legacyTournamentId: source.legacyTournamentId
+    });
+
+    expect(result).toMatchObject({ status: "applied", issues: [] });
+    const checkpoint = await database.query<{
+      policy: string;
+      mismatch_count: string;
+      mismatch_digest: string;
+    }>(
+      `
+        SELECT
+          metadata #>> '{tournamentStatisticCorrections,policy}' AS policy,
+          metadata #>> '{tournamentStatisticCorrections,mismatchCount}'
+            AS mismatch_count,
+          metadata #>> '{tournamentStatisticCorrections,mismatchDigest}'
+            AS mismatch_digest
+        FROM engine_legacy_backfill_runs
+        WHERE legacy_tournament_id = $1 AND status = 'completed'
+      `,
+      [source.legacyTournamentId]
+    );
+    expect(checkpoint.rows).toEqual([{
+      policy: "canonical_match_events_v1",
+      mismatch_count: "1",
+      mismatch_digest: expect.stringMatching(/^[a-f0-9]{64}$/)
+    }]);
+
+    const projection = await database.query<{
+      detail: CanonicalPublicTournament;
+    }>(
+      `
+        SELECT payload.tournament_detail AS detail
+        FROM engine_public_tournament_projection_payloads payload
+        JOIN engine_active_projection_versions active
+          ON active.tournament_id = payload.tournament_id
+         AND active.projection_version = payload.projection_version
+      `
+    );
+    expect(statisticValue(
+      projection.rows[0]?.detail.statistics ?? [],
+      null,
+      "legacy-player-a1",
+      "makes"
+    )).toBe(1);
+  });
+
+  it("normalizes legacy player rows and playoff sides without weakening parity", async () => {
+    const source = syntheticPopulatedLegacySource();
+    const podMatch = source.matches.find((match) =>
+      match.legacyMatchId === "legacy-match-pod-a"
+    );
+    const proxyPlayerRow = podMatch?.statistics.find((statistic) =>
+      statistic.legacyPlayerId === "legacy-player-a1"
+    );
+    const playoffMatch = source.matches.find((match) =>
+      match.legacyMatchId === "legacy-match-playoff-scored"
+    );
+    if (proxyPlayerRow === undefined || playoffMatch === undefined) {
+      throw new Error("Synthetic legacy normalization fixture is incomplete.");
+    }
+    proxyPlayerRow.subjectType = "team";
+    delete proxyPlayerRow.legacyPlayerId;
+    proxyPlayerRow.metricValues.voms = 0;
+    playoffMatch.participants.reverse();
+    await seedLegacySource(database, source);
+
+    const result = await runLegacy2026Backfill({
+      database,
+      legacyTournamentId: source.legacyTournamentId
+    });
+
+    expect(result).toMatchObject({ status: "applied", issues: [] });
+    const projection = await database.query<{
+      match_public_key: string;
+      detail_payload: CanonicalPublicMatch;
+    }>(
+      `
+        SELECT match_public_key, detail_payload
+        FROM engine_public_match_projection_payloads
+        ORDER BY match_public_key
+      `
+    );
+    const matches = new Map(projection.rows.map((row) => [
+      row.match_public_key,
+      row.detail_payload
+    ]));
+    expect(boxScoreValue(
+      matches.get("legacy-match-pod-a"),
+      "legacy-player-a1",
+      "makes"
+    )).toBe(1);
+    expect(matches.get("legacy-match-playoff-scored")?.participants.map(
+      (participant) => ({
+        side: participant.side,
+        teamId: participant.team.id,
+        seed: participant.seed
+      })
+    )).toEqual([
+      { side: 1, teamId: "legacy-team-charlie", seed: 2 },
+      { side: 2, teamId: "legacy-team-alpha", seed: 1 }
+    ]);
+  });
+
   it("rolls back every canonical artifact when equivalence fails", async () => {
     const source = syntheticPopulatedLegacySource();
     source.matches[0]?.statistics.push({

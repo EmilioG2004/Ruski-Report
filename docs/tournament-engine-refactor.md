@@ -625,6 +625,11 @@ names captured in a previous tournament navigation route.
 - Preserve the current full-workbook endpoint as an explicitly legacy import
   path during rollout.
 - Compare migrated public projections with the qualified production response.
+- For the migrated 2026 v2 projection, canonical match events are authoritative
+  for derived tournament statistics. Qualified differences from stale legacy
+  cached tournament summaries must be recorded as a bounded correction count
+  and deterministic digest in the backfill checkpoint; v1 responses remain
+  unchanged.
 - Rehearse rollback through the documented backup/restore process before any
   production migration.
 

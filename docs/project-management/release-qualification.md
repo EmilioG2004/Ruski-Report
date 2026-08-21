@@ -70,8 +70,12 @@ On the restored copy:
 2. Apply the backfill once. It must commit canonical rows and one coherent
    public projection atomically. Apply it a second time; it must be a no-op.
 3. Require semantic v1/v2 equivalence for tournament identity, roster history,
-   match identities and results, standings/statistics, seeds, bracket
-   progression, and public projection pointers. Counts alone are insufficient.
+   match identities and results, match statistics, standings, seeds, bracket
+   progression, and public projection pointers. For migrated 2026 tournament
+   aggregates only, canonical match events are authoritative over stale legacy
+   cached summaries; record the bounded correction count and deterministic
+   digest in release evidence. Counts alone are insufficient, and v1 remains
+   unchanged.
 4. Exercise failure injection before commit, during backfill apply, during
    projection materialization, and before active-pointer change. Each failure
    must retain the previous readable state and permit a clean retry.
