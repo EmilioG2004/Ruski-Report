@@ -9,12 +9,16 @@ import {
   WorkbookImportPreviewRecord,
   WorkbookRevisionCandidateInput
 } from "../../tournament-engine/workbook";
+import { PostgresTournamentProgressionRepository } from "../../tournament-engine/persistence";
 import { AdministratorPrincipal } from "../security";
+import * as bracketCorrectionPlan from "../tournament-progression/admin-bracket-correction.plan";
 import { AdminTournamentWorkbookService } from "./admin-tournament-workbook.service";
 
 const TOURNAMENT_ID = stable(1, "tournament");
 
 describe("AdminTournamentWorkbookService", () => {
+  afterEach(() => jest.restoreAllMocks());
+
   it("generates and stores an exact canonical artifact from published state", async () => {
     const source = generationSource();
     let storedInput: StoreGeneratedWorkbookInput | undefined;
@@ -99,6 +103,60 @@ describe("AdminTournamentWorkbookService", () => {
     expect(repository.createImportPreview).not.toHaveBeenCalled();
   });
 
+  it.each(["forfeited", "cancelled"] as const)(
+    "omits a non-scorecard %s result without rewriting it as scheduled",
+    async (status) => {
+      const source = generationSource();
+      const repository = {
+        readGenerationSource: jest.fn().mockResolvedValue({
+          ...source,
+          matches: source.matches.map((match) => ({
+            ...match,
+            status,
+            scoreAvailability: "not_applicable" as const
+          }))
+        }),
+        storeGeneratedWorkbook: jest.fn().mockImplementation(
+          (input: StoreGeneratedWorkbookInput) => Promise.resolve({
+            created: true,
+            workbook: {
+              workbookId: input.workbookId,
+              tournamentId: input.tournamentId,
+              generationRevision: input.generationRevision,
+              workbookSchemaVersion: input.workbookSchemaVersion,
+              generationKind: input.generationKind,
+              sourceTournamentRowVersion: input.sourceTournamentRowVersion,
+              sourceDigest: input.sourceDigest,
+              artifactDigest: input.artifactDigest,
+              artifactSizeBytes: input.artifact.byteLength,
+              artifact: input.artifact,
+              filename: input.filename,
+              generatedByAdminId: input.generatedByAdminId,
+              generatedAt: input.generatedAt,
+              sheets: []
+            }
+          })
+        )
+      } as unknown as PostgresWorkbookReconciliationRepository;
+      const service = new AdminTournamentWorkbookService(repository);
+
+      await service.generate(
+        TOURNAMENT_ID,
+        { expectedTournamentRowVersion: 2 },
+        PRINCIPAL
+      );
+
+      expect(repository.storeGeneratedWorkbook).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sheets: [
+            expect.objectContaining({ sheetKind: "control" }),
+            expect.objectContaining({ sheetKind: "blank" })
+          ]
+        })
+      );
+    }
+  );
+
   it("maps a stored unsupported generation source to a stable validation error", async () => {
     const source = generationSource();
     const repository = {
@@ -164,6 +222,7 @@ describe("AdminTournamentWorkbookService", () => {
         matchStatisticRunId: stable(604, "match_revision"),
         matchRowVersion: 2
       }],
+      replacementMatchIds: [],
       tournamentStatisticRunId: stable(605, "match_revision"),
       tournamentStatisticRunDigest: "9".repeat(64),
       completedAt: "2026-08-20T13:00:00.000Z"
@@ -200,6 +259,151 @@ describe("AdminTournamentWorkbookService", () => {
       }],
       tournamentStatisticRunDigest: "9".repeat(64)
     });
+  });
+
+  it("requires and forwards a confirmed started-playoff cascade atomically", async () => {
+    const base = generationSource();
+    const podMatch = base.matches[0];
+    if (podMatch === undefined) throw new Error("Expected sanitized match.");
+    const source = {
+      ...base,
+      tournament: { ...base.tournament, lifecycle: "playoffs" as const },
+      matches: [{
+        ...podMatch,
+        stage: "playoffs" as const,
+        podId: null,
+        bracketMatchId: stable(610, "bracket_match"),
+        sequenceInPod: null,
+        gameNumberForPair: null,
+        sequenceInRound: 1
+      }]
+    } satisfies WorkbookGenerationSourceRecord;
+    const candidate = revisionCandidate(source, 3, 1, "correction");
+    const batch = previewRecord(source, candidate);
+    const cascadeDigest = "a".repeat(64);
+    const previousResolutionId = stable(611, "match_revision");
+    const correctedBracketMatchId = source.matches[0].bracketMatchId;
+    const replacementMatchId = stable(612, "match");
+    jest.spyOn(bracketCorrectionPlan, "prepareBracketCorrectionPlan")
+      .mockReturnValue({
+        previousResolutionId,
+        impact: {
+          correctedBracketMatchId,
+          confirmationDigest: cascadeDigest,
+          requiresConfirmation: true,
+          actions: [{ action: "replace_started_match" }]
+        },
+        replacements: [{
+          replacementId: stable(613, "match_revision"),
+          bracketMatchId: stable(614, "bracket_match"),
+          previousMatchId: stable(615, "match"),
+          reason: "Corrected playoff winner",
+          createWhenPlayable: true,
+          pendingMatch: {
+            id: replacementMatchId,
+            publicKey: `playoff-match-${replacementMatchId}`,
+            sequence: 3,
+            metadata: { instanceNumber: 2 }
+          }
+        }]
+      } as never);
+    const confirmImport = jest.fn().mockResolvedValue({
+      batchId: batch.batchId,
+      tournamentId: TOURNAMENT_ID,
+      status: "applied",
+      appliedMatchIds: [candidate.matchId],
+      skippedMatchIds: [],
+      unchangedMatchIds: [],
+      missingMatchIds: [],
+      materializedRevisions: [],
+      replacementMatchIds: [replacementMatchId],
+      tournamentStatisticRunId: null,
+      tournamentStatisticRunDigest: null,
+      completedAt: "2026-08-20T13:00:00.000Z"
+    });
+    const repository = {
+      findImportPreview: jest.fn().mockResolvedValue(batch),
+      readGenerationSource: jest.fn().mockResolvedValue(source),
+      confirmImport
+    } as unknown as PostgresWorkbookReconciliationRepository;
+    const progression = {
+      readProgression: jest.fn().mockResolvedValue({ tournamentId: TOURNAMENT_ID })
+    } as unknown as PostgresTournamentProgressionRepository;
+    const service = new AdminTournamentWorkbookService(repository, progression);
+
+    const response = await service.apply(
+      TOURNAMENT_ID,
+      batch.batchId,
+      {
+        previewDigest: batch.previewDigest,
+        acceptedObservationIds: [batch.observations[0]?.observationId],
+        skippedObservationIds: [],
+        correctionReasons: {
+          [batch.observations[0]?.observationId ?? ""]: "Corrected playoff winner"
+        },
+        cascadeConfirmationDigests: {
+          [batch.observations[0]?.observationId ?? ""]: cascadeDigest
+        }
+      },
+      PRINCIPAL
+    );
+
+    expect(confirmImport).toHaveBeenCalledWith(expect.objectContaining({
+      playoffCorrectionCascades: {
+        [batch.observations[0]?.observationId ?? ""]: expect.objectContaining({
+          previousResolutionId,
+          correctedBracketMatchId,
+          correctedWinnerTeamId: source.matches[0].participantTeamIds[0],
+          confirmationDigest: cascadeDigest
+        })
+      }
+    }));
+    expect(response.replacementMatchIds).toEqual([replacementMatchId]);
+  });
+
+  it("rejects a preview when playoff correction impact cannot be prepared", async () => {
+    const base = generationSource();
+    const podMatch = base.matches[0];
+    if (podMatch === undefined) throw new Error("Expected sanitized match.");
+    const source = {
+      ...base,
+      tournament: { ...base.tournament, lifecycle: "playoffs" as const },
+      matches: [{
+        ...podMatch,
+        stage: "playoffs" as const,
+        podId: null,
+        bracketMatchId: stable(620, "bracket_match"),
+        sequenceInPod: null,
+        gameNumberForPair: null,
+        sequenceInRound: 1
+      }]
+    } satisfies WorkbookGenerationSourceRecord;
+    const candidate = revisionCandidate(source, 4, 1, "correction");
+    const batch = previewRecord(source, candidate);
+    jest.spyOn(bracketCorrectionPlan, "prepareBracketCorrectionPlan")
+      .mockImplementation(() => {
+        throw new Error("sanitized unavailable plan");
+      });
+    const repository = {
+      findImportPreview: jest.fn().mockResolvedValue(batch),
+      readGenerationSource: jest.fn().mockResolvedValue(source)
+    } as unknown as PostgresWorkbookReconciliationRepository;
+    const progression = {
+      readProgression: jest.fn().mockResolvedValue({ tournamentId: TOURNAMENT_ID })
+    } as unknown as PostgresTournamentProgressionRepository;
+
+    const response = await new AdminTournamentWorkbookService(
+      repository,
+      progression
+    ).findPreview(TOURNAMENT_ID, batch.batchId);
+
+    expect(response.status).toBe("preview_rejected");
+    expect(response.observations[0]?.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: "PLAYOFF_CORRECTION_IMPACT_UNAVAILABLE",
+        severity: "error"
+      })
+    ]));
   });
 });
 
@@ -244,6 +448,7 @@ function generationSource(): WorkbookGenerationSourceRecord {
       matchId: stable(20, "match"),
       stage: "pod_play",
       podId,
+      bracketMatchId: null,
       sequence: 1,
       rowVersion: 1,
       status: "scheduled",
@@ -266,7 +471,9 @@ function generationSource(): WorkbookGenerationSourceRecord {
       sequenceInPod: 1,
       roundNumber: 1,
       gameNumberForPair: 1,
+      sequenceInRound: null,
       activeScoringPreview: null,
+      activeScorecardSource: null,
       workbookState: null
     }]
   };
@@ -275,7 +482,8 @@ function generationSource(): WorkbookGenerationSourceRecord {
 function revisionCandidate(
   source: WorkbookGenerationSourceRecord,
   suffix: number,
-  envelopeSchemaVersion: 1 | 2 = 1
+  envelopeSchemaVersion: 1 | 2 = 1,
+  reason: WorkbookRevisionCandidateInput["reason"] = "initial"
 ): WorkbookRevisionCandidateInput {
   const match = source.matches[0];
   if (match === undefined) {
@@ -339,7 +547,7 @@ function revisionCandidate(
     fingerprint: "f".repeat(64),
     proposedStatus: "final",
     proposedScoreAvailability: "complete",
-    reason: "initial",
+    reason,
     participantDigest,
     participants,
     rows,
@@ -360,8 +568,8 @@ function revisionCandidate(
     fingerprint: "f".repeat(64),
     proposedStatus: "final",
     proposedScoreAvailability: "complete",
-    reason: "initial",
-    requiresConfirmation: false,
+    reason,
+    requiresConfirmation: reason === "correction",
     expectedMatchRowVersion: match.rowVersion,
     expectedSourceStateVersion: 0,
     envelopeSchemaVersion,
