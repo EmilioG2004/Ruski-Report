@@ -25,6 +25,8 @@ struct HomeStateContentView: View {
                     openTournament: openTournament,
                     openMatch: openMatch
                 )
+            case .canonicalLoaded(let screen):
+                PublicHomeScoreFeedView(screen: screen)
             case .failed(let message):
                 failureView(message)
             }
