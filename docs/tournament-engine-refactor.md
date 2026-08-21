@@ -88,6 +88,10 @@ identity, and score-availability guarantees.
 - Missing workbook sheets do not delete imported matches.
 - Corrections create audited revisions. Final and playoff corrections require
   preview and confirmation, and dependent playoff results are protected.
+- V1 prohibits correcting a finalized pod result after bracket publication.
+  A future audited rollback workflow may invalidate and replace affected pod
+  finalization, seeding, bracket, and match-progression artifacts without
+  rewriting their history.
 - A forfeit contributes one win or loss, zero cup differential, and no shooting
   percentage denominator.
 - A postponed matchup remains required. A cancelled matchup is permanently
@@ -427,6 +431,9 @@ Score availability is separate:
 - Final-result changes require an administrator preview and confirmation.
 - An upstream playoff winner cannot change after a dependent match begins
   without an explicit cascade/rollback preview and confirmation.
+- In v1, a finalized pod result cannot be corrected after bracket publication.
+  A future rollback/reseed/rebracket workflow must preserve the prior artifacts
+  and require an explicit impact preview before such a correction is accepted.
 - Public projections activate only after every affected derived record is
   consistent.
 
