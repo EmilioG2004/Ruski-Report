@@ -184,13 +184,22 @@ Swift access control: default to `private`; use `internal` only across files; us
 
 Initial screens:
 
-- Home: official tournament card, featured/live matches.
-- Tournament Detail: tabs for Pods, Bracket, Matches, Stats.
+- Home: score-first active tournament feed with compact scheduled, live, and
+  final game cards.
+- Tournament Detail: horizontally extensible navigation for Games, Overview,
+  Pods, Bracket, and Stats.
 - Pod Standings: generic standings view driven by tournament data.
 - Bracket View: generic bracket display.
-- Match Detail: game-aware score header, box score, scorecard, shot/event log, comments.
+- Match Detail: persistent game-aware score header with selectable Overview,
+  Plays, Scorecard, and Chat panels. New feature panels must be independently
+  composable rather than appended to one permanent vertical stack.
 - Account/Guest State: lightweight guest/account distinction.
 - Blocked Users: authenticated safety settings with explicit unblock actions.
+
+Shared score cards, feature selectors, surfaces, identity marks, and metric
+tiles use semantic theme values and accept generic tournament/match data. The
+visual system is documented in `docs/ios-ui-design.md` and is designed to add
+future game data and social features without rewriting the navigation shell.
 
 Scorecard UI must be metadata-driven:
 
@@ -211,7 +220,7 @@ Backend config:
 
 iOS config:
 
-- `AppConfig.plist` or bundled JSON for API base URL, realtime endpoint, feature flags, and refresh fallback interval.
+- A processed Info.plist setting for the build-specific API base URL, with bundled JSON reserved for public policy links and future non-secret feature flags.
 
 No tournament data is manually translated into JSON. Tournament snapshots are generated only by backend ingestion.
 

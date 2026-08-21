@@ -175,6 +175,8 @@ nonisolated extension PreviewData {
                 ScorecardRow(
                     id: "scorecard-row-1",
                     sequence: 1,
+                    teamId: "team-1",
+                    playerId: "player-alex",
                     values: [
                         "shotNumber": "1",
                         "shooter": "Alex",
@@ -185,28 +187,19 @@ nonisolated extension PreviewData {
                         "tri": "false",
                         "di": "true",
                         "vom": "false"
-                    ]
+                    ],
+                    eventIds: ["event-2026-001"],
+                    turnNumber: 1,
+                    teamTurnOrder: 1,
+                    shotInTeamTurn: 1
                 ),
                 ScorecardRow(
                     id: "scorecard-row-2",
                     sequence: 2,
+                    teamId: "team-1",
+                    playerId: "player-sam",
                     values: [
-                        "shotNumber": "2",
-                        "shooter": "Jordan",
-                        "miss": "false",
-                        "make": "false",
-                        "splashOut": "false",
-                        "guy": "true",
-                        "tri": "false",
-                        "di": "false",
-                        "vom": "false"
-                    ]
-                ),
-                ScorecardRow(
-                    id: "scorecard-row-3",
-                    sequence: 3,
-                    values: [
-                        "shotNumber": "3",
+                        "shotNumber": "1",
                         "shooter": "Sam",
                         "miss": "false",
                         "make": "true",
@@ -215,7 +208,53 @@ nonisolated extension PreviewData {
                         "tri": "false",
                         "di": "false",
                         "vom": "false"
-                    ]
+                    ],
+                    eventIds: ["event-2026-002"],
+                    turnNumber: 1,
+                    teamTurnOrder: 1,
+                    shotInTeamTurn: 2
+                ),
+                ScorecardRow(
+                    id: "scorecard-row-3",
+                    sequence: 3,
+                    teamId: "team-2",
+                    playerId: "player-jordan",
+                    values: [
+                        "shotNumber": "1",
+                        "shooter": "Jordan",
+                        "miss": "false",
+                        "make": "false",
+                        "splashOut": "false",
+                        "guy": "true",
+                        "tri": "false",
+                        "di": "false",
+                        "vom": "false"
+                    ],
+                    eventIds: ["event-2026-003"],
+                    turnNumber: 1,
+                    teamTurnOrder: 2,
+                    shotInTeamTurn: 1
+                ),
+                ScorecardRow(
+                    id: "scorecard-row-4",
+                    sequence: 4,
+                    teamId: "team-2",
+                    playerId: "player-casey",
+                    values: [
+                        "shotNumber": "1",
+                        "shooter": "Casey",
+                        "miss": "true",
+                        "make": "false",
+                        "splashOut": "false",
+                        "guy": "false",
+                        "tri": "false",
+                        "di": "false",
+                        "vom": "false"
+                    ],
+                    eventIds: ["event-2026-004"],
+                    turnNumber: 1,
+                    teamTurnOrder: 2,
+                    shotInTeamTurn: 2
                 )
             ]
         ),
@@ -226,23 +265,43 @@ nonisolated extension PreviewData {
                 sequence: 1,
                 teamId: "team-1",
                 playerId: "player-alex",
-                value: 2
+                value: 2,
+                turnNumber: 1,
+                teamTurnOrder: 1,
+                shotInTeamTurn: 1
             ),
             GameEvent(
                 id: "event-2026-002",
-                type: "guy",
+                type: "make",
                 sequence: 2,
-                teamId: "team-2",
-                playerId: "player-jordan",
-                value: 1
+                teamId: "team-1",
+                playerId: "player-sam",
+                value: 1,
+                turnNumber: 1,
+                teamTurnOrder: 1,
+                shotInTeamTurn: 2
             ),
             GameEvent(
                 id: "event-2026-003",
-                type: "make",
+                type: "guy",
                 sequence: 3,
-                teamId: "team-1",
-                playerId: "player-sam",
-                value: 1
+                teamId: "team-2",
+                playerId: "player-jordan",
+                value: 1,
+                turnNumber: 1,
+                teamTurnOrder: 2,
+                shotInTeamTurn: 1
+            ),
+            GameEvent(
+                id: "event-2026-004",
+                type: "miss",
+                sequence: 4,
+                teamId: "team-2",
+                playerId: "player-casey",
+                value: nil,
+                turnNumber: 1,
+                teamTurnOrder: 2,
+                shotInTeamTurn: 2
             )
         ],
         commentsSummary: MatchCommentsSummary(

@@ -109,18 +109,38 @@ nonisolated final class URLSessionAPIClient: APIClient {
     }
 
     private func makeURL(path: String) throws -> URL {
-        let trimmedPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let relativeComponents = URLComponents(string: path),
+              relativeComponents.scheme == nil,
+              relativeComponents.host == nil,
+              relativeComponents.fragment == nil else {
+            throw AppError.invalidURL(path)
+        }
+
+        let trimmedPath = relativeComponents.path.trimmingCharacters(
+            in: CharacterSet(charactersIn: "/")
+        )
         var url = baseURL
 
         for component in trimmedPath.split(separator: "/") {
             url.appendPathComponent(String(component))
         }
 
-        guard url.scheme != nil, url.host != nil else {
+        guard var components = URLComponents(
+            url: url,
+            resolvingAgainstBaseURL: false
+        ),
+        components.scheme != nil,
+        components.host != nil else {
             throw AppError.invalidURL(path)
         }
 
-        return url
+        components.queryItems = relativeComponents.queryItems
+
+        guard let resolvedURL = components.url else {
+            throw AppError.invalidURL(path)
+        }
+
+        return resolvedURL
     }
 
     private func mapErrorResponse(data: Data, statusCode: Int) -> AppError {

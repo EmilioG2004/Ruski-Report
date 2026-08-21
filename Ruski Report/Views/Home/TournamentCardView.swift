@@ -2,6 +2,9 @@
 //  TournamentCardView.swift
 //  Ruski Report
 //
+//  Presents the active tournament as the primary branded route from the Home
+//  score feed.
+//
 
 import SwiftUI
 
@@ -11,33 +14,46 @@ struct TournamentCardView: View {
 
     var body: some View {
         Button(action: action) {
-            AppSurface {
-                HStack(spacing: 12) {
-                    StatusPill(status: tournament.status)
+            VStack(alignment: .leading, spacing: AppLayout.largeSpacing) {
+                HStack(spacing: AppLayout.standardSpacing) {
+                    Label(tournament.status.displayName, systemImage: "trophy.fill")
+                        .font(.caption.weight(.bold))
+                        .padding(.horizontal, AppLayout.pillHorizontalPadding)
+                        .padding(.vertical, AppLayout.pillVerticalPadding)
+                        .background(
+                            Color.white.opacity(AppVisualTokens.statusPillOnBrandOpacity)
+                        )
+                        .clipShape(Capsule())
 
-                    Spacer(minLength: 8)
+                    Spacer(minLength: AppLayout.smallSpacing)
 
                     Text(verbatim: String(tournament.year))
-                        .font(.subheadline.weight(.semibold).monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .font(.subheadline.weight(.bold).monospacedDigit())
                 }
 
                 Text(tournament.name)
-                    .font(.title2.bold())
-                    .foregroundStyle(.primary)
+                    .font(.title2.weight(.black))
                     .fixedSize(horizontal: false, vertical: true)
 
                 Label(tournament.locationName, systemImage: "mappin.and.ellipse")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(
+                        Color.white.opacity(AppVisualTokens.secondaryOnBrandOpacity)
+                    )
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(tournament.formatSummary)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(
+                        Color.white.opacity(AppVisualTokens.secondaryOnBrandOpacity)
+                    )
                     .fixedSize(horizontal: false, vertical: true)
 
-                Divider()
+                Rectangle()
+                    .fill(
+                        Color.white.opacity(AppVisualTokens.dividerOnBrandOpacity)
+                    )
+                    .frame(height: AppLayout.hairlineWidth)
 
                 HStack {
                     Label(featuredMatchText, systemImage: "sportscourt")
@@ -49,8 +65,23 @@ struct TournamentCardView: View {
                         .font(.title3)
                         .accessibilityHidden(true)
                 }
-                .foregroundStyle(Color.accentColor)
+                .font(.subheadline.weight(.bold))
             }
+            .foregroundStyle(Color.appOnBrand)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(AppLayout.heroPadding)
+            .background(Color.appBrandGradient)
+            .clipShape(
+                RoundedRectangle(
+                    cornerRadius: AppLayout.surfaceRadius,
+                    style: .continuous
+                )
+            )
+            .shadow(
+                color: Color.appBrand.opacity(AppVisualTokens.heroShadowOpacity),
+                radius: AppVisualTokens.heroShadowRadius,
+                y: AppVisualTokens.heroShadowY
+            )
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("home.tournamentCard")
@@ -59,7 +90,6 @@ struct TournamentCardView: View {
     }
 
     private var featuredMatchText: String {
-        let count = tournament.featuredMatchCount
-        return "\(count) featured \(count == 1 ? "match" : "matches")"
+        HomeCopy.featuredGameCount(tournament.featuredMatchCount)
     }
 }

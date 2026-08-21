@@ -98,7 +98,11 @@ nonisolated struct ScorecardColumnDTO: Decodable, Equatable {
 nonisolated struct ScorecardRowDTO: Decodable, Equatable {
     let id: String
     let sequence: Int
+    let teamId: String?
+    let playerId: String?
     let values: [String: JSONValue]
+    let eventIds: [String]?
+    let metadata: [String: JSONValue]?
 }
 
 nonisolated struct GameEventDTO: Decodable, Equatable {
@@ -108,6 +112,7 @@ nonisolated struct GameEventDTO: Decodable, Equatable {
     let teamId: String?
     let playerId: String?
     let value: Double?
+    let metadata: [String: JSONValue]?
 }
 
 nonisolated struct CommentsSummaryDTO: Decodable, Equatable {

@@ -91,6 +91,21 @@ postgresDescribe("PostgreSQL persistence", () => {
     });
   });
 
+  it("returns the newest published snapshot after a tournament completes", async () => {
+    const completed = createSnapshot("completed-tournament");
+    completed.tournament.status = "completed";
+    completed.tournament.activeMatchIds = [];
+
+    await publishSnapshot(completed);
+    const active = await reads.findActiveTournament({ gameType: "ruski" });
+
+    expect(active.ok && active.value).toMatchObject({
+      id: sampleTournament.id,
+      status: "completed",
+      activeMatchIds: []
+    });
+  });
+
   it("keeps the previous active snapshot visible after rollback", async () => {
     await publishSnapshot(createSnapshot("upload-initial"));
     const replacement = createSnapshot("upload-rollback", 4, "Replacement");

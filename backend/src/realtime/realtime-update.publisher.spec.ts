@@ -54,6 +54,30 @@ describe("RealtimeUpdatePublisher", () => {
     });
     expect(broadcaster.events).toEqual([matchEvent, commentsEvent]);
   });
+
+  it("publishes projection versions with the legacy version alias", () => {
+    const broadcaster = new RecordingBroadcaster();
+    const publisher = new RealtimeUpdatePublisher(broadcaster);
+
+    const tournamentEvent = publisher.publishTournamentUpdated({
+      tournamentId: "tournament-2027",
+      projectionVersion: 12
+    });
+    const matchEvent = publisher.publishMatchUpdated({
+      tournamentId: "tournament-2027",
+      matchId: "match-12",
+      projectionVersion: 12
+    });
+
+    expect(tournamentEvent).toMatchObject({
+      projectionVersion: 12,
+      version: 12
+    });
+    expect(matchEvent).toMatchObject({
+      projectionVersion: 12,
+      version: 12
+    });
+  });
 });
 
 class RecordingBroadcaster implements RealtimeEventBroadcaster {

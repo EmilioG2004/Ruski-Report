@@ -2,13 +2,17 @@
 //  MatchDetailView.swift
 //  Ruski Report
 //
+//  Owns game loading and destination selection. The loaded layout keeps game
+//  context fixed while each destination controls its own scrolling behavior.
+//
 
 import SwiftUI
 
 struct MatchDetailView: View {
     @StateObject private var controller: MatchDetailController
+    @State private var selectedPanel: MatchDetailPanel = .overview
 
-    private let routeContext: MatchRouteContext
+    private let legacyRouteContext: MatchRouteContext?
     private let comments: any CommentRepository
     private let commentReports: any CommentReportingRepository
     private let userBlocking: UserBlockingStore
@@ -27,7 +31,7 @@ struct MatchDetailView: View {
         realtime: any RealtimeUpdateRepository,
         logger: any AppLogger
     ) {
-        self.routeContext = routeContext
+        self.legacyRouteContext = routeContext
         self.comments = comments
         self.commentReports = commentReports
         self.userBlocking = userBlocking
@@ -46,24 +50,62 @@ struct MatchDetailView: View {
         )
     }
 
+    init(
+        routeContext: PublicMatchRouteContext,
+        matches: any MatchRepository,
+        tournaments: any TournamentRepository,
+        games: any GameRepository,
+        comments: any CommentRepository,
+        commentReports: any CommentReportingRepository,
+        userBlocking: UserBlockingStore,
+        session: AccountSessionStore,
+        realtime: any RealtimeUpdateRepository,
+        logger: any AppLogger
+    ) {
+        self.legacyRouteContext = nil
+        self.comments = comments
+        self.commentReports = commentReports
+        self.userBlocking = userBlocking
+        self.session = session
+        self.realtime = realtime
+        self.logger = logger
+        _controller = StateObject(
+            wrappedValue: MatchDetailController(
+                routeContext: routeContext,
+                matches: matches,
+                tournaments: tournaments,
+                games: games,
+                realtime: realtime,
+                logger: logger
+            )
+        )
+    }
+
     var body: some View {
         Group {
             switch controller.state {
             case .loading:
                 AppLoadingStateView(
-                    title: "Loading match",
-                    message: "Fetching the official scorecard and match activity."
+                    title: MatchCopy.loadingTitle,
+                    message: MatchCopy.loadingMessage
                 )
                     .accessibilityIdentifier("match.loading")
             case .loaded(let screen):
-                detailContent(screen)
+                if let legacyRouteContext {
+                    detailContent(screen, routeContext: legacyRouteContext)
+                } else {
+                    errorContent("This legacy game route is unavailable.")
+                }
+            case .canonicalLoaded(let detail):
+                canonicalDetailContent(detail)
             case .failed(let message):
                 errorContent(message)
             }
         }
         .background(Color.appGroupedBackground)
-        .navigationTitle("Match")
+        .navigationTitle(MatchCopy.navigationTitle)
         .appInlineNavigationTitle()
+        .tint(Color.appBrand)
         .task {
             await controller.loadMatch()
         }
@@ -72,45 +114,125 @@ struct MatchDetailView: View {
         }
     }
 
-    private func detailContent(_ screen: MatchDetailScreen) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                MatchScoreHeaderView(
-                    screen: screen,
-                    routeContext: routeContext
+    private func canonicalDetailContent(_ detail: PublicMatchDetail) -> some View {
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                PublicMatchDetailHeaderView(
+                    detail: detail,
+                    availableHeight: proxy.size.height,
+                    selection: $selectedPanel
                 )
 
-                MatchBoxScoreView(screen: screen)
+                Divider()
 
-                MatchScorecardView(scorecard: screen.match.scorecard)
+                canonicalPanelContent(detail)
+                    .id(selectedPanel)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .animation(
+                        AppVisualTokens.selectionAnimation,
+                        value: selectedPanel
+                    )
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("match.public.screen")
+    }
 
+    @ViewBuilder
+    private func canonicalPanelContent(_ detail: PublicMatchDetail) -> some View {
+        switch selectedPanel {
+        case .overview:
+            MatchPanelScrollView {
+                PublicMatchOverviewPanel(detail: detail)
+            }
+        case .plays:
+            MatchPanelScrollView {
+                PublicMatchEventLogView(detail: detail)
+            }
+        case .scorecard:
+            MatchPanelScrollView {
+                PublicMatchScorecardView(detail: detail)
+            }
+        case .chat:
+            MatchCommentsView(
+                matchId: detail.id,
+                comments: comments,
+                commentReports: commentReports,
+                userBlocking: userBlocking,
+                session: session,
+                realtime: realtime,
+                logger: logger
+            )
+        }
+    }
+
+    private func detailContent(
+        _ screen: MatchDetailScreen,
+        routeContext: MatchRouteContext
+    ) -> some View {
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                MatchDetailHeaderView(
+                    screen: screen,
+                    routeContext: routeContext,
+                    availableHeight: proxy.size.height,
+                    selection: $selectedPanel
+                )
+
+                Divider()
+
+                panelContent(screen, routeContext: routeContext)
+                    .id(selectedPanel)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .animation(
+                        AppVisualTokens.selectionAnimation,
+                        value: selectedPanel
+                    )
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("match.detail")
+    }
+
+    @ViewBuilder
+    private func panelContent(
+        _ screen: MatchDetailScreen,
+        routeContext: MatchRouteContext
+    ) -> some View {
+        switch selectedPanel {
+        case .overview:
+            MatchPanelScrollView {
+                MatchOverviewPanel(screen: screen)
+            }
+        case .plays:
+            MatchPanelScrollView {
                 MatchEventLogView(
                     screen: screen,
                     routeContext: routeContext
                 )
-
-                MatchCommentsView(
-                    matchId: screen.match.id,
-                    comments: comments,
-                    commentReports: commentReports,
-                    userBlocking: userBlocking,
-                    session: session,
-                    realtime: realtime,
-                    logger: logger
+            }
+        case .scorecard:
+            MatchPanelScrollView {
+                MatchScorecardView(
+                    screen: screen,
+                    routeContext: routeContext
                 )
             }
-            .padding(AppLayout.pagePadding)
-            .frame(
-                maxWidth: AppLayout.maximumContentWidth,
-                alignment: .leading
+        case .chat:
+            MatchCommentsView(
+                matchId: screen.match.id,
+                comments: comments,
+                commentReports: commentReports,
+                userBlocking: userBlocking,
+                session: session,
+                realtime: realtime,
+                logger: logger
             )
-            .frame(maxWidth: .infinity)
         }
-        .accessibilityIdentifier("match.detail")
     }
 
     private func errorContent(_ message: String) -> some View {
-        AppErrorStateView(title: "Match unavailable", message: message) {
+        AppErrorStateView(title: MatchCopy.unavailableTitle, message: message) {
             Task {
                 await controller.loadMatch()
             }

@@ -2,84 +2,104 @@
 //  MatchScorecardView.swift
 //  Ruski Report
 //
+//  Renders schema-driven shot results inside the shared chronological turn
+//  hierarchy, replacing the team-flattened horizontal spreadsheet treatment.
+//
 
 import SwiftUI
 
 struct MatchScorecardView: View {
-    let scorecard: Scorecard?
+    let screen: MatchDetailScreen
+    let routeContext: MatchRouteContext
+
+    private var scorecard: Scorecard? { screen.match.scorecard }
+
+    private var recordedTurns: [MatchTurn] {
+        screen.turns.filter { turn in
+            turn.teamTurns.contains { teamTurn in
+                teamTurn.shots.contains { $0.scorecardRow != nil }
+            }
+        }
+    }
 
     var body: some View {
-        MatchSectionView(title: "Scorecard", systemImage: "tablecells") {
-            if let scorecard,
-               !scorecard.columns.isEmpty,
-               !scorecard.rows.isEmpty {
-                ScrollView(.horizontal, showsIndicators: true) {
-                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 12) {
-                        GridRow {
-                            ForEach(scorecard.columns) { column in
-                                Text(column.label)
-                                    .scorecardHeaderStyle(
-                                        width: width(for: column),
-                                        alignment: alignment(for: column)
-                                    )
-                            }
-                        }
-
-                        ForEach(scorecard.rows.sorted { $0.sequence < $1.sequence }) { row in
-                            GridRow {
-                                ForEach(scorecard.columns) { column in
-                                    scorecardCell(row: row, column: column)
-                                        .frame(
-                                            width: width(for: column),
-                                            alignment: alignment(for: column)
+        MatchSectionView(title: MatchCopy.scorecardTitle, systemImage: "tablecells") {
+            if let scorecard, !recordedTurns.isEmpty {
+                LazyVStack(spacing: AppLayout.contentSpacing) {
+                    ForEach(recordedTurns) { turn in
+                        MatchTurnCard(turn: turn, routeContext: routeContext) { teamTurn in
+                            VStack(spacing: AppLayout.standardSpacing) {
+                                ForEach(teamTurn.shots) { shot in
+                                    if let row = shot.scorecardRow {
+                                        MatchScorecardShotRow(
+                                            shot: shot,
+                                            row: row,
+                                            columns: scorecard.columns,
+                                            routeContext: routeContext
                                         )
-                                        .frame(minHeight: 28)
+                                    }
                                 }
                             }
                         }
                     }
-                    .padding(.vertical, 2)
                 }
                 .accessibilityIdentifier("match.scorecard")
             } else {
                 EmptyMatchSectionView(
-                    title: "Scorecard rows are not available yet",
+                    title: MatchCopy.scorecardUnavailable,
                     systemImage: "tablecells"
                 )
             }
         }
     }
+}
 
-    @ViewBuilder
-    private func scorecardCell(
-        row: ScorecardRow,
-        column: ScorecardColumn
-    ) -> some View {
-        if column.dataType == "boolean" {
-            let isSelected = MatchValueFormatter.bool(row.values[column.key])
-            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                .accessibilityLabel(
-                    "\(column.label) \(isSelected ? "selected" : "not selected")"
-                )
-        } else {
-            Text(row.values[column.key] ?? "-")
-                .font(.subheadline)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
-        }
+private struct MatchScorecardShotRow: View {
+    let shot: MatchTurnShot
+    let row: ScorecardRow
+    let columns: [ScorecardColumn]
+    let routeContext: MatchRouteContext
+
+    private var shooterName: String {
+        routeContext.playerName(for: shot.playerId)
+            ?? row.values[MatchScorecardField.shooter]
+            ?? MatchCopy.unknownShooter
     }
 
-    private func width(for column: ScorecardColumn) -> CGFloat {
-        switch column.dataType {
-        case "boolean": AppLayout.scorecardBooleanWidth
-        case "number": AppLayout.scorecardNumberWidth
-        case "player": AppLayout.scorecardPlayerWidth
-        default: AppLayout.scorecardDefaultWidth
-        }
+    private var resultSummary: String {
+        let results = columns.compactMap(resultText(for:))
+        return results.isEmpty ? MatchCopy.unrecordedShot : results.joined(separator: " · ")
     }
 
-    private func alignment(for column: ScorecardColumn) -> Alignment {
-        column.dataType == "boolean" ? .center : .leading
+    var body: some View {
+        HStack(alignment: .top, spacing: AppLayout.standardSpacing) {
+            MatchShotMarker(position: shot.position)
+
+            VStack(alignment: .leading, spacing: AppLayout.microSpacing) {
+                Text(shooterName)
+                    .font(.subheadline.weight(.semibold))
+                Text(resultSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: AppLayout.smallSpacing)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func resultText(for column: ScorecardColumn) -> String? {
+        guard !MatchScorecardField.identityKeys.contains(column.key) else {
+            return nil
+        }
+
+        let value = row.values[column.key]
+        if column.dataType == "boolean" || column.dataType == "event" {
+            return MatchValueFormatter.bool(value) ? column.label : nil
+        }
+
+        guard let value, !value.isEmpty else { return nil }
+        return "\(column.label): \(value)"
     }
 }

@@ -1,3 +1,8 @@
+/**
+ * Resolves each scorecard side to a canonical tournament team. Exact roster
+ * identity takes precedence because workbook tab names do not reliably mirror
+ * the physical left/right scorecard layout; weighted aliases remain a fallback.
+ */
 import { Player, TeamId } from "../../../domain";
 import { ParsedScorebookSheet, ParsedScorebookSide } from "../../parsed-scorebook";
 import { ruskiTournamentConfig } from "../config/ruski-tournament-config";
@@ -8,6 +13,7 @@ import { stringSimilarity } from "./ruski-string-similarity";
 interface SideCandidate {
   teamId: TeamId;
   score: number;
+  hasExactRoster: boolean;
 }
 
 const identityConfiguration = ruskiTournamentConfig.identity;
@@ -60,6 +66,7 @@ function scoreSide(
 
       return {
         teamId: entry.teamId,
+        hasExactRoster: isExactRoster(entry.players, playerNames),
         score:
           aliasScore * identityConfiguration.aliasWeight +
           rosterScore * identityConfiguration.rosterWeight +
@@ -77,18 +84,44 @@ function chooseDistinctAssignment(
   }
 
   let best: [SideCandidate, SideCandidate] | undefined;
+  let bestExactRosterCount = -1;
   let bestScore = Number.NEGATIVE_INFINITY;
 
   candidates[0].forEach((first) => {
     candidates[1].forEach((second) => {
-      if (first.teamId !== second.teamId && first.score + second.score > bestScore) {
+      if (first.teamId === second.teamId) {
+        return;
+      }
+
+      const exactRosterCount = Number(first.hasExactRoster) +
+        Number(second.hasExactRoster);
+      const score = first.score + second.score;
+
+      if (
+        exactRosterCount > bestExactRosterCount ||
+        (exactRosterCount === bestExactRosterCount && score > bestScore)
+      ) {
         best = [first, second];
-        bestScore = first.score + second.score;
+        bestExactRosterCount = exactRosterCount;
+        bestScore = score;
       }
     });
   });
 
   return best;
+}
+
+function isExactRoster(
+  players: readonly Player[],
+  observedNames: readonly string[]
+): boolean {
+  if (players.length === 0 || players.length !== observedNames.length) {
+    return false;
+  }
+
+  const expected = players.map((player) => normalizeName(player.displayName)).sort();
+  const observed = observedNames.map(normalizeName).sort();
+  return expected.every((name, index) => name === observed[index]);
 }
 
 function splitMatchupName(name: string): string[] {

@@ -2,6 +2,9 @@
 //  MatchCommentRowView.swift
 //  Ruski Report
 //
+//  Presents one conversation entry with accessible moderation actions and
+//  timestamp formatting isolated from feed state.
+//
 
 import Foundation
 import SwiftUI
@@ -12,13 +15,13 @@ struct MatchCommentRowView: View {
     let block: (() -> Void)?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.title3)
-                .foregroundStyle(.secondary)
-                .accessibilityHidden(true)
+        HStack(alignment: .top, spacing: AppLayout.compactSpacing) {
+            TeamMonogramView(
+                name: comment.authorDisplayName,
+                size: AppLayout.commentAvatarSize
+            )
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: AppLayout.microSpacing) {
                 Text(comment.authorDisplayName)
                     .font(.subheadline.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
@@ -31,11 +34,11 @@ struct MatchCommentRowView: View {
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 2)
+                    .padding(.top, AppLayout.microSpacing)
             }
             .accessibilityElement(children: .combine)
 
-            Spacer(minLength: 4)
+            Spacer(minLength: AppLayout.microSpacing)
 
             Menu {
                 Button {
@@ -58,11 +61,22 @@ struct MatchCommentRowView: View {
                 }
             } label: {
                 Image(systemName: "ellipsis")
-                    .frame(minWidth: 32, minHeight: 32)
+                    .frame(
+                        minWidth: AppLayout.minimumTapTarget,
+                        minHeight: AppLayout.minimumTapTarget
+                    )
             }
             .accessibilityLabel("Actions for comment by \(comment.authorDisplayName)")
             .accessibilityIdentifier("match.comments.actions.\(comment.id)")
         }
+        .padding(AppLayout.standardSpacing)
+        .background(Color.appInsetBackground)
+        .clipShape(
+            RoundedRectangle(
+                cornerRadius: AppLayout.compactRadius,
+                style: .continuous
+            )
+        )
     }
 }
 

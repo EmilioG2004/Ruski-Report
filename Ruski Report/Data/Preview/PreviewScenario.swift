@@ -11,11 +11,20 @@ nonisolated enum PreviewScenario: String, Equatable {
     case standard
     case empty
     case unavailable
+    case recovering
     case authenticated
     case moderationRejected
     case reporting
     case reportUnavailable
     case blocking
+    case longContent
+    case publicZero = "public-zero"
+    case publicTwo = "public-two"
+    case publicStates = "public-states"
+    case publicLongContent = "public-long-content"
+    case publicOffline = "public-offline"
+    case publicRecovering = "public-recovering"
+    case publicPartialDetail = "public-partial-detail"
 
     static func resolve(from arguments: [String]) -> PreviewScenario {
         guard let flagIndex = arguments.firstIndex(of: argumentName),

@@ -157,6 +157,11 @@ systemctl list-timers 'ruski-report-backup*'
 shared lock prevents a backup, prune, integrity check, and restore rehearsal
 from changing the repository concurrently.
 
+The retention command groups snapshots by host and tags rather than by the
+temporary staging path. Keep that explicit grouping: every backup uses a unique
+run directory, and path-based groups would prevent the 27-day window from
+expiring older snapshots.
+
 ## Routine Verification
 
 The normal recovery point is the most recent successful hourly snapshot. Run

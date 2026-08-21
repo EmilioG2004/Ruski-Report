@@ -2,12 +2,16 @@
 //  TournamentDetailView.swift
 //  Ruski Report
 //
+//  Owns tournament loading and destination selection while delegating every
+//  content surface to a focused section view.
+//
 
 import SwiftUI
 
 struct TournamentDetailView: View {
     @StateObject private var controller: TournamentDetailController
-    @State private var selectedSection: TournamentDetailSection = .overview
+    @State private var selectedSection: TournamentDetailSection = .matches
+    private let canonicalDiscoveryScope: PublicTournamentDiscoveryScope
 
     init(
         tournamentId: TournamentPreview.ID,
@@ -16,9 +20,29 @@ struct TournamentDetailView: View {
         realtime: any RealtimeUpdateRepository,
         logger: any AppLogger
     ) {
+        canonicalDiscoveryScope = .active
         _controller = StateObject(
             wrappedValue: TournamentDetailController(
                 tournamentId: tournamentId,
+                tournaments: tournaments,
+                games: games,
+                realtime: realtime,
+                logger: logger
+            )
+        )
+    }
+
+    init(
+        routeContext: PublicTournamentRouteContext,
+        tournaments: any TournamentRepository,
+        games: any GameRepository,
+        realtime: any RealtimeUpdateRepository,
+        logger: any AppLogger
+    ) {
+        canonicalDiscoveryScope = routeContext.discoveryScope
+        _controller = StateObject(
+            wrappedValue: TournamentDetailController(
+                routeContext: routeContext,
                 tournaments: tournaments,
                 games: games,
                 realtime: realtime,
@@ -32,19 +56,26 @@ struct TournamentDetailView: View {
             switch controller.state {
             case .loading:
                 AppLoadingStateView(
-                    title: "Loading tournament",
-                    message: "Fetching standings, matches, and bracket results."
+                    title: TournamentCopy.loadingTitle,
+                    message: TournamentCopy.loadingMessage
                 )
                     .accessibilityIdentifier("tournament.loading")
             case .loaded(let screen):
                 detailContent(screen)
+            case .canonicalLoaded(let detail):
+                PublicTournamentDetailContentView(
+                    detail: detail,
+                    selectedSection: $selectedSection,
+                    discoveryScope: canonicalDiscoveryScope
+                )
             case .failed(let message):
                 errorContent(message)
             }
         }
         .background(Color.appGroupedBackground)
-        .navigationTitle("Tournament")
+        .navigationTitle(TournamentCopy.navigationTitle)
         .appInlineNavigationTitle()
+        .tint(Color.appBrand)
         .task {
             await controller.loadTournament()
         }
@@ -55,12 +86,14 @@ struct TournamentDetailView: View {
 
     private func detailContent(_ screen: TournamentDetailScreen) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: AppLayout.largeSpacing) {
                 TournamentOverviewHeader(detail: screen.detail)
 
                 TournamentSectionPicker(selection: $selectedSection)
 
                 sectionContent(screen)
+                    .id(selectedSection)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
             .padding(AppLayout.pagePadding)
             .frame(
@@ -89,7 +122,7 @@ struct TournamentDetailView: View {
 
     private func errorContent(_ message: String) -> some View {
         AppErrorStateView(
-            title: "Tournament unavailable",
+            title: TournamentCopy.unavailableTitle,
             message: message
         ) {
             Task {

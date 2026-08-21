@@ -45,6 +45,24 @@ available through `RUSKI_PRIVACY_POLICY_URL`, `RUSKI_SUPPORT_URL`, and
 The detailed contract and local commands are in
 [`docs/ios-release-configuration.md`](../ios-release-configuration.md).
 
+The end-to-end procedure and current observed results are in
+[`release-qualification.md`](release-qualification.md) and
+[`release-qualification-evidence.md`](release-qualification-evidence.md).
+
+## iOS Production Networking
+
+- [x] Keep the Debug API endpoint explicitly configured as
+      `http://127.0.0.1:3000/api`.
+- [x] Inject `https://api.ruskireport.com/api` into Release builds through the
+      Release build configuration.
+- [x] Derive the production realtime endpoint as secure WSS at
+      `wss://api.ruskireport.com/socket.io/`.
+- [x] Ignore Debug process-environment overrides in Release builds.
+- [x] Require HTTPS and reject embedded URL credentials for Release.
+- [x] Keep App Transport Security enabled without production exceptions.
+- [x] Inspect an unsigned Release archive for loopback endpoints and server
+      credential markers.
+
 ## App Store Age Rating
 
 - [x] Record 18+ as the intended v1 storefront rating.
@@ -93,7 +111,7 @@ Complete these when production networking and storage are selected:
       policy; update the policy before adding a provider with broader use.
 - [x] Configure persistent logs and rotating backups, if enabled, with a
       maximum 30-day retention.
-- [ ] Verify logs exclude passwords, raw session tokens, comment bodies, report
+- [x] Verify logs exclude passwords, raw session tokens, comment bodies, report
       context, and reporter identities.
-- [ ] Exercise account deletion against the production database and confirm
+- [x] Exercise account deletion against the production database and confirm
       authored comments, credentials, sessions, and blocks are removed.

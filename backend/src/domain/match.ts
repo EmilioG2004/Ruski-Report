@@ -38,7 +38,7 @@ export interface MatchParticipant {
   role?: MatchParticipantRole;
   seed?: number;
   playerIds?: PlayerId[];
-  score: number;
+  score?: number;
   result?: MatchResult;
   metadata?: Metadata;
 }
