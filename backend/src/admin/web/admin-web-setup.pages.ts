@@ -47,7 +47,12 @@ export function renderTournamentSetupPage(input: {
         ? `<p>Generate the canonical scorekeeping workbook, preview cumulative updates, and apply selected revisions without deleting omitted scorecards.</p>
           <p><a class="button secondary" href="${ADMIN_WEB_ROOT}/tournaments/${escapeAttribute(detail.tournament.id)}/workbooks">Open workbook operations</a></p>`
         : `<p>Publish setup before generating or reconciling the canonical workbook.</p>`}
-    </section>`
+    </section>
+    ${locked ? `<section class="panel locked">
+      <h2>Tournament progression</h2>
+      <p>Review canonical standings, finalize pods, resolve seed ties, and publish or advance the playoff bracket.</p>
+      <p><a class="button secondary" href="${ADMIN_WEB_ROOT}/tournaments/${escapeAttribute(detail.tournament.id)}/progression">Open progression</a></p>
+    </section>` : ""}`
   });
 }
 

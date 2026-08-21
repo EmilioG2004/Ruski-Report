@@ -13,6 +13,7 @@ import {
   PostgresProjectionRepository,
   PostgresRosterRepository,
   PostgresTournamentSetupRepository,
+  PostgresTournamentProgressionRepository,
   TournamentEngineTransactionManager
 } from "../tournament-engine/persistence";
 import { PostgresWorkbookReconciliationRepository } from "../tournament-engine/workbook";
@@ -82,6 +83,7 @@ const tournamentEngineRepositoryTokens = [
   PostgresMatchWriterRepository,
   PostgresMatchRevisionRepository,
   PostgresCanonicalStatisticRepository,
+  PostgresTournamentProgressionRepository,
   PostgresProjectionRepository,
   PostgresWorkbookReconciliationRepository
 ];
@@ -140,26 +142,37 @@ const tournamentEngineRepositoryProviders = [
     ) => new PostgresProjectionRepository(database, transactions)
   },
   {
+    provide: PostgresTournamentProgressionRepository,
+    inject: [PostgresDatabase, TournamentEngineTransactionManager],
+    useFactory: (
+      database: PostgresDatabase,
+      transactions: TournamentEngineTransactionManager
+    ) => new PostgresTournamentProgressionRepository(database, transactions)
+  },
+  {
     provide: PostgresWorkbookReconciliationRepository,
     inject: [
       PostgresDatabase,
       TournamentEngineTransactionManager,
       PostgresMatchWriterRepository,
       PostgresMatchRevisionRepository,
-      PostgresCanonicalStatisticRepository
+      PostgresCanonicalStatisticRepository,
+      PostgresTournamentProgressionRepository
     ],
     useFactory: (
       database: PostgresDatabase,
       transactions: TournamentEngineTransactionManager,
       writers: PostgresMatchWriterRepository,
       revisions: PostgresMatchRevisionRepository,
-      statistics: PostgresCanonicalStatisticRepository
+      statistics: PostgresCanonicalStatisticRepository,
+      progression: PostgresTournamentProgressionRepository
     ) => new PostgresWorkbookReconciliationRepository(
       database,
       transactions,
       writers,
       revisions,
-      statistics
+      statistics,
+      progression
     )
   }
 ];

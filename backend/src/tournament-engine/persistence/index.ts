@@ -8,3 +8,5 @@ export * from "./postgres-match-writer.repository";
 export * from "./postgres-projection.repository";
 export * from "./postgres-roster.repository";
 export * from "./postgres-tournament-setup.repository";
+export * from "./progression-contracts";
+export * from "./postgres-tournament-progression.repository";
