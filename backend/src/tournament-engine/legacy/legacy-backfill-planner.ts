@@ -144,7 +144,8 @@ export class LegacyBackfillPlanner {
         id: identity.id,
         publicKey: identity.publicKey,
         legacyPlayerId: player.legacyPlayerId,
-        displayName: player.displayName
+        displayName: player.displayName,
+        sourceSnapshotVersion: player.sourceSnapshotVersion
       };
     });
     const rosterMemberships = source.rosterMemberships.map((membership) => {
@@ -164,7 +165,10 @@ export class LegacyBackfillPlanner {
         teamId: requireIdentity(teamIdentities, membership.legacyTeamId).id,
         playerId: requireIdentity(playerIdentities, membership.legacyPlayerId).id,
         sequence: membership.sequence,
-        effectiveFrom: source.snapshotPublishedAt
+        sourceSnapshotVersion: membership.sourceSnapshotVersion,
+        effectiveFrom: membership.effectiveFrom ?? source.snapshotPublishedAt,
+        effectiveTo: membership.effectiveTo,
+        replacementReason: membership.replacementReason
       };
     });
     const pods = source.pods.map((pod) => {
@@ -430,9 +434,7 @@ export class LegacyBackfillPlanner {
           calculationId: calculation.id
         };
       });
-    const seededTeams = source.teams.filter(
-      (team) => team.overallSeed !== undefined
-    );
+    const seededTeams = deriveSeededTeams(source);
     const seedCalculationIdentity = seededTeams.length === 0
       ? undefined
       : identities.create("seed_calculation", [source.snapshotVersion]);
@@ -987,7 +989,9 @@ function canonicalStatisticCounts(input: {
       teamId: team.id,
       podId: requireMapValue(podByTeam, team.id),
       playerIds: input.rosterMemberships
-        .filter((membership) => membership.teamId === team.id)
+        .filter((membership) =>
+          membership.teamId === team.id && membership.effectiveTo === undefined
+        )
         .sort((left, right) => left.sequence - right.sequence)
         .map((membership) => membership.playerId)
     }))
@@ -1149,6 +1153,77 @@ function readPositiveFormatInteger(
     throw new Error(`Validated legacy format field '${field}' is invalid.`);
   }
   return value as number;
+}
+
+function deriveSeededTeams(
+  source: LegacyTournamentSource
+): Array<LegacyTournamentSource["teams"][number] & { overallSeed: number }> {
+  const seedByTeam = new Map<string, number>();
+  const issues: LegacyBackfillIssue[] = [];
+  const addSeed = (teamId: string, seed: number): void => {
+    if (!Number.isInteger(seed) || seed < 1) {
+      issues.push({
+        code: "LEGACY_PLAYOFF_SEED_INVALID",
+        message: "Legacy playoff seeds must be positive integers."
+      });
+      return;
+    }
+    const existing = seedByTeam.get(teamId);
+    if (existing !== undefined && existing !== seed) {
+      issues.push({
+        code: "LEGACY_PLAYOFF_SEED_CONFLICT",
+        message: "Legacy playoff seed evidence must agree for each team."
+      });
+      return;
+    }
+    seedByTeam.set(teamId, seed);
+  };
+
+  for (const team of source.teams) {
+    if (team.overallSeed !== undefined) {
+      addSeed(team.legacyTeamId, team.overallSeed);
+    }
+  }
+  for (const slot of (source.bracket?.rounds ?? []).flatMap((round) =>
+    round.matches.flatMap((match) => match.slots)
+  )) {
+    if (slot.legacyTeamId !== undefined && slot.seed !== undefined) {
+      addSeed(slot.legacyTeamId, slot.seed);
+    }
+  }
+
+  if (source.bracket !== undefined) {
+    const bracketSize = readPositiveFormatInteger(source.format, "bracketSize");
+    const qualifiedSeeds = [...seedByTeam.values()].filter(
+      (seed) => Number.isInteger(seed) && seed >= 1 && seed <= bracketSize
+    );
+    const uniqueQualifiedSeeds = [...new Set(qualifiedSeeds)].sort(
+      (left, right) => left - right
+    );
+    const expectedSeeds = Array.from(
+      { length: bracketSize },
+      (_, index) => index + 1
+    );
+    if (
+      qualifiedSeeds.length !== bracketSize ||
+      uniqueQualifiedSeeds.length !== bracketSize ||
+      uniqueQualifiedSeeds.some((seed, index) => seed !== expectedSeeds[index])
+    ) {
+      issues.push({
+        code: "LEGACY_PLAYOFF_SEEDS_INCOMPLETE",
+        message:
+          "Legacy bracket publication requires one stable team for every seed."
+      });
+    }
+  }
+  if (issues.length > 0) {
+    throw new LegacyBackfillPlanningError(issues);
+  }
+
+  return source.teams.flatMap((team) => {
+    const overallSeed = seedByTeam.get(team.legacyTeamId);
+    return overallSeed === undefined ? [] : [{ ...team, overallSeed }];
+  });
 }
 
 function validateSource(source: LegacyTournamentSource): LegacyBackfillIssue[] {

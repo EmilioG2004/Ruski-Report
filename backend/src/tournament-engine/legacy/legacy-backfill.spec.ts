@@ -165,6 +165,20 @@ describe("2026 legacy canonical backfill", () => {
     });
   });
 
+  it("derives legacy playoff seeds from stable bracket slots", () => {
+    const source = syntheticPopulatedLegacySource();
+    source.teams.forEach((team) => {
+      delete team.overallSeed;
+    });
+
+    const plan = new LegacyBackfillPlanner().plan(source);
+
+    expect(plan.seedCalculation).toBeDefined();
+    expect(plan.seeds.map((seed) => seed.effectivePlayoffSeed).sort(
+      (left, right) => (left ?? 0) - (right ?? 0)
+    )).toEqual([1, 2, 3, 4]);
+  });
+
   it("keeps the completion key stable when community references grow", () => {
     const source = syntheticPopulatedLegacySource();
     const initial = new LegacyBackfillPlanner().plan(source);
