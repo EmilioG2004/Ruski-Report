@@ -30,6 +30,15 @@ import {
 } from "../../persistence/postgres-match-writer.repository";
 import { PostgresMatchRevisionRepository } from "../../persistence/postgres-match-revision.repository";
 import { TournamentEngineTransactionManager } from "../../persistence/engine-transaction.manager";
+import {
+  CanonicalProjectionActivationResult,
+  PostgresProjectionRepository
+} from "../../persistence/postgres-projection.repository";
+import {
+  CanonicalProjectionActivationListener,
+  notifyCanonicalProjectionActivation,
+  refreshCanonicalProjectionInTransaction
+} from "../../persistence/projection-refresh";
 import { createUuidV5 } from "../../scheduling/uuid-v5";
 import {
   materializeWorkbookCandidate,
@@ -298,7 +307,9 @@ export class PostgresWorkbookReconciliationRepository {
     writers?: PostgresMatchWriterRepository,
     revisions?: PostgresMatchRevisionRepository,
     statistics?: PostgresCanonicalStatisticRepository,
-    progression?: PostgresTournamentProgressionRepository
+    progression?: PostgresTournamentProgressionRepository,
+    private readonly projections?: PostgresProjectionRepository,
+    private readonly projectionListener?: CanonicalProjectionActivationListener
   ) {
     this.transactions = transactions ?? new TournamentEngineTransactionManager(database);
     this.writers = writers ?? new PostgresMatchWriterRepository(
@@ -857,16 +868,55 @@ export class PostgresWorkbookReconciliationRepository {
     );
   }
 
-  confirmImport(
+  async confirmImport(
     input: ConfirmWorkbookImportInput
   ): Promise<WorkbookImportConfirmationResult> {
     validateDigest(input.previewDigest, "Preview digest");
     validateDigest(input.confirmationDigest, "Confirmation digest");
     assertUniqueIds(input.acceptedObservationIds, "Accepted observations");
     assertUniqueIds(input.skippedObservationIds, "Skipped observations");
-    return this.transactions.run((transaction) =>
-      this.confirmImportInTransaction(input, transaction)
-    );
+    let projection: CanonicalProjectionActivationResult | undefined;
+    const result = await this.transactions.run(async (transaction) => {
+      const confirmation = await this.confirmImportInTransaction(
+        input,
+        transaction
+      );
+      if (confirmation.status === "applied") {
+        const executor = engineExecutor(this.database, transaction);
+        const tournament = await executor.query<{
+          row_version: string | number;
+        }>(`
+          SELECT row_version
+          FROM engine_tournaments
+          WHERE id = $1::uuid
+        `, [input.tournamentId]);
+        const rowVersion = tournament.rows[0]?.row_version;
+        if (rowVersion === undefined) {
+          throw new EnginePersistenceInvariantError(
+            "Tournament was not found after workbook confirmation."
+          );
+        }
+        projection = await refreshCanonicalProjectionInTransaction(
+          this.projections,
+          {
+            tournamentId: input.tournamentId,
+            expectedTournamentRowVersion: Number(rowVersion),
+            occurredAt: confirmation.completedAt,
+            sourceCommandType: "workbook_import_applied",
+            actor: {
+              kind: "administrator",
+              id: input.confirmedByAdminId
+            },
+            sourceEventId: input.audit.eventId,
+            correlationId: input.audit.correlationId
+          },
+          transaction
+        );
+      }
+      return confirmation;
+    });
+    notifyCanonicalProjectionActivation(this.projectionListener, projection);
+    return result;
   }
 
   private async findGeneratedWorkbookArtifactInTransaction(
