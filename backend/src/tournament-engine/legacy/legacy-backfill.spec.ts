@@ -85,16 +85,35 @@ describe("2026 legacy canonical backfill", () => {
       matchRevisions: 4,
       matchParticipants: 8,
       standingCalculations: 2,
+      standingCalculationMatches: 1,
       standings: 4,
       podFinalizations: 2,
+      podFinalizationProvenance: 2,
       seedCalculations: 1,
       seeds: 4,
       brackets: 1,
       bracketRounds: 2,
       bracketMatches: 3,
       bracketSlots: 6,
-      commentReferences: 3,
-      reportReferences: 2
+      scoringEvents: 5,
+      shotAttempts: 4,
+      shotClassifications: 2,
+      statisticRuns: 5,
+      statisticValues: 658,
+      activeStatisticRuns: 1,
+      activePodStandingCalculations: 2,
+      activeTournamentStandingCalculations: 0,
+      seedCalculationFinalizations: 2,
+      activeSeedCalculations: 1,
+      bracketPublications: 1,
+      activeBrackets: 1,
+      bracketResolutions: 3,
+      activeBracketResolutions: 3,
+      bracketAdvancements: 2,
+      projectionVersions: 1,
+      tournamentProjectionPayloads: 1,
+      matchProjectionPayloads: 4,
+      projectionActivations: 1
     });
     expect(
       plan.matches.find(
@@ -140,7 +159,44 @@ describe("2026 legacy canonical backfill", () => {
         (reference) =>
           reference.legacyMatchId === "legacy-match-historical-identity"
       )
-    ).toMatchObject({ commentCount: 1, reportCount: 1 });
+    ).toMatchObject({
+      commentIds: ["synthetic-comment-historical"],
+      reportIds: ["synthetic-report-historical"]
+    });
+  });
+
+  it("keeps the completion key stable when community references grow", () => {
+    const source = syntheticPopulatedLegacySource();
+    const initial = new LegacyBackfillPlanner().plan(source);
+    source.matchIdentities[0]?.commentIds.push("later-comment");
+    source.matchIdentities[0]?.reportIds.push("later-report");
+    const later = new LegacyBackfillPlanner().plan(source);
+
+    expect(later.sourceDigest).toBe(initial.sourceDigest);
+    expect(later.planDigest).toBe(initial.planDigest);
+    expect(later.counts).toEqual(initial.counts);
+  });
+
+  it("normalizes legacy Ruski events without double-counting special misses", () => {
+    const plan = new LegacyBackfillPlanner().plan(
+      syntheticPopulatedLegacySource()
+    );
+    const events = plan.matchRevisions.flatMap((revision) => revision.events);
+
+    expect(events).toHaveLength(5);
+    expect(events.filter((event) => event.type === "shot_attempt")).toHaveLength(4);
+    expect(events.filter((event) => event.type === "vom")).toHaveLength(1);
+    expect(events.find((event) =>
+      event.shotAttempt?.classification === "tri"
+    )?.shotAttempt).toEqual({
+      outcome: "miss",
+      classification: "tri",
+      cupDelta: 3,
+      phase: "normal",
+      turnNumber: 2,
+      teamTurnOrder: 2,
+      shotInTeamTurn: 1
+    });
   });
 
   it("records a dry run without applying canonical rows", async () => {

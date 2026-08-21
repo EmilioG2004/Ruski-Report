@@ -167,7 +167,13 @@ export class LegacyBackfillService {
           retryable: false
         });
       }
-      return appliedRun;
+      return state.wasApplied === false
+        ? this.recordResult({
+            ...appliedRun,
+            status: "no_op",
+            completedAt: this.clock.now()
+          })
+        : appliedRun;
     } catch {
       return this.recordResult({
         ...appliedRun,
