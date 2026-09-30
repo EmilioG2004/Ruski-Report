@@ -204,7 +204,9 @@ private struct PublicTournamentCardView: View {
     }
 
     private var seasonLabel: some View {
-        Text("\(tournament.year) · v\(tournament.projection.version)")
+        Text(
+            verbatim: "\(tournament.year) · v\(tournament.projection.version)"
+        )
             .font(.subheadline.weight(.bold).monospacedDigit())
     }
 }

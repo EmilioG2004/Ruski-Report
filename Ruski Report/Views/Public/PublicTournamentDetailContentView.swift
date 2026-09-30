@@ -80,7 +80,9 @@ private struct PublicTournamentHeaderView: View {
                 .font(.title.weight(.black))
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("\(detail.year) · Projection v\(detail.projection.version)")
+            Text(
+                verbatim: "\(detail.year) · Projection v\(detail.projection.version)"
+            )
                 .font(.subheadline.weight(.medium).monospacedDigit())
                 .foregroundStyle(
                     Color.white.opacity(AppVisualTokens.secondaryOnBrandOpacity)

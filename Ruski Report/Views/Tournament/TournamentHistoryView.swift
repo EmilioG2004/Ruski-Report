@@ -127,7 +127,9 @@ struct TournamentHistoryView: View {
     private func seasonLabel(
         _ tournament: PublicTournamentSummary
     ) -> some View {
-        Text("\(tournament.year) · v\(tournament.projection.version)")
+        Text(
+            verbatim: "\(tournament.year) · v\(tournament.projection.version)"
+        )
             .font(.caption.weight(.semibold).monospacedDigit())
             .foregroundStyle(.secondary)
     }
