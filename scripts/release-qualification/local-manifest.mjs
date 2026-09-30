@@ -25,6 +25,11 @@ export const LOCAL_QUALIFICATION_GATES = Object.freeze([
   backendGate("backend-lint", "backend TypeScript lint", ["run", "lint"]),
   backendGate("backend-build", "backend production build", ["run", "build"]),
   backendGate(
+    "backend-production-dependency-audit",
+    "production dependency audit (high and critical advisories)",
+    ["audit", "--omit=dev", "--audit-level=high"]
+  ),
+  backendGate(
     "backend-unit",
     "complete backend unit suite",
     ["test", "--", "--testPathIgnorePatterns=integration\\.spec\\.ts$"]

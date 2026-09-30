@@ -41,7 +41,7 @@ The ordered manifest runs these groups:
 
 | Gate | Executable coverage |
 | --- | --- |
-| Backend lint/build/unit | TypeScript lint, production build, and every non-integration Jest suite. |
+| Backend lint/build/audit/unit | TypeScript lint, production build, a registry audit that rejects high or critical production dependency advisories, and every non-integration Jest suite. |
 | Lifecycle contracts | Setup, workbook generation and parsing, beginning/middle/correction/end/no-op planning, canonical event adaptation, statistics, standings, seeds, mirrored bracket, progression, public projection, v2 reads, and realtime publication. |
 | Projection/realtime transaction | The production dependency graph must inject projection refresh/listener dependencies, the listener must emit version-pinned tournament and changed-match events, and the PostgreSQL projection suite must retain an old active pointer on activation failure. |
 | PostgreSQL integration | Migrations on clean and populated databases; setup, workbook reconciliation, statistics, progression, projection, backfill, authentication, authorization, CSRF, rate-limit, and audit persistence suites. |
