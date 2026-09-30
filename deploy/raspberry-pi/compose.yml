@@ -23,7 +23,8 @@ x-api-environment: &api-environment
   SCOREBOOK_UPLOAD_LIMIT_BYTES: "${SCOREBOOK_UPLOAD_LIMIT_BYTES:-10485760}"
 
 x-api-container: &api-container
-  image: ruski-report-api:${RUSKI_IMAGE_TAG:-local}
+  image: ${RUSKI_API_IMAGE:-ruski-report-api:local}
+  pull_policy: never
   build:
     context: ../../backend
     dockerfile: Dockerfile

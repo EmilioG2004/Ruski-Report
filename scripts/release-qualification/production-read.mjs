@@ -6,7 +6,10 @@
 import { verifyRealtimeConnections } from
   "../../backend/scripts/realtime-smoke-client.mjs";
 import { fileURLToPath } from "node:url";
-import { loadQualificationConfiguration } from "./configuration.mjs";
+import {
+  loadExpectedActiveTournamentIds,
+  loadQualificationConfiguration
+} from "./configuration.mjs";
 import {
   QualificationHttpClient,
   requireCondition
@@ -15,6 +18,7 @@ import { comparePublicContracts } from "./public-equivalence.mjs";
 
 export async function runProductionReadQualification(environment = process.env) {
   const configuration = loadQualificationConfiguration(environment);
+  const expectedActiveTournamentIds = loadExpectedActiveTournamentIds(environment);
   const client = new QualificationHttpClient(
     configuration.apiBaseUrl,
     configuration.requestTimeoutMilliseconds
@@ -76,6 +80,13 @@ export async function runProductionReadQualification(environment = process.env) 
   ]);
   requireV2Envelope(v2Active, "active tournament discovery");
   requireV2Envelope(v2History, "tournament history discovery");
+  validateDiscoveryState({
+    legacyTournament: active,
+    v2Active,
+    v2History,
+    expectedActiveTournamentIds,
+    legacyTournamentYear: configuration.tournamentYear
+  });
   const discovery = [...v2Active.tournaments, ...v2History.tournaments];
   const v2Item = discovery.find((item) => item?.tournament?.id === active.id);
   requireCondition(
@@ -126,6 +137,17 @@ export async function runProductionReadQualification(environment = process.env) 
       .map((mismatch) => mismatch.code).join(",")}`
   );
 
+  const legacyWorkbookRouteStatus = await client.status(
+    `admin/tournaments/${configuration.tournamentYear}/upload-scorebook?` +
+      `gameType=${encodeURIComponent(configuration.gameType)}`,
+    { method: "POST" }
+  );
+  requireCondition(
+    legacyWorkbookRouteStatus === 401,
+    "The preserved legacy workbook route is missing or its authentication " +
+      `boundary changed (status ${legacyWorkbookRouteStatus}).`
+  );
+
   await verifyRealtimeConnections(configuration.publicBaseUrl);
   return {
     gameCount: games.length,
@@ -134,9 +156,56 @@ export async function runProductionReadQualification(environment = process.env) 
     legacyMatchCount: matches.length,
     canonicalMatchCount: v2Matches.matches.length,
     sampledCommentCount: comments.length,
+    activeCanonicalTournamentCount: v2Active.tournaments.length,
+    historicalCanonicalTournamentCount: v2History.tournaments.length,
     canonicalProjectionVersion: projectionVersion,
-    v1V2Equivalent: true
+    v1V2Equivalent: true,
+    legacyWorkbookRouteRegistered: true
   };
+}
+
+export function validateDiscoveryState({
+  legacyTournament,
+  v2Active,
+  v2History,
+  expectedActiveTournamentIds,
+  legacyTournamentYear
+}) {
+  const activeIds = v2Active.tournaments.map(tournamentId).sort();
+  requireCondition(
+    JSON.stringify(activeIds) === JSON.stringify(expectedActiveTournamentIds),
+    "Canonical active tournament discovery does not match the operator-declared set."
+  );
+  requireCondition(
+    !activeIds.includes(legacyTournament.id),
+    "The completed legacy tournament is incorrectly listed as active in v2."
+  );
+
+  const legacyHistory = v2History.tournaments.find(
+    (item) => tournamentId(item) === legacyTournament.id
+  );
+  requireCondition(
+    legacyHistory !== undefined,
+    "The completed legacy tournament is absent from v2 history."
+  );
+  requireCondition(
+    legacyTournament.year === legacyTournamentYear &&
+      legacyHistory.tournament?.year === legacyTournamentYear,
+    "The legacy migration does not represent the configured tournament year."
+  );
+  requireCondition(
+    ["completed", "archived"].includes(legacyHistory.tournament?.lifecycle),
+    "The legacy tournament has an invalid canonical historical lifecycle."
+  );
+}
+
+function tournamentId(item) {
+  const identifier = item?.tournament?.id;
+  requireCondition(
+    typeof identifier === "string" && identifier.length > 0,
+    "Canonical discovery contains a tournament without an identifier."
+  );
+  return identifier;
 }
 
 function requireV2Envelope(value, label) {

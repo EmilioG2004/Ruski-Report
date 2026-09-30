@@ -189,6 +189,75 @@ sudo journalctl --disk-usage
 Each container must use Docker's `journald` driver. The journal configuration
 must show persistent storage, a 256 MiB system cap, and a 30-day maximum age.
 
+## Phase 7 Release Image Custody
+
+`prepare-release-image.sh` stays in the checked-out repository because it must
+validate the exact checkout that supplies the Docker build context. Do not copy
+it into `/usr/local`, run it from another checkout, or modify the candidate
+after preparation.
+
+Before it builds anything, the helper requires an exact full commit or tag,
+requires that value to resolve to `HEAD`, and rejects tracked, untracked, or
+submodule changes. It reads the currently running API container's immutable
+image ID, gives that image a full-ID rollback tag, builds the candidate once,
+and labels it with the candidate commit. Its mode-0600 state file contains only
+privacy-safe release metadata:
+
+- candidate source reference and full commit;
+- commit-specific local candidate image reference and immutable image ID;
+- full-ID rollback image reference and immutable image ID;
+- preparation timestamp and state schema version.
+
+The state deliberately excludes environment values, credentials, database
+addresses, source paths, container names, and application data. Record the
+sanitized `prepare` or `verify` output in qualification evidence, not the state
+file's host path or contents.
+
+Preparation and verification are fail-closed:
+
+```bash
+cd /opt/ruski-report/source
+candidate_ref=EXACT_TAG_OR_FULL_COMMIT
+candidate_commit=$(git rev-parse "${candidate_ref}^{commit}")
+install -d -m 0700 /opt/ruski-report/release-images
+release_state=/opt/ruski-report/release-images/${candidate_commit}.env
+deploy/raspberry-pi/operations/prepare-release-image.sh prepare \
+  "$candidate_ref" "$release_state"
+deploy/raspberry-pi/operations/prepare-release-image.sh verify "$release_state"
+```
+
+Treat the state file as write-once release evidence for that attempt. If it
+already exists, `prepare` refuses to rebuild. Use `verify`; if verification fails,
+record a blocker and investigate rather than retagging or overwriting the
+file. Never run `docker image prune`, remove either recorded tag, or rebuild
+the candidate tag before the release decision and observation window end.
+
+Use `release-ref` to select the candidate for both the newly restored isolated
+database and production. Every Compose `up` in those workflows must include
+`--no-build`; `pull_policy: never` also prevents Compose from substituting a
+registry image. Verify the rehearsal and production API containers against the
+state after they start:
+
+```bash
+release_image=$(deploy/raspberry-pi/operations/prepare-release-image.sh \
+  release-ref "$release_state")
+export RUSKI_API_IMAGE="$release_image"
+deploy/raspberry-pi/operations/prepare-release-image.sh verify-container \
+  release "$release_state" API_CONTAINER
+```
+
+`restore-rehearsal.sh` remains the backup-integrity smoke test and intentionally
+uses the running deployment image. It is not the Phase 7 production-shaped
+candidate environment. That separate environment must import a fresh snapshot
+into a newly created database, export the verified `RUSKI_API_IMAGE`, and keep
+its data path and Compose project distinct from production.
+
+For rollback, `rollback-ref` verifies both image IDs and prints only the safe
+local reference. Keep the candidate checkout and state file in place until
+that check is complete. A database restore remains mandatory for the first
+canonical migration or any release whose backward compatibility has not been
+proven.
+
 ## Availability Alert Response
 
 An AWS email alarm means the external monitor could not complete public HTTPS,

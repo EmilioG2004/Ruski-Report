@@ -61,6 +61,18 @@ DATABASE_URL="$RESTORED_DATABASE_URL" npm run db:backfill:legacy -- \
 `--apply` is permitted only on the isolated rehearsal copy until the production
 window is explicitly authorized.
 
+Capture the four JSON summaries in protected temporary files and verify the
+sequence without exposing database contents or connection details:
+
+```bash
+node scripts/release-qualification/backfill-sequence.mjs \
+  FIRST_DRY_RUN.json SECOND_DRY_RUN.json APPLY.json SECOND_APPLY.json
+```
+
+The verifier requires identical source, plan, mapping, and count evidence; an
+`applied` then `no_op` outcome; stable protected-row evidence; and the recorded
+event-derived tournament-statistic correction summary.
+
 ## Production Window
 
 1. Announce the maintenance window and prevent administrator setup, workbook,
@@ -84,7 +96,11 @@ window is explicitly authorized.
 9. Verify health, then run the read-only v1/v2/realtime hook. Confirm the old
    workbook endpoint remains registered, 2026 remains readable, 2026 is not
    incorrectly listed as active in v2, and all currently active tournaments
-   appear on v2 discovery.
+   appear on v2 discovery. Before the hook, set
+   `RUSKI_QUALIFICATION_EXPECTED_ACTIVE_TOURNAMENT_IDS` to the exact
+   comma-separated public IDs expected to be active, or to `none` when no
+   canonical tournament should be active. The hook fails closed when this
+   declaration is absent or differs from discovery.
 10. Run bounded administrator canaries through the approved flows. Export the
     corresponding application-log window and pass the privacy audit. Delete
     temporary canary files securely after evidence is recorded.

@@ -50,6 +50,30 @@ export function loadQualificationConfiguration(environment = process.env) {
   };
 }
 
+export function loadExpectedActiveTournamentIds(environment = process.env) {
+  const value = environment.RUSKI_QUALIFICATION_EXPECTED_ACTIVE_TOURNAMENT_IDS;
+  if (value === undefined || value.trim().length === 0) {
+    throw new Error(
+      "RUSKI_QUALIFICATION_EXPECTED_ACTIVE_TOURNAMENT_IDS must be 'none' " +
+        "or an explicit comma-separated list."
+    );
+  }
+  if (value.trim().toLowerCase() === "none") return [];
+
+  const identifiers = value.split(",").map((identifier) => identifier.trim());
+  if (
+    identifiers.some((identifier) =>
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(identifier)
+    ) ||
+    new Set(identifiers).size !== identifiers.length
+  ) {
+    throw new Error(
+      "RUSKI_QUALIFICATION_EXPECTED_ACTIVE_TOURNAMENT_IDS is invalid."
+    );
+  }
+  return identifiers.sort((left, right) => left.localeCompare(right));
+}
+
 function readHttpsUrl(value, name) {
   const url = new URL(value);
   if (url.protocol !== "https:") {

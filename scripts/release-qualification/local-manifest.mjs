@@ -58,12 +58,15 @@ export const LOCAL_QUALIFICATION_GATES = Object.freeze([
     args: [
       "--test",
       "scripts/release-qualification/candidate-identity.test.mjs",
+      "scripts/release-qualification/backfill-sequence.test.mjs",
       "scripts/release-qualification/configuration.test.mjs",
       "scripts/release-qualification/database-guard.test.mjs",
       "scripts/release-qualification/evidence.test.mjs",
       "scripts/release-qualification/log-audit.test.mjs",
       "scripts/release-qualification/public-equivalence.test.mjs",
+      "scripts/release-qualification/production-read.test.mjs",
       "scripts/release-qualification/production-write.test.mjs",
+      "deploy/raspberry-pi/operations/prepare-release-image.test.mjs",
       "backend/scripts/realtime-event-observer.test.mjs"
     ]
   },
