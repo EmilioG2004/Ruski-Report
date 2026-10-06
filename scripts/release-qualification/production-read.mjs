@@ -8,6 +8,7 @@ import { verifyRealtimeConnections } from
 import { fileURLToPath } from "node:url";
 import {
   loadExpectedActiveTournamentIds,
+  loadExpectedTournamentStatisticCorrections,
   loadQualificationConfiguration
 } from "./configuration.mjs";
 import {
@@ -19,6 +20,8 @@ import { comparePublicContracts } from "./public-equivalence.mjs";
 export async function runProductionReadQualification(environment = process.env) {
   const configuration = loadQualificationConfiguration(environment);
   const expectedActiveTournamentIds = loadExpectedActiveTournamentIds(environment);
+  const expectedTournamentStatisticCorrections =
+    loadExpectedTournamentStatisticCorrections(environment);
   const client = new QualificationHttpClient(
     configuration.apiBaseUrl,
     configuration.requestTimeoutMilliseconds
@@ -129,7 +132,8 @@ export async function runProductionReadQualification(environment = process.env) 
     legacyMatchDetails,
     canonicalTournament: v2Tournament.tournament,
     canonicalMatches: v2Matches.matches,
-    canonicalMatchDetails: v2MatchEnvelopes.map((envelope) => envelope.match)
+    canonicalMatchDetails: v2MatchEnvelopes.map((envelope) => envelope.match),
+    expectedTournamentStatisticCorrections
   });
   requireCondition(
     equivalence.equivalent,

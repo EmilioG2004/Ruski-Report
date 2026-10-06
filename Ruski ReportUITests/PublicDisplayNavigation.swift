@@ -51,4 +51,22 @@ extension PreviewAppUITestCase {
         }
         assertExists(element)
     }
+
+    @MainActor
+    func returnToPublicTournament(in app: XCUIApplication) {
+        let tournament = app.descendants(matching: .any)[
+            "tournament.public.detail"
+        ]
+        let back = app.navigationBars["Game"].buttons.firstMatch
+
+        for _ in 0..<3 where !tournament.exists {
+            if back.isHittable {
+                back.tap()
+            }
+            if tournament.waitForExistence(timeout: 2) {
+                return
+            }
+        }
+        assertExists(tournament)
+    }
 }

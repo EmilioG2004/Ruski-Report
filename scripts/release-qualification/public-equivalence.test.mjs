@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { comparePublicContracts } from "./public-equivalence.mjs";
+import {
+  comparePublicContracts,
+  summarizeTournamentStatisticCorrections
+} from "./public-equivalence.mjs";
 
 test("accepts material v1 and v2 public equivalence", () => {
   assert.deepEqual(comparePublicContracts(fixture()), {
@@ -36,6 +39,65 @@ test("compares standings statistics events scorecards and box scores", () => {
     { code: "tournament_statistics" },
     { code: "match_details" }
   ]);
+});
+
+test("accepts canonical additive data and legacy unavailable fields", () => {
+  const input = fixture();
+  input.legacyTournament.teams.forEach((team) => delete team.seed);
+  delete input.legacyTournament.standings[0].metricValues.makes;
+  delete input.legacyTournament.standings[0].metricValues.attempts;
+  input.legacyMatches[0].score.participants = [];
+  input.canonicalMatches[0].scoreAvailability = "unrecorded";
+  input.canonicalMatches[0].participants.forEach((participant) => {
+    participant.score = null;
+  });
+  input.legacyMatchDetails[0].events[0].playerId = undefined;
+  input.legacyMatchDetails[0].scorecard.rows[0].playerId = undefined;
+  input.legacyMatchDetails[0].scorecard.rows.push({
+    sequence: 2,
+    teamId: "team-red",
+    playerId: "red-1",
+    eventIds: []
+  });
+  input.canonicalMatchDetails[0].boxScore.rows.push({
+    subject: { id: "blue-1", type: "player" },
+    values: { makes: 0 }
+  });
+  input.legacyTournament.bracket.rounds[0].matches[0].slots[0].source = {
+    type: "match-winner",
+    sourceMatchId: "bracket-source"
+  };
+  input.canonicalTournament.bracket.rounds[0].matches[0].slots[0] = {
+    source: "match_winner",
+    sourceBracketMatchId: "bracket-source",
+    team: { id: "team-red" },
+    seed: 1
+  };
+
+  assert.deepEqual(comparePublicContracts(input), {
+    equivalent: true,
+    mismatches: []
+  });
+});
+
+test("accepts only the exact recorded tournament-statistic correction set", () => {
+  const input = fixture();
+  input.canonicalTournament.statistics[0].values.makes = 8;
+  const correction = summarizeTournamentStatisticCorrections(
+    input.legacyTournament.statistics,
+    input.canonicalTournament.statistics
+  );
+
+  assert.deepEqual(comparePublicContracts(input).mismatches, [
+    { code: "tournament_statistics" }
+  ]);
+  assert.deepEqual(comparePublicContracts({
+    ...input,
+    expectedTournamentStatisticCorrections: correction
+  }), {
+    equivalent: true,
+    mismatches: []
+  });
 });
 
 function fixture() {
@@ -99,6 +161,7 @@ function fixture() {
       }],
       statistics: [{
         scope: "season",
+        subjectType: "team",
         rows: [{
           subject: { teamId: "team-red" },
           values: { makes: 7 }
@@ -158,7 +221,7 @@ function fixture() {
       }],
       statistics: [{
         scope: "tournament",
-        stage: "pod_play",
+        stage: null,
         subject: { id: "team-red" },
         values: { makes: 7 }
       }],
@@ -195,6 +258,7 @@ function fixture() {
         { teamId: "team-blue", playerIds: ["blue-1"] }
       ],
       events: [{
+        id: "event-1",
         sequence: 1,
         type: "make",
         teamId: "team-red",
@@ -202,12 +266,17 @@ function fixture() {
       }],
       boxScore: {
         rows: [{
-          subject: { teamId: "team-red" },
+          subject: { type: "team", teamId: "team-red" },
           stats: { makes: 7 }
         }]
       },
       scorecard: {
-        rows: [{ sequence: 1, teamId: "team-red", playerId: "red-1" }]
+        rows: [{
+          sequence: 1,
+          teamId: "team-red",
+          playerId: "red-1",
+          eventIds: ["event-1"]
+        }]
       }
     }],
     canonicalMatchDetails: [{
@@ -217,20 +286,27 @@ function fixture() {
         { team: { id: "team-red" }, players: [{ id: "red-1" }] }
       ],
       events: [{
+        id: "event-1",
         sequence: 1,
         type: "shot_attempt",
         teamId: "team-red",
         playerId: "red-1",
-        details: { outcome: "made" }
+        details: { outcome: "make" }
       }],
       boxScore: {
         rows: [{
-          subject: { id: "team-red" },
+          subject: { id: "team-red", type: "team" },
+          teamId: "team-red",
           values: { makes: 7 }
         }]
       },
       scorecard: {
-        rows: [{ sequence: 1, teamId: "team-red", playerId: "red-1" }]
+        rows: [{
+          id: "event-1",
+          sequence: 1,
+          teamId: "team-red",
+          playerId: "red-1"
+        }]
       }
     }]
   };

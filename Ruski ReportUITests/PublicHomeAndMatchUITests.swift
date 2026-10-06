@@ -166,10 +166,7 @@ final class PublicHomeAndMatchUITests: PreviewAppUITestCase {
                 ]
             )
 
-            app.navigationBars["Game"].buttons.firstMatch.tap()
-            assertExists(
-                app.descendants(matching: .any)["tournament.public.detail"]
-            )
+            returnToPublicTournament(in: app)
         }
     }
 
