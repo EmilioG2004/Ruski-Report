@@ -5,33 +5,58 @@ release-candidate run and link any blocker to its GitHub issue.
 
 ## Phase 7 Canonical Tournament Engine · Current Candidate
 
-The 2026-08-18 evidence below qualified the legacy release. It does **not**
-qualify the canonical tournament engine, legacy backfill, v1/v2 equivalence, or
-the Phase 7 rollout. Until current-candidate evidence replaces each `Blocked`
-entry, `releaseReady` remains false.
+The current application candidate is
+`c4e84ce960617684eee18152b0a999530ea5a5c0`. The evidence below qualifies
+several pre-window gates but does **not** authorize production migration,
+deployment, TestFlight upload, or App Store submission. `releaseReady` remains
+false while any required entry is blocked.
 
 | Gate | Result | Required current-candidate evidence |
 | --- | --- | --- |
-| Local two-database manifest | Pending | Deterministic sanitized summary; exact candidate commit, clean worktree, Node/Git versions, zero failed local gates, and distinct disposable clean/populated databases. |
-| Production-shaped restore | Blocked | Fresh backup digest plus successful isolated restore and protected-row baseline. Requires authorized production backup access. |
+| Local two-database manifest | Pass | Exact-candidate clean run: 11 gates passed, 0 failed, and the 8 environment/window gates remained blocked. Distinct disposable clean and populated PostgreSQL databases were used. |
+| Production-shaped restore | Pass | Fresh encrypted snapshot restored into a temporary PostgreSQL 17.10 container; dump digest and protected-row evidence were recorded. The live database was not accessed by the candidate. |
 | Restored end-to-end lifecycle | Blocked | One database-backed setup-to-champion execution on the isolated restored environment, including correction, standings, seeds, bracket, projection, and realtime continuity. Pure contract traces do not satisfy this gate. |
-| Migration/backfill rehearsal | Blocked | Deterministic dry run, atomic apply, second-run no-op, failure injection, protected legacy-row stability, and deep semantic equivalence on the fresh restore. |
+| Migration/backfill rehearsal | Blocked (partial pass) | Exact-candidate dry-run/dry-run/apply/no-op, protected legacy-row stability, and deep equivalence passed on the fresh restore. Restored-environment failure injection remains required. |
 | Production migration/apply | Blocked | Explicit production authorization, maintenance window, successful migration/backfill evidence, and rollback owner. |
-| V1/v2 public equivalence | Blocked | Version-pinned legacy/v2 read hook and deep restored-database comparison from the same candidate. |
+| V1/v2 public equivalence | Pass | The exact candidate served the restored database through an isolated API; all 59 legacy and 59 canonical matches passed the material comparator at projection version 1. |
 | Production realtime | Blocked | Tournament and changed-match events pinned to the activated projection plus reconnect evidence. |
 | Production privacy logs | Blocked | Bounded current-candidate structured/unstructured window with qualification canaries absent. |
-| Compact iPhone matrix | Blocked | Current-candidate unit/UI `.xcresult`, light/dark/accessibility, lifecycle/status/content/failure/recovery states. |
-| Large iPhone matrix | Blocked | Current-candidate unit/UI `.xcresult`, light/dark/accessibility, lifecycle/status/content/failure/recovery states. |
-| Physical iPhone Release pass | Blocked (partial evidence recorded below) | Current-candidate guest/admin-approved flows, network failure/recovery, old-client compatibility, and no crash. |
-| Rollback rehearsal | Blocked | Timed restore of the pre-change backup and prior-application verification on an isolated environment. |
+| Compact iPhone matrix | Pass | iPhone 17e / iOS 26.5: 139 unit and 30 distinct Release UI tests passed with zero failures. |
+| Large iPhone matrix | Pass | iPhone 17 Pro Max / iOS 26.5: 139 unit and 30 distinct Release UI tests passed with zero failures. |
+| Physical iPhone Release pass | Blocked (partial pass) | All 30 distinct Release UI scenarios passed on an iPhone 16 Plus / iOS 26.3.1, with one history-card timing failure passing on isolated retry. Production old-client and rollout-window checks remain required. |
+| Rollback rehearsal | Blocked (partial pass) | A pre-change artifact restored and verified in 17 seconds, but exact-candidate rollback plus prior-application verification remains required. |
 
 Do not change these items to `Pass` based on code review, a clean synthetic
 database, or the earlier release evidence. Attach only privacy-safe counts,
 digests, versions, status codes, and artifact identifiers.
 
-## 2026-10-05 · Current-Candidate Apple And Physical-Device Evidence
+## 2026-10-05 · Exact-Candidate Qualification Evidence
 
-This is partial Phase 7 evidence for candidate `60cd9f1e1bab251518e35fd83bb30d091f05328b`.
+This section records observed evidence for
+`c4e84ce960617684eee18152b0a999530ea5a5c0`. Evidence artifacts are retained
+outside Git. No candidate image was deployed and no build was uploaded.
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Candidate identity | Pass | The worktree was clean at qualification start and the local manifest, Pi source tree, image revision label, and evidence all resolved to the full candidate SHA. |
+| Local two-database gate | Pass | 11 passed, 0 failed, 8 blocked. Backend lint/build and runtime dependency audit passed; 554 backend unit tests, 139 lifecycle tests, projection/realtime transaction coverage, PostgreSQL integration coverage, 44 qualification-tool tests, iOS Release validation, and policy-site validation passed. |
+| Runtime dependency posture | Pass | The exact ARM64 runtime image audited 230 production packages with 0 vulnerabilities. |
+| Candidate image | Pass | `sha256:d3ed504dba98890a8f7a94e0530ff46688695bc4416ff0f4bed348d6ffa9bdd7`, carrying the exact candidate revision label. |
+| Isolated production restore | Pass | Encrypted snapshot `9922d4763b978c3e2bea7aa2f826b23994581e1a7dd7672f359dc978b8e1a583` restored successfully. Database dump SHA-256: `55113c2691a6c6aa6747625859f5e4c96792903283b4eee08b7b02de4bfce4ea`; PostgreSQL 17.10; 13 migrations. |
+| Deterministic legacy backfill | Pass, except failure-injection subgate | Two dry runs matched, one apply succeeded, and the second apply was a deterministic no-op. The protected legacy digest remained `b07fe794f04e9532930df75703b16ef0c590ae7c0cf00dd4ebb77d5fb7a374d9`. Restored-environment failure injection is still blocked. |
+| Backfill identity and counts | Pass | Source `808caaaefe71a88d87890976a1c3c72b1c4db8496d19fe330670a4223e8a8bec`, plan `c6a37ac61b4bba97641a3d451f1e8acfa06a5f08384b08e817a5ac7497602fcc`, mapping `947ce8e10ea88d842ddaf571f0b412b715705575677dbf32a7735b1e1c0e81ea`; 1 tournament, 32 teams, 65 players and memberships, 8 pods, 59 matches and revisions, 118 participants, 4,163 scoring events, 4,156 shot attempts, 32 standings, 16 seeds, 15 bracket matches, 7,390 statistic values, one projection version, and 59 projected match payloads. |
+| Event-derived statistic correction checkpoint | Pass | Policy `canonical_match_events_v1`; 55 bounded corrections; deterministic digest `ba6170004615be21746526cab0e547bf06097292046231594da8274cc0dcea6e`. |
+| Restored v1/v2 public equivalence | Pass | 59 legacy and 59 canonical matches, one historical tournament, projection version 1, and the protected legacy workbook route remained registered behind HTTP 401. |
+| Compact simulator | Pass | `simulator-c4e84ce-unit-debug.xcresult`: 139/139. `simulator-c4e84ce-compact-ui-release.xcresult`: 30/30 distinct UI tests, including light/dark, accessibility, lifecycle/status/content, offline, delayed-failure, retry, and recovery states. |
+| Large simulator | Pass | `simulator-c4e84ce-large-unit-debug.xcresult`: 139/139. `simulator-c4e84ce-large-ui-release.xcresult`: 30/30 distinct UI tests across the same state matrix. |
+| Physical Release UI | Pass with isolated environmental retry | `physical-c4e84ce-ui-release.xcresult`: 29/30 distinct tests passed; one history-card wait failed. `physical-c4e84ce-history-retry.xcresult`: that exact test passed alone. All 30 scenarios therefore passed on the exact candidate without a crash. |
+| Exact signed Release archive | Partial pass | Version 1.0 (1), bundle `com.emiliogarcia.ruskireport`, archived and signed locally. App Store export is blocked because the Apple Distribution certificate/private-key identity is no longer present in the login keychain; the archive was not uploaded. |
+| Live production isolation | Pass | Production remained on `9f9c0d298d51e2ef8a982ac6c20777b639a302ce`; the rehearsal used temporary containers and did not stop or mutate the live API or PostgreSQL database. |
+
+## 2026-10-05 · Earlier Apple And Physical-Device Evidence
+
+This is historical partial Phase 7 evidence for candidate
+`60cd9f1e1bab251518e35fd83bb30d091f05328b`.
 It does not replace the blocked Release-device, simulator, restored-database,
 or production gates above.
 
@@ -58,9 +83,9 @@ The live application remained on commit
 | Production host baseline | Pass | ARM64 Pi, Docker active/enabled, zero failed systemd units, Compose configuration valid, and API/PostgreSQL/cloudflared containers healthy. The API remained bound to loopback and PostgreSQL had no host-published port. |
 | Production database baseline | Pass | PostgreSQL 17.10 with migrations 1–6. Privacy-safe cardinalities: 1 tournament, 7 snapshot versions, 398 matches, 224 teams, 448 players, 224 standings, 11 upload reports, 0 comments, and 0 user accounts. |
 | Public baseline | Pass | HTTPS API/database health passed; WSS initial connection and reconnection passed. |
-| Encrypted backup freshness | Pass | Snapshot `0fc4c3405fbe3417b5b9eec540ccbc51e913e49fb1d263d6f151be1647a31a39` completed at 2026-10-05 21:01:47 ET. The hourly backup and weekly repository-integrity jobs both reported success. |
+| Encrypted backup freshness | Pass | Snapshot `9922d4763b978c3e2bea7aa2f826b23994581e1a7dd7672f359dc978b8e1a583` completed at 2026-10-05 23:04:37 ET. The hourly backup and weekly repository-integrity jobs both reported success. |
 | Existing-artifact clean restore | Pass (partial Phase 7 evidence) | The newest snapshot restored into isolated temporary PostgreSQL/API containers and completed its read verification in 17 seconds. The live containers and database were not stopped or modified. This used the deployed pre-Phase-7 artifact, so candidate migration/backfill/equivalence and rollback gates remain blocked. |
-| Candidate container preflight | Previous candidate blocked; replacement prepared | Image `sha256:2610cc1fdf12760dd9759fd30c6ea8e53128bc98c083b22494d7394ecdedf7de` was built from `60cd9f1e1bab251518e35fd83bb30d091f05328b` but is quarantined after the current production audit identified critical advisory `GHSA-jqcg-44mw-7w3h` in transitive `proxy-addr` 2.0.7. The replacement lockfile uses 2.0.8; production audit, lint, build, and 17 focused proxy/security tests pass. The replacement commit and artifact require exact-candidate requalification before deployment. |
+| Candidate container preflight | Pass | Exact-candidate image `sha256:d3ed504dba98890a8f7a94e0530ff46688695bc4416ff0f4bed348d6ffa9bdd7` passed the restored migration/backfill/equivalence rehearsal. Its production runtime audited 230 packages with 0 vulnerabilities. Earlier candidate images remain quarantined and no candidate was deployed. |
 | Persistent storage readiness | Blocked for a live tournament | PostgreSQL remains on the 128 GB microSD filesystem (103 GB free). The deployment runbook requires moving persistent PostgreSQL storage to a USB 3 SSD before a live tournament. |
 
 ## 2026-08-18 · Production And Simulator Matrix
