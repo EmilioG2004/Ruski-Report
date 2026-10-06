@@ -33,14 +33,18 @@ available through `RUSKI_PRIVACY_POLICY_URL`, `RUSKI_SUPPORT_URL`, and
       missing-icon, entitlement, or platform warnings.
 - [x] Attempt automatic development and App Store provisioning and record the
       Apple account prerequisites reported on July 28, 2026.
-- [ ] Enroll the current Apple account in the Apple Developer Program or select
+- [x] Enroll the current Apple account in the Apple Developer Program or select
       an enrolled team with App Store Connect access.
-- [ ] Complete any required Apple Developer and App Store Connect agreements.
-- [ ] Register `com.emiliogarcia.ruskireport` with the Apple Developer account
+- [x] Complete the agreements required for the initial free, no-IAP, US-only
+      release. The Free Apps Agreement is active through August 26, 2027. The
+      Paid Apps Agreement remains `New` and EU Digital Services Act trader
+      status remains incomplete; both are deferred while monetization and EU
+      availability remain out of scope. Reopen this gate before either changes.
+- [x] Register `com.emiliogarcia.ruskireport` with the Apple Developer account
       and create or download its provisioning profile.
-- [ ] Register an iPhone with the development team before validating a signed
+- [x] Register an iPhone with the development team before validating a signed
       development-device build.
-- [ ] Produce and validate a signed distribution archive.
+- [x] Produce and validate a signed distribution archive.
 
 The detailed contract and local commands are in
 [`docs/ios-release-configuration.md`](../ios-release-configuration.md).

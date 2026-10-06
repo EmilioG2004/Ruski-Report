@@ -22,12 +22,46 @@ entry, `releaseReady` remains false.
 | Production privacy logs | Blocked | Bounded current-candidate structured/unstructured window with qualification canaries absent. |
 | Compact iPhone matrix | Blocked | Current-candidate unit/UI `.xcresult`, light/dark/accessibility, lifecycle/status/content/failure/recovery states. |
 | Large iPhone matrix | Blocked | Current-candidate unit/UI `.xcresult`, light/dark/accessibility, lifecycle/status/content/failure/recovery states. |
-| Physical iPhone Release pass | Blocked | Current-candidate guest/admin-approved flows, network failure/recovery, old-client compatibility, and no crash. |
+| Physical iPhone Release pass | Blocked (partial evidence recorded below) | Current-candidate guest/admin-approved flows, network failure/recovery, old-client compatibility, and no crash. |
 | Rollback rehearsal | Blocked | Timed restore of the pre-change backup and prior-application verification on an isolated environment. |
 
 Do not change these items to `Pass` based on code review, a clean synthetic
 database, or the earlier release evidence. Attach only privacy-safe counts,
 digests, versions, status codes, and artifact identifiers.
+
+## 2026-10-05 · Current-Candidate Apple And Physical-Device Evidence
+
+This is partial Phase 7 evidence for candidate `60cd9f1e1bab251518e35fd83bb30d091f05328b`.
+It does not replace the blocked Release-device, simulator, restored-database,
+or production gates above.
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Apple development connection | Pass | The enrolled team became visible in Xcode; a registered iPhone 16 Plus on iOS 26.3.1 (a) connected over USB with Developer Mode and developer disk-image services enabled. |
+| Signed development build | Pass | Xcode provisioned, installed, and launched the current candidate on the registered phone. |
+| Signed distribution archive | Pass | Version 1.0 (1), bundle `com.emiliogarcia.ruskireport`, Release API `https://api.ruskireport.com/api`, Apple Distribution signing, App Store provisioning, and `get-task-allow=false` were verified. |
+| Exported IPA digest | Pass | SHA-256 `093cb6d2d30a2677a813ccbe7f23ec67bfdb8f78d865fb17cb63349ad9e578b7`; the export was not uploaded. |
+| Physical preview smoke | Pass | `Smoke.xcresult`: one deterministic bundled-preview home-to-match UI test passed. |
+| Physical preview matrix | Pass with isolated environmental retry | `FullPreview.xcresult`: 28 of 29 tests passed; one test was interrupted by an iOS notification banner. `AccountCancellationRetry.xcresult`: the interrupted test passed alone. All 29 deterministic preview scenarios therefore passed on the physical phone without production traffic. |
+| Physical Release preview matrix | Pass | `physical-60cd9f1-preview-ui-release.xcresult`: all 29 deterministic bundled-preview UI tests passed under the Release configuration with zero failures in 500.316 seconds. The ordinary launch test was deliberately excluded so the qualification run could not contact the production API. |
+| Physical iPhone Release gate | Blocked | The current candidate now has a clean physical Release preview matrix. Release-endpoint guest/admin-approved flows, network failure/recovery, and old-client compatibility remain required before the complete gate can pass. |
+
+## 2026-10-05 · Homelab Inspection And Pre-Window Evidence
+
+This inspection did not deploy the candidate or alter the production database.
+The live application remained on commit
+`9f9c0d298d51e2ef8a982ac6c20777b639a302ce` throughout.
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| WireGuard and SSH management path | Pass | The recovered `Emi Mac` tunnel connected, the WireGuard gateway and Pi LAN path were reachable, and SSH connected over the private route. |
+| Production host baseline | Pass | ARM64 Pi, Docker active/enabled, zero failed systemd units, Compose configuration valid, and API/PostgreSQL/cloudflared containers healthy. The API remained bound to loopback and PostgreSQL had no host-published port. |
+| Production database baseline | Pass | PostgreSQL 17.10 with migrations 1–6. Privacy-safe cardinalities: 1 tournament, 7 snapshot versions, 398 matches, 224 teams, 448 players, 224 standings, 11 upload reports, 0 comments, and 0 user accounts. |
+| Public baseline | Pass | HTTPS API/database health passed; WSS initial connection and reconnection passed. |
+| Encrypted backup freshness | Pass | Snapshot `0fc4c3405fbe3417b5b9eec540ccbc51e913e49fb1d263d6f151be1647a31a39` completed at 2026-10-05 21:01:47 ET. The hourly backup and weekly repository-integrity jobs both reported success. |
+| Existing-artifact clean restore | Pass (partial Phase 7 evidence) | The newest snapshot restored into isolated temporary PostgreSQL/API containers and completed its read verification in 17 seconds. The live containers and database were not stopped or modified. This used the deployed pre-Phase-7 artifact, so candidate migration/backfill/equivalence and rollback gates remain blocked. |
+| Candidate container preflight | Previous candidate blocked; replacement prepared | Image `sha256:2610cc1fdf12760dd9759fd30c6ea8e53128bc98c083b22494d7394ecdedf7de` was built from `60cd9f1e1bab251518e35fd83bb30d091f05328b` but is quarantined after the current production audit identified critical advisory `GHSA-jqcg-44mw-7w3h` in transitive `proxy-addr` 2.0.7. The replacement lockfile uses 2.0.8; production audit, lint, build, and 17 focused proxy/security tests pass. The replacement commit and artifact require exact-candidate requalification before deployment. |
+| Persistent storage readiness | Blocked for a live tournament | PostgreSQL remains on the 128 GB microSD filesystem (103 GB free). The deployment runbook requires moving persistent PostgreSQL storage to a USB 3 SSD before a live tournament. |
 
 ## 2026-08-18 · Production And Simulator Matrix
 
