@@ -453,6 +453,23 @@ qualification_administrator_id=$(docker exec "${database_container}" psql \
   --username "${database_user}" --dbname "${database_name}" \
   --tuples-only --no-align --command \
   "SELECT id FROM admin_accounts WHERE status = 'active' ORDER BY id LIMIT 1")
+qualification_administrator_source=restored
+if [[ -z "${qualification_administrator_id}" ]]; then
+  qualification_administrator_id=$(python3 -c \
+    'import uuid; print(uuid.uuid4())')
+  qualification_administrator_login="phase7rehearsal${run_id}"
+  docker exec "${database_container}" psql --username "${database_user}" \
+    --dbname "${database_name}" --set ON_ERROR_STOP=1 --command \
+    "INSERT INTO admin_accounts (
+       id, login_name, normalized_login_name, display_name
+     ) VALUES (
+       '${qualification_administrator_id}'::uuid,
+       '${qualification_administrator_login}',
+       '${qualification_administrator_login}',
+       'Phase 7 Rehearsal'
+     )" >/dev/null
+  qualification_administrator_source=synthetic_disposable
+fi
 [[ "${qualification_administrator_id}" =~ ^[a-f0-9-]{36}$ ]] || \
   fail active_qualification_administrator_missing
 run_qualification_command_with \
@@ -553,6 +570,7 @@ export work_root candidate_commit candidate_image_id qualification_commit
 export qualification_image_id rollback_image_id snapshot_id snapshot_time
 export dump_digest postgres_image_id migration_count rollback_seconds
 export rollback_archive_digest
+export qualification_administrator_source
 python3 - "${temporary_evidence}" <<'PY'
 import json, os, sys
 root=os.environ["work_root"]
@@ -567,7 +585,7 @@ result={
   "qualification":{"commit":os.environ["qualification_commit"],"imageId":os.environ["qualification_image_id"]},
   "rollback":{"imageId":os.environ["rollback_image_id"],"archiveSha256":os.environ["rollback_archive_digest"],"restoreSeconds":int(os.environ["rollback_seconds"]),"checks":load("rollback.json"),"realtime":load("rollback-realtime.json")},
   "snapshot":{"id":os.environ["snapshot_id"],"time":os.environ["snapshot_time"],"dumpSha256":os.environ["dump_digest"]},
-  "database":{"postgresImageId":os.environ["postgres_image_id"],"migrationCount":int(os.environ["migration_count"])},
+  "database":{"postgresImageId":os.environ["postgres_image_id"],"migrationCount":int(os.environ["migration_count"]),"qualificationAdministratorSource":os.environ["qualification_administrator_source"]},
   "backfill":{"status":sequence["status"],"sourceSnapshotVersion":sequence["sourceSnapshotVersion"],"sourceDigest":sequence["sourceDigest"],"planDigest":sequence["planDigest"],"mappingDigest":sequence["mappingDigest"],"counts":sequence["counts"],"issueCodes":sequence["issueCodes"],"checkpointEvidence":sequence["checkpointEvidence"]},
   "failureInjections":[load(f"failure-{index}.json") for index in range(1,5)],
   "lifecycle":load("lifecycle.json"),

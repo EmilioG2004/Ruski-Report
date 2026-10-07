@@ -40,3 +40,9 @@ test("guards cleanup with per-run labels and emits allowlisted evidence", () => 
   assert.doesNotMatch(script, /docker (system|image|volume) prune/u);
   assert.doesNotMatch(script, /docker compose .* down/u);
 });
+
+test("creates an administrator only inside the disposable restored database", () => {
+  assert.match(script, /synthetic_disposable/u);
+  assert.match(script, /INSERT INTO admin_accounts/u);
+  assert.match(script, /qualificationAdministratorSource/u);
+});
