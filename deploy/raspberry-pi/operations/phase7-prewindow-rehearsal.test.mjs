@@ -12,6 +12,8 @@ test("uses a dedicated internal network and never joins a production network", (
   assert.doesNotMatch(script, /NetworkSettings\.Networks.*production_postgres/su);
   assert.doesNotMatch(script, /docker compose/u);
   assert.match(script, /--network "\$\{network_name\}"/u);
+  assert.match(script, /container_has_no_published_ports/u);
+  assert.match(script, /PortBindings/u);
 });
 
 test("pins candidate and rollback containers to immutable image IDs", () => {

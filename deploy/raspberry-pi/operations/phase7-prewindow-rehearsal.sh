@@ -235,6 +235,17 @@ stop_database() {
   unset database_url database_password loopback_database_url
 }
 
+container_has_no_published_ports() {
+  docker inspect "$1" | python3 -c '
+import json,sys
+container=json.load(sys.stdin)[0]
+bindings=container.get("HostConfig",{}).get("PortBindings") or {}
+ports=container.get("NetworkSettings",{}).get("Ports") or {}
+if bindings or any(value not in (None, []) for value in ports.values()):
+    raise SystemExit(1)
+'
+}
+
 start_database() {
   local role=$1
   database_container="phase7-db-${role}-${run_id}"
@@ -259,8 +270,8 @@ start_database() {
   [[ $(docker inspect --format \
     "{{with index .NetworkSettings.Networks \"${network_name}\"}}yes{{end}}" \
     "${database_container}") == yes ]] || fail isolated_postgres_network
-  [[ $(docker inspect --format '{{json .NetworkSettings.Ports}}' \
-    "${database_container}") == '{}' ]] || fail isolated_postgres_ports
+  container_has_no_published_ports "${database_container}" || \
+    fail isolated_postgres_ports
   for _ in {1..45}; do
     if docker exec "${database_container}" pg_isready \
       --username "${database_user}" --dbname "${database_name}" >/dev/null 2>&1; then
@@ -354,8 +365,7 @@ start_api() {
     "${image_id}" ]] || fail isolated_api_image
   [[ $(docker inspect --format '{{len .NetworkSettings.Networks}}' \
     "${api_container}") == 1 ]] || fail isolated_api_network_count
-  [[ $(docker inspect --format '{{json .NetworkSettings.Ports}}' \
-    "${api_container}") == '{}' ]] || fail isolated_api_ports
+  container_has_no_published_ports "${api_container}" || fail isolated_api_ports
   for _ in {1..45}; do
     if run_qualification_command node -e \
       'fetch(process.argv[1]).then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))' \
