@@ -69,6 +69,14 @@ const SAFE_PROGRESSION_DETAIL_CODES = new Map<string, string>([
     "workbook_generation_revision_stale"
   ],
   [
+    "Workbook operations require published tournament setup.",
+    "workbook_requires_published_setup"
+  ],
+  [
+    "Tournament changed after workbook source was read.",
+    "tournament_changed_after_workbook_source"
+  ],
+  [
     "This tournament already has a published bracket.",
     "bracket_already_published"
   ],
@@ -79,6 +87,34 @@ const SAFE_PROGRESSION_DETAIL_CODES = new Map<string, string>([
   [
     "The seed override changed after bracket preview was prepared.",
     "seed_override_changed_after_preview"
+  ],
+  [
+    "Canonical projection source changed while it was being captured.",
+    "canonical_projection_source_changed"
+  ],
+  [
+    "Active match revision pointers are not projection-coherent.",
+    "active_match_revision_pointer_incoherent"
+  ],
+  [
+    "Active tournament statistics do not reference an aggregate run.",
+    "active_tournament_statistics_incoherent"
+  ],
+  [
+    "Bracket resolution winner disagrees with the active match revision.",
+    "bracket_resolution_winner_incoherent"
+  ],
+  [
+    "The same canonical source is already the active public projection.",
+    "canonical_projection_source_already_active"
+  ],
+  [
+    "Projection could not be activated from its current state.",
+    "projection_activation_state_changed"
+  ],
+  [
+    "Tournament changed after the projection was prepared.",
+    "tournament_changed_after_projection_prepared"
   ]
 ]);
 
