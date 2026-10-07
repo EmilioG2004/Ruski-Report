@@ -971,7 +971,9 @@ function persistenceObservations(
   source: WorkbookGenerationSourceRecord
 ): WorkbookImportObservationInput[] {
   const sourceByIndex = new Map(scorecards.map((sheet) => [sheet.worksheetIndex, sheet]));
-  return preview.observations.map((observation) => {
+  return preview.observations.filter(
+    (observation) => !isPristineUnassignedTemplate(observation)
+  ).map((observation) => {
     const match = observation.matchId === undefined
       ? undefined
       : source.matches.find((item) => item.matchId === observation.matchId);
@@ -1034,6 +1036,16 @@ function persistenceObservations(
       })
     };
   });
+}
+
+function isPristineUnassignedTemplate(
+  observation: WorkbookSheetObservation
+): boolean {
+  return observation.decision === "unchanged" &&
+    observation.matchId === undefined &&
+    observation.binding === undefined &&
+    observation.fingerprint === undefined &&
+    observation.candidate === undefined;
 }
 
 function persistenceCandidate(

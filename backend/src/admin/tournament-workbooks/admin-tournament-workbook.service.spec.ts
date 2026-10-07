@@ -1,8 +1,10 @@
 import { AppError } from "../../errors";
 import { parseStableUuid } from "../../tournament-engine/domain";
 import {
+  CreateWorkbookImportPreviewInput,
   digestWorkbookParticipants,
   digestWorkbookValue,
+  GeneratedWorkbookArtifactRecord,
   PostgresWorkbookReconciliationRepository,
   StoreGeneratedWorkbookInput,
   WorkbookGenerationSourceRecord,
@@ -76,6 +78,81 @@ describe("AdminTournamentWorkbookService", () => {
     expect(response.downloadUrl).toBe(
       `/api/admin/tournaments/${TOURNAMENT_ID}/workbooks/${response.id}/download`
     );
+  });
+
+  it("omits the untouched blank template from persisted preview observations", async () => {
+    const source = generationSource();
+    let artifact: GeneratedWorkbookArtifactRecord | undefined;
+    let previewInput: CreateWorkbookImportPreviewInput | undefined;
+    const stopAfterCapture = new Error("captured preview input");
+    const repository = {
+      readGenerationSource: jest.fn().mockResolvedValue(source),
+      storeGeneratedWorkbook: jest.fn().mockImplementation(
+        (input: StoreGeneratedWorkbookInput) => {
+          artifact = {
+            workbookId: input.workbookId,
+            tournamentId: input.tournamentId,
+            generationRevision: input.generationRevision,
+            workbookSchemaVersion: input.workbookSchemaVersion,
+            generationKind: input.generationKind,
+            sourceTournamentRowVersion: input.sourceTournamentRowVersion,
+            sourceDigest: input.sourceDigest,
+            artifactDigest: input.artifactDigest,
+            artifactSizeBytes: input.artifact.byteLength,
+            artifact: input.artifact,
+            filename: input.filename,
+            generatedByAdminId: input.generatedByAdminId,
+            generatedAt: input.generatedAt,
+            sheets: input.sheets.map((sheet) => ({
+              ...sheet,
+              matchId: "matchId" in sheet ? sheet.matchId : null,
+              generatedMatchRowVersion: "generatedMatchRowVersion" in sheet
+                ? sheet.generatedMatchRowVersion
+                : null,
+              participantTeamIds: "participantTeamIds" in sheet
+                ? sheet.participantTeamIds
+                : null,
+              participantDigest: "participantDigest" in sheet
+                ? sheet.participantDigest
+                : null
+            }))
+          };
+          return Promise.resolve({ created: true, workbook: artifact });
+        }
+      ),
+      findGeneratedWorkbookArtifact: jest.fn().mockImplementation(
+        () => Promise.resolve(artifact)
+      ),
+      createImportPreview: jest.fn().mockImplementation(
+        (input: CreateWorkbookImportPreviewInput) => {
+          previewInput = input;
+          return Promise.reject(stopAfterCapture);
+        }
+      )
+    } as unknown as PostgresWorkbookReconciliationRepository;
+    const service = new AdminTournamentWorkbookService(repository);
+    const generation = await service.generate(
+      TOURNAMENT_ID,
+      { expectedTournamentRowVersion: 2 },
+      PRINCIPAL
+    );
+    if (artifact === undefined) throw new Error("Expected generated artifact.");
+
+    await expect(service.preview(TOURNAMENT_ID, {
+      buffer: artifact.artifact,
+      originalname: generation.filename,
+      mimetype: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      size: artifact.artifactSizeBytes
+    }, PRINCIPAL)).rejects.toBe(stopAfterCapture);
+
+    expect(previewInput).toBeDefined();
+    expect(previewInput?.observations).toHaveLength(1);
+    expect(previewInput?.observations[0]).toMatchObject({
+      observationKind: "present",
+      disposition: "unchanged",
+      assignmentSource: "stable_metadata",
+      matchId: source.matches[0]?.matchId
+    });
   });
 
   it("rejects stale generation and unsafe upload types before persistence", async () => {
