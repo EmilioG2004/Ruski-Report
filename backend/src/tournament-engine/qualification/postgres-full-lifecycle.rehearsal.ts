@@ -55,6 +55,32 @@ const PROTECTED_DATABASE_NAMES = new Set([
   "template1",
   "ruski_report"
 ]);
+const SAFE_PROGRESSION_DETAIL_CODES = new Map<string, string>([
+  [
+    "Tournament changed before progression could activate.",
+    "progression_version_changed_before_activation"
+  ],
+  [
+    "Tournament changed after progression was prepared.",
+    "progression_version_changed_after_preview"
+  ],
+  [
+    "Workbook generation revision is stale; regenerate from current source.",
+    "workbook_generation_revision_stale"
+  ],
+  [
+    "This tournament already has a published bracket.",
+    "bracket_already_published"
+  ],
+  [
+    "Effective seeds changed after bracket preview was prepared.",
+    "effective_seeds_changed_after_preview"
+  ],
+  [
+    "The seed override changed after bracket preview was prepared.",
+    "seed_override_changed_after_preview"
+  ]
+]);
 
 export interface PostgresFullLifecycleRehearsalInput {
   databaseUrl: string;
@@ -1120,6 +1146,12 @@ function safeErrorCode(error: unknown): string | undefined {
       isRecord(detail) && isSafeEvidenceCode(detail.code)
     );
     if (isRecord(detailCode) && typeof detailCode.code === "string") {
+      if (typeof detailCode.message === "string") {
+        const messageCode = SAFE_PROGRESSION_DETAIL_CODES.get(
+          detailCode.message
+        );
+        if (messageCode !== undefined) return messageCode;
+      }
       return detailCode.code.toLowerCase();
     }
   }
