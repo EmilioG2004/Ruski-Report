@@ -71,7 +71,10 @@ export const LOCAL_QUALIFICATION_GATES = Object.freeze([
       "scripts/release-qualification/public-equivalence.test.mjs",
       "scripts/release-qualification/production-read.test.mjs",
       "scripts/release-qualification/production-write.test.mjs",
+      "scripts/release-qualification/restored-database-guard.test.mjs",
+      "scripts/release-qualification/isolated-realtime-smoke.test.mjs",
       "deploy/raspberry-pi/operations/prepare-release-image.test.mjs",
+      "deploy/raspberry-pi/operations/phase7-prewindow-rehearsal.test.mjs",
       "backend/scripts/realtime-event-observer.test.mjs"
     ]
   },

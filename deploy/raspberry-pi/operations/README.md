@@ -232,6 +232,66 @@ record a blocker and investigate rather than retagging or overwriting the
 file. Never run `docker image prune`, remove either recorded tag, or rebuild
 the candidate tag before the release decision and observation window end.
 
+### Phase 7 Pre-window Rehearsal
+
+`phase7-prewindow-rehearsal.sh` closes the restored-database gates without
+joining a production Docker network or changing a production container. It
+requires the immutable release-image state, an exact full restic snapshot ID,
+the exact clean candidate checkout, and a separate clean qualification-tool
+checkout. The qualification checkout may be a later tooling-only commit; the
+application candidate and rollback artifacts still come exclusively from the
+verified release state.
+
+The script performs these operations sequentially:
+
+- a protected `docker image save` archive of the immutable rollback image and
+  its SHA-256 digest alongside the final evidence;
+- four independent fresh restores for the backfill, projection-materialization,
+  active-pointer, and before-commit fault/retry scenarios;
+- another fresh restore for deterministic migration, dry-run/apply/no-op
+  backfill, the persisted setup-to-champion lifecycle, v1/v2 equivalence, and
+  two internal Socket.IO connections;
+- a final fresh restore started with the immutable previous application image
+  for rollback health, legacy read, comments, and realtime verification.
+
+Every database uses a generated name, tmpfs storage, and a dedicated internal
+Docker network with no published ports. The script verifies the currently
+running application image is the recorded rollback image before it starts. It
+never stops or restarts production, starts Cloudflare, runs Compose `up` or
+`down`, prunes Docker objects, or connects a rehearsal container to a
+production network. Cleanup is label-checked and cleanup failure fails the
+gate.
+
+Run it from a root shell after selecting an exact approved snapshot. The
+evidence destination is write-once and must not already exist:
+
+```bash
+set -a
+source /opt/ruski-report/secrets/restic.env
+set +a
+
+release_state=/opt/ruski-report/release-images/FULL_CANDIDATE_COMMIT.env
+snapshot_id=FULL_64_CHARACTER_RESTIC_SNAPSHOT_ID
+candidate_source=/opt/ruski-report/qualification/FULL_CANDIDATE_COMMIT
+qualification_source=/opt/ruski-report/qualification/FULL_TOOLING_COMMIT
+evidence_file=/opt/ruski-report/qualification-evidence/FULL_TOOLING_COMMIT.json
+
+"$qualification_source/deploy/raspberry-pi/operations/phase7-prewindow-rehearsal.sh" \
+  "$release_state" \
+  "$snapshot_id" \
+  "$candidate_source" \
+  "$qualification_source" \
+  "$evidence_file"
+```
+
+Record only the generated JSON evidence and the final sanitized status line.
+Keep the adjacent mode-0600 rollback image archive until the release decision
+and observation window are complete; its digest is recorded in the evidence.
+Do not retain the temporary logs, database URL, generated password, container
+names, administrator identity, tournament identity, or restored data. A failed
+run requires a new evidence path and a new execution; do not weaken a guard or
+reuse a partially mutated rehearsal database.
+
 Use `release-ref` to select the candidate for both the newly restored isolated
 database and production. Every Compose `up` in those workflows must include
 `--no-build`; `pull_policy: never` also prevents Compose from substituting a
