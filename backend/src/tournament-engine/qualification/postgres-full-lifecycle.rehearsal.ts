@@ -1123,6 +1123,9 @@ function safeErrorCode(error: unknown): string | undefined {
       return detailCode.code.toLowerCase();
     }
   }
+  if (typeof error.code === "string" && /^[0-9A-Z]{5}$/u.test(error.code)) {
+    return `sqlstate_${error.code.toLowerCase()}`;
+  }
   return isSafeEvidenceCode(error.code)
     ? error.code.toLowerCase()
     : undefined;
