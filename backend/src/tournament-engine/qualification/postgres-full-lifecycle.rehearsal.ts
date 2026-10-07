@@ -1124,7 +1124,11 @@ function safeErrorCode(error: unknown): string | undefined {
     }
   }
   if (typeof error.code === "string" && /^[0-9A-Z]{5}$/u.test(error.code)) {
-    return `sqlstate_${error.code.toLowerCase()}`;
+    const constraint = typeof error.constraint === "string" &&
+      /^[a-z][a-z0-9_]{1,100}$/u.test(error.constraint)
+      ? `_${error.constraint}`
+      : "";
+    return `sqlstate_${error.code.toLowerCase()}${constraint}`;
   }
   return isSafeEvidenceCode(error.code)
     ? error.code.toLowerCase()
