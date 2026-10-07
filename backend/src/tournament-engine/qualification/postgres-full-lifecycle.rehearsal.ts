@@ -1105,8 +1105,31 @@ async function guarded<T>(
     return await operation();
   } catch (error) {
     if (error instanceof RehearsalFailure) throw error;
-    throw new RehearsalFailure(evidenceCode);
+    const safeCode = safeErrorCode(error);
+    throw new RehearsalFailure(
+      safeCode === undefined ? evidenceCode : `${evidenceCode}_${safeCode}`
+    );
   }
+}
+
+function safeErrorCode(error: unknown): string | undefined {
+  if (!isRecord(error)) return undefined;
+  const details = error.details;
+  if (Array.isArray(details)) {
+    const detailCode = details.find((detail) =>
+      isRecord(detail) && isSafeEvidenceCode(detail.code)
+    );
+    if (isRecord(detailCode) && typeof detailCode.code === "string") {
+      return detailCode.code.toLowerCase();
+    }
+  }
+  return isSafeEvidenceCode(error.code)
+    ? error.code.toLowerCase()
+    : undefined;
+}
+
+function isSafeEvidenceCode(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Z][A-Z0-9_]{1,80}$/u.test(value);
 }
 
 function requireCondition(
