@@ -6,29 +6,52 @@ release-candidate run and link any blocker to its GitHub issue.
 ## Phase 7 Canonical Tournament Engine · Current Candidate
 
 The current application candidate is
-`c4e84ce960617684eee18152b0a999530ea5a5c0`. The evidence below qualifies
+`e5fff7c7d2c42d9ab98df379eb6b0269b5ca43de`. The evidence below qualifies
 several pre-window gates but does **not** authorize production migration,
 deployment, TestFlight upload, or App Store submission. `releaseReady` remains
 false while any required entry is blocked.
 
 | Gate | Result | Required current-candidate evidence |
 | --- | --- | --- |
-| Local two-database manifest | Pass | Exact-candidate clean run: 11 gates passed, 0 failed, and the 8 environment/window gates remained blocked. Distinct disposable clean and populated PostgreSQL databases were used. |
-| Production-shaped restore | Pass | Fresh encrypted snapshot restored into a temporary PostgreSQL 17.10 container; dump digest and protected-row evidence were recorded. The live database was not accessed by the candidate. |
-| Restored end-to-end lifecycle | Blocked | One database-backed setup-to-champion execution on the isolated restored environment, including correction, standings, seeds, bracket, projection, and realtime continuity. Pure contract traces do not satisfy this gate. |
-| Migration/backfill rehearsal | Blocked (partial pass) | Exact-candidate dry-run/dry-run/apply/no-op, protected legacy-row stability, and deep equivalence passed on the fresh restore. Restored-environment failure injection remains required. |
+| Local two-database manifest | Pass | Exact-candidate clean run: 11 gates passed, 0 failed, and 8 external/window gates remained correctly blocked. Two distinct disposable local PostgreSQL 17.11 databases were used. |
+| Production-shaped restore | Pass | Encrypted snapshot `9cdf223684f6cf661f41e469fcc08e08589eff0d9fea51dd7460fb883b5a49e8` restored independently for the candidate lifecycle, rollback, and four failure scenarios on PostgreSQL 17.10. The live database was not accessed by the candidate. |
+| Restored end-to-end lifecycle | Pass | The isolated restored environment completed setup, beginning/middle/end workbook ingestion, missing-sheet preservation, correction, identical no-op, pod finalization, seeding, override, bracket publication, championship, historical discovery, projection versions 1–9, and version-pinned realtime. |
+| Migration/backfill rehearsal | Pass | Exact-candidate dry-run/dry-run/apply/no-op passed. Backfill-apply, projection-materialization, active-pointer, and before-commit faults each rolled back completely, cleaned their fault objects, retried successfully, and ended with a deterministic no-op. |
 | Production migration/apply | Blocked | Explicit production authorization, maintenance window, successful migration/backfill evidence, and rollback owner. |
 | V1/v2 public equivalence | Pass | The exact candidate served the restored database through an isolated API; all 59 legacy and 59 canonical matches passed the material comparator at projection version 1. |
-| Production realtime | Blocked | Tournament and changed-match events pinned to the activated projection plus reconnect evidence. |
+| Production realtime | Blocked (isolated pass) | The current candidate passed isolated API connection/reconnect and the lifecycle emitted 9 tournament plus 8 changed-match events pinned to projection versions. A bounded production-window check remains required. |
 | Production privacy logs | Blocked | Bounded current-candidate structured/unstructured window with qualification canaries absent. |
 | Compact iPhone matrix | Pass | iPhone 17e / iOS 26.5: 139 unit and 30 distinct Release UI tests passed with zero failures. |
 | Large iPhone matrix | Pass | iPhone 17 Pro Max / iOS 26.5: 139 unit and 30 distinct Release UI tests passed with zero failures. |
 | Physical iPhone Release pass | Blocked (partial pass) | All 30 distinct Release UI scenarios passed on an iPhone 16 Plus / iOS 26.3.1, with one history-card timing failure passing on isolated retry. Production old-client and rollout-window checks remain required. |
-| Rollback rehearsal | Blocked (partial pass) | A pre-change artifact restored and verified in 17 seconds, but exact-candidate rollback plus prior-application verification remains required. |
+| Rollback rehearsal | Pass | The current production image was archived before rehearsal, restored in 11 seconds, and passed health, 59-match legacy reads, comment reads, and realtime connection/reconnect against a fresh restored database. Archive digest and mode-0600 evidence were verified. |
 
 Do not change these items to `Pass` based on code review, a clean synthetic
 database, or the earlier release evidence. Attach only privacy-safe counts,
 digests, versions, status codes, and artifact identifiers.
+
+## 2026-10-07 · Restored Lifecycle, Failure Injection, And Rollback
+
+This section records the successful pre-window rehearsal for application
+candidate `e5fff7c7d2c42d9ab98df379eb6b0269b5ca43de`, using qualification tooling
+at `49e245cb7bce1974396fd31efb4e057f8fc15cba`. Evidence and the rollback image
+archive are retained outside Git with mode `0600`. No candidate was deployed,
+no production database write occurred, and no build was uploaded.
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Candidate identity | Pass | Immutable candidate image `sha256:19a257048e1a1887e102cf15fc51823af0651a2c9407c6d22fab37b3ef6ce73b` carried the exact application commit label. Qualification source and image were separately pinned to the full tooling commit. |
+| Local two-database manifest | Pass | Clean candidate worktree; 11 passed, 0 failed, 8 blocked. Lint, build, production dependency audit, 555 unit tests, 140 lifecycle tests, 9 projection/realtime transaction tests, 90 PostgreSQL integration tests, 63 qualification-tool tests, iOS Release configuration, and the four-page policy-site check passed. |
+| Fresh encrypted restore | Pass | Snapshot `9cdf223684f6cf661f41e469fcc08e08589eff0d9fea51dd7460fb883b5a49e8`, created 2026-10-07 14:03:07 ET, restored into dedicated internal Docker networks with no published ports. Thirteen migrations were present. |
+| Deterministic backfill | Pass | Two dry runs matched; apply succeeded; retry was a no-op. Protected legacy state remained unchanged and the material equivalence comparator passed 59 legacy and 59 canonical matches at projection version 1. |
+| Failure injection | Pass | Independent fresh restores passed `backfill-apply`, `projection-materialization`, `active-pointer`, and `before-commit`. Every injected failure left canonical artifacts absent, active pointers and compatibility identities unchanged, legacy reads intact, and fault objects removed before a successful retry/no-op. |
+| Full lifecycle | Pass | Thirteen gates passed from setup publication through completed champion discovery. Four imports applied, two no-opped, one correction created an immutable revision, and one missing sheet remained non-destructive. Nine coherent public projection versions activated. |
+| Lifecycle realtime | Pass | Nine tournament events and eight changed-match events were emitted, all pinned to the activating projection version. |
+| Candidate API and realtime | Pass | Isolated candidate API equivalence passed; the protected legacy workbook route remained registered behind HTTP 401. Initial realtime connection and reconnect both passed. |
+| Rollback artifact | Pass | Prior image `sha256:f1c70114270a9bc39da23c088a97a8ddbcfcc51a66f1a6f2d1baa58d8934bfab` was archived with SHA-256 `069eb1f5dbe90a055cd5febddc6e0334b34de4fdb166b75f548c90c8942ba796`; the independently recomputed digest matched. |
+| Rollback execution | Pass | The prior image restored in 11 seconds and passed health, 59-match legacy reads, comment reads, and realtime connection/reconnect. |
+| Isolation and cleanup | Pass | The live API remained healthy on tag `9f9c0d2`. Final labeled rehearsal container and network counts were both zero. |
+| Regression discovered and fixed | Pass | Rehearsal found that cumulative playoff workbook sheets were validated before their deferred playoff matches materialized. The atomic transaction now permits only explicitly deferred playoff matches and revalidates the complete manifest after bracket materialization. The PostgreSQL workbook suite passed all 14 tests. |
 
 ## 2026-10-05 · Exact-Candidate Qualification Evidence
 
