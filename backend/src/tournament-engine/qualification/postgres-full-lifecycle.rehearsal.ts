@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { Workbook, Worksheet } from "exceljs";
 
@@ -1187,6 +1187,13 @@ function safeErrorCode(error: unknown): string | undefined {
           detailCode.message
         );
         if (messageCode !== undefined) return messageCode;
+        if (detailCode.code === "PROGRESSION_CONFLICT" &&
+            /^[\x20-\x7e]{1,240}$/u.test(detailCode.message)) {
+          return `progression_conflict_${createHash("sha256")
+            .update(detailCode.message)
+            .digest("hex")
+            .slice(0, 12)}`;
+        }
       }
       return detailCode.code.toLowerCase();
     }
