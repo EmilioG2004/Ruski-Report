@@ -555,10 +555,20 @@ export async function runPostgresFullLifecycleRehearsal(
       .flatMap((round) => round.matches)
       .find((match) => match.matchId === bracket.playableMatchIds[0]);
     requireCondition(
-      completed.tournament.lifecycle === "completed" &&
-        championshipNode?.status === "completed" &&
-        championshipNode.winner !== null,
-      "champion_projection_invalid"
+      completed.tournament.lifecycle === "completed",
+      "champion_projection_lifecycle_not_completed"
+    );
+    requireCondition(
+      championshipNode !== undefined,
+      "champion_projection_match_missing"
+    );
+    requireCondition(
+      championshipNode.status === "completed",
+      "champion_projection_match_not_completed"
+    );
+    requireCondition(
+      championshipNode.winner !== null,
+      "champion_projection_winner_missing"
     );
     const [activeDiscovery, historicalDiscovery] = await Promise.all([
       runtime.publicReads.listActiveTournaments(),
