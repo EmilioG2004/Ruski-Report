@@ -551,13 +551,18 @@ export async function runPostgresFullLifecycleRehearsal(
     const completed = await guarded("completed_projection_read_failed", () =>
       runtime.publicReads.getTournament(publicTournamentId)
     );
-    const championshipNode = completed.tournament.bracket?.rounds
+    const publicPlayableNodes = completed.tournament.bracket?.rounds
       .flatMap((round) => round.matches)
-      .find((match) => match.matchId === bracket.playableMatchIds[0]);
+      .filter((match) => match.matchId !== null) ?? [];
     requireCondition(
       completed.tournament.lifecycle === "completed",
       "champion_projection_lifecycle_not_completed"
     );
+    requireCondition(
+      publicPlayableNodes.length === 1,
+      "champion_projection_playable_match_count_invalid"
+    );
+    const championshipNode = publicPlayableNodes[0];
     requireCondition(
       championshipNode !== undefined,
       "champion_projection_match_missing"
