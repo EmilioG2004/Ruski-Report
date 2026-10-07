@@ -472,6 +472,7 @@ if [[ -z "${qualification_administrator_id}" ]]; then
 fi
 [[ "${qualification_administrator_id}" =~ ^[a-f0-9-]{36}$ ]] || \
   fail active_qualification_administrator_missing
+lifecycle_exit=0
 run_qualification_command_with \
   --env RUSKI_QUALIFICATION_RESTORED_WRITE_ACK=I_ACKNOWLEDGE_THIS_IS_AN_ISOLATED_RESTORED_COPY \
   --env "RUSKI_QUALIFICATION_ADMINISTRATOR_ID=${qualification_administrator_id}" \
@@ -479,7 +480,20 @@ run_qualification_command_with \
   --env "RUSKI_QUALIFICATION_CANDIDATE_SHA=${candidate_commit}" \
   -- \
   node dist/database/rehearse-tournament-lifecycle.js \
-  >"${work_root}/lifecycle.json"
+  >"${work_root}/lifecycle.json" || lifecycle_exit=$?
+if [[ ${lifecycle_exit} -ne 0 ]]; then
+  lifecycle_failure_code=$(python3 -c '
+import json,sys
+try:
+    value=json.load(open(sys.argv[1],encoding="utf-8")).get("evidenceCode","")
+except Exception:
+    value=""
+if not isinstance(value,str) or not value.replace("_","").isalnum():
+    value="unavailable"
+print(value)
+' "${work_root}/lifecycle.json")
+  fail "lifecycle_${lifecycle_failure_code}"
+fi
 
 current_step=candidate_api
 start_api candidate "${candidate_image_id}"

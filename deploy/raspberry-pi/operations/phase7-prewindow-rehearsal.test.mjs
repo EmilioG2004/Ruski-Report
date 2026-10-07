@@ -46,3 +46,9 @@ test("creates an administrator only inside the disposable restored database", ()
   assert.match(script, /INSERT INTO admin_accounts/u);
   assert.match(script, /qualificationAdministratorSource/u);
 });
+
+test("retains only the sanitized lifecycle evidence code on failure", () => {
+  assert.match(script, /lifecycle_failure_code/u);
+  assert.match(script, /replace\("_",""\)\.isalnum/u);
+  assert.match(script, /fail "lifecycle_\$\{lifecycle_failure_code\}"/u);
+});
