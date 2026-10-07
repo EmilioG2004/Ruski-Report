@@ -3,7 +3,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { loadDatabaseConfig } from "../../../config/database.config";
 import { MigrationRunner, PostgresDatabase } from "../../../database";
 import { parseStableUuid } from "../../domain";
-import { PostgresMatchWriterRepository } from "../../persistence";
+import {
+  PostgresMatchWriterRepository,
+  TournamentEngineTransactionManager
+} from "../../persistence";
+import { engineExecutor } from "../../persistence/postgres-engine-executor";
 import {
   CreateWorkbookImportPreviewInput,
   digestWorkbookParticipants,
@@ -24,6 +28,7 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
   let database: PostgresDatabase;
   let repository: PostgresWorkbookReconciliationRepository;
   let writers: PostgresMatchWriterRepository;
+  let transactions: TournamentEngineTransactionManager;
 
   beforeAll(async () => {
     const config = loadDatabaseConfig({
@@ -33,6 +38,7 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
     database = new PostgresDatabase(config);
     await new MigrationRunner(database, config).migrate();
     writers = new PostgresMatchWriterRepository(database);
+    transactions = new TournamentEngineTransactionManager(database);
     repository = new PostgresWorkbookReconciliationRepository(
       database,
       undefined,
@@ -91,6 +97,84 @@ postgresDescribe("workbook reconciliation PostgreSQL persistence", () => {
       })]);
     expect((await repository.readGenerationSource(fixture.tournamentId))
       ?.nextGenerationRevision).toBe(2);
+  });
+
+  it("defers playoff sheet validation until bracket matches materialize", async () => {
+    const fixture = await seedPublishedTournament(database);
+    const matchId = randomUUID();
+    const generatedAt = new Date().toISOString();
+    const base = generatedWorkbook(fixture);
+    const gameSheet: GeneratedWorkbookSheetInput = {
+      sheetId: randomUUID(),
+      sheetOrdinal: 2,
+      sheetKind: "game",
+      sheetName: "Championship",
+      matchId,
+      generatedMatchRowVersion: 1,
+      participantTeamIds: [fixture.teamIds[0], fixture.teamIds[2]],
+      participantDigest: digest("playoff-participants"),
+      baselineFingerprint: digest("playoff-baseline")
+    };
+    const generation: StoreGeneratedWorkbookInput = {
+      ...base,
+      generationKind: "playoffs_cumulative",
+      sourceDigest: digest("playoff-generation-source"),
+      filename: "sanitized-playoff.xlsx",
+      generatedAt,
+      sheets: [base.sheets[0], gameSheet]
+    };
+
+    await transactions.run(async (transaction) => {
+      await repository.storeGeneratedWorkbookInTransaction(
+        generation,
+        transaction,
+        true
+      );
+      const executor = engineExecutor(database, transaction);
+      await executor.query(`
+        INSERT INTO match_identities (match_id, tournament_id, created_at)
+        SELECT $2, tournament.public_key, $3
+        FROM engine_tournaments tournament
+        WHERE tournament.id = $1::uuid
+      `, [fixture.tournamentId, matchId, generatedAt]);
+      await executor.query(`
+        INSERT INTO engine_matches (
+          id, tournament_id, public_key, stage, pod_id, sequence,
+          identity_only, status, score_availability, row_version,
+          created_at, updated_at, metadata
+        ) VALUES (
+          $1::uuid, $2::uuid, $1, 'playoffs', NULL, 3,
+          false, 'scheduled', 'not_started', 1,
+          $3, $3, '{}'::jsonb
+        )
+      `, [matchId, fixture.tournamentId, generatedAt]);
+      for (const [index, teamId] of gameSheet.participantTeamIds.entries()) {
+        await executor.query(`
+          INSERT INTO engine_match_slots (
+            tournament_id, match_id, slot_number, source_type, team_id
+          ) VALUES ($1::uuid, $2::uuid, $3, 'team', $4::uuid)
+        `, [fixture.tournamentId, matchId, index + 1, teamId]);
+      }
+      await repository.assertGeneratedWorkbookSheetsCurrentInTransaction(
+        {
+          tournamentId: fixture.tournamentId,
+          workbookId: generation.workbookId,
+          sheets: generation.sheets
+        },
+        transaction
+      );
+    });
+
+    await expect(repository.findGeneratedWorkbookArtifact(
+      fixture.tournamentId,
+      generation.workbookId
+    )).resolves.toMatchObject({
+      generationKind: "playoffs_cumulative",
+      sheets: [
+        expect.objectContaining({ sheetKind: "control" }),
+        expect.objectContaining({ matchId })
+      ]
+    });
   });
 
   it("rejects publishing a setup that exceeds workbook sheet capacity", async () => {

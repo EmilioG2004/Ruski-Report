@@ -172,6 +172,12 @@ export interface StoreGeneratedWorkbookInput {
   audit: WorkbookAuditIdentity;
 }
 
+export interface AssertGeneratedWorkbookSheetsInput {
+  workbookId: WorkbookId;
+  tournamentId: TournamentId;
+  sheets: readonly GeneratedWorkbookSheetInput[];
+}
+
 export interface GeneratedWorkbookManifestSheetRecord {
   sheetId: WorkbookSheetId;
   sheetOrdinal: number;

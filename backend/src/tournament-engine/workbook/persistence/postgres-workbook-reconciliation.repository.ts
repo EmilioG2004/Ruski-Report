@@ -46,6 +46,7 @@ import {
 } from "../../scoring";
 import type { CanonicalWorkbookSourceRow } from "../generation";
 import {
+  AssertGeneratedWorkbookSheetsInput,
   ConfirmWorkbookImportInput,
   CreateWorkbookImportPreviewInput,
   digestWorkbookParticipants,
@@ -618,7 +619,8 @@ export class PostgresWorkbookReconciliationRepository {
 
   async storeGeneratedWorkbookInTransaction(
     input: StoreGeneratedWorkbookInput,
-    transaction: TransactionContext
+    transaction: TransactionContext,
+    allowDeferredGameMatches = false
   ): Promise<StoreGeneratedWorkbookResult> {
     const executor = engineExecutor(this.database, transaction);
     await lockEngineTournament(executor, input.tournamentId);
@@ -700,7 +702,12 @@ export class PostgresWorkbookReconciliationRepository {
       ]
     );
     for (const sheet of input.sheets) {
-      await this.insertGeneratedSheet(executor, input, sheet);
+      await this.insertGeneratedSheet(
+        executor,
+        input,
+        sheet,
+        allowDeferredGameMatches
+      );
     }
     await writeEngineAuditEvent(executor, input.tournamentId, {
       eventId: input.audit.eventId,
@@ -730,6 +737,43 @@ export class PostgresWorkbookReconciliationRepository {
       );
     }
     return { created: true, workbook };
+  }
+
+  async assertGeneratedWorkbookSheetsCurrentInTransaction(
+    input: AssertGeneratedWorkbookSheetsInput,
+    transaction: TransactionContext
+  ): Promise<void> {
+    const executor = engineExecutor(this.database, transaction);
+    await lockEngineTournament(executor, input.tournamentId);
+    const persisted = await executor.query<{ sheet_id: string }>(
+      `
+        SELECT sheet_id::text
+        FROM engine_generated_workbook_sheets
+        WHERE tournament_id = $1::uuid AND workbook_id = $2::uuid
+        ORDER BY sheet_id
+      `,
+      [input.tournamentId, input.workbookId]
+    );
+    const expectedSheetIds = input.sheets.map((sheet) => sheet.sheetId).sort();
+    const persistedSheetIds = persisted.rows.map((sheet) => sheet.sheet_id);
+    if (persistedSheetIds.length !== expectedSheetIds.length ||
+        persistedSheetIds.some((sheetId, index) =>
+          sheetId !== expectedSheetIds[index]
+        )) {
+      throw new EnginePersistenceInvariantError(
+        "Stored workbook sheets do not match the generated manifest."
+      );
+    }
+    for (const sheet of input.sheets) {
+      if (sheet.sheetKind === "game") {
+        await this.assertGeneratedGameSheetCurrent(
+          executor,
+          input.tournamentId,
+          sheet,
+          false
+        );
+      }
+    }
   }
 
   createImportPreview(
@@ -958,37 +1002,17 @@ export class PostgresWorkbookReconciliationRepository {
   private async insertGeneratedSheet(
     executor: EnginePostgresExecutor,
     workbook: StoreGeneratedWorkbookInput,
-    sheet: GeneratedWorkbookSheetInput
+    sheet: GeneratedWorkbookSheetInput,
+    allowDeferredGameMatches: boolean
   ): Promise<void> {
     if (sheet.sheetKind === "game") {
-      const match = await executor.query<{
-        row_version: string | number;
-        side_one_team_id: string | null;
-        side_two_team_id: string | null;
-      }>(
-        `
-          SELECT match.row_version,
-                 side_one.team_id::text AS side_one_team_id,
-                 side_two.team_id::text AS side_two_team_id
-          FROM engine_matches match
-          LEFT JOIN engine_match_slots side_one
-            ON side_one.match_id = match.id AND side_one.slot_number = 1
-          LEFT JOIN engine_match_slots side_two
-            ON side_two.match_id = match.id AND side_two.slot_number = 2
-          WHERE match.tournament_id = $1::uuid AND match.id = $2::uuid
-          FOR KEY SHARE OF match
-        `,
-        [workbook.tournamentId, sheet.matchId]
+      await this.assertGeneratedGameSheetCurrent(
+        executor,
+        workbook.tournamentId,
+        sheet,
+        allowDeferredGameMatches &&
+          workbook.generationKind === "playoffs_cumulative"
       );
-      const stored = match.rows[0];
-      if (stored === undefined ||
-          Number(stored.row_version) !== sheet.generatedMatchRowVersion ||
-          stored.side_one_team_id !== sheet.participantTeamIds[0] ||
-          stored.side_two_team_id !== sheet.participantTeamIds[1]) {
-        throw new EnginePersistenceConflictError(
-          "Generated sheet participants or match version are stale."
-        );
-      }
     }
     await executor.query(
       `
@@ -1019,6 +1043,43 @@ export class PostgresWorkbookReconciliationRepository {
         sheet.baselineFingerprint
       ]
     );
+  }
+
+  private async assertGeneratedGameSheetCurrent(
+    executor: EnginePostgresExecutor,
+    tournamentId: TournamentId,
+    sheet: Extract<GeneratedWorkbookSheetInput, { sheetKind: "game" }>,
+    allowDeferredMatch: boolean
+  ): Promise<void> {
+    const match = await executor.query<{
+      row_version: string | number;
+      side_one_team_id: string | null;
+      side_two_team_id: string | null;
+    }>(
+      `
+        SELECT match.row_version,
+               side_one.team_id::text AS side_one_team_id,
+               side_two.team_id::text AS side_two_team_id
+        FROM engine_matches match
+        LEFT JOIN engine_match_slots side_one
+          ON side_one.match_id = match.id AND side_one.slot_number = 1
+        LEFT JOIN engine_match_slots side_two
+          ON side_two.match_id = match.id AND side_two.slot_number = 2
+        WHERE match.tournament_id = $1::uuid AND match.id = $2::uuid
+        FOR KEY SHARE OF match
+      `,
+      [tournamentId, sheet.matchId]
+    );
+    const stored = match.rows[0];
+    if (stored === undefined && allowDeferredMatch) return;
+    if (stored === undefined ||
+        Number(stored.row_version) !== sheet.generatedMatchRowVersion ||
+        stored.side_one_team_id !== sheet.participantTeamIds[0] ||
+        stored.side_two_team_id !== sheet.participantTeamIds[1]) {
+      throw new EnginePersistenceConflictError(
+        "Generated sheet participants or match version are stale."
+      );
+    }
   }
 
   private async insertImportPreview(

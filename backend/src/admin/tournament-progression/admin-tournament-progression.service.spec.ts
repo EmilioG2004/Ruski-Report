@@ -63,7 +63,12 @@ describe("AdminTournamentProgressionService", () => {
             }
           });
         }
-      )
+      ),
+      assertGeneratedWorkbookSheetsCurrentInTransaction: jest.fn()
+        .mockImplementation(() => {
+          calls.push("validate");
+          return Promise.resolve();
+        })
     } as unknown as PostgresWorkbookReconciliationRepository;
     const transactions = {
       run: jest.fn().mockImplementation(async (operation) =>
@@ -90,7 +95,7 @@ describe("AdminTournamentProgressionService", () => {
       playableMatchCount: 1,
       byeCount: 0
     });
-    expect(calls).toEqual(["workbook", "publish"]);
+    expect(calls).toEqual(["workbook", "publish", "validate"]);
     expect(workbooks.storeGeneratedWorkbookInTransaction)
       .toHaveBeenCalledWith(expect.objectContaining({
         generationKind: "playoffs_cumulative",
@@ -99,7 +104,7 @@ describe("AdminTournamentProgressionService", () => {
         sheets: expect.arrayContaining([
           expect.objectContaining({ sheetKind: "game" })
         ])
-      }), expect.any(Object));
+      }), expect.any(Object), true);
     expect(repository.publishBracketInTransaction).toHaveBeenCalledWith(
       expect.objectContaining({
         expectedTournamentRowVersion: 7,
@@ -108,6 +113,14 @@ describe("AdminTournamentProgressionService", () => {
       }),
       expect.any(Object)
     );
+    expect(workbooks.assertGeneratedWorkbookSheetsCurrentInTransaction)
+      .toHaveBeenCalledWith(expect.objectContaining({
+        tournamentId: TOURNAMENT_ID,
+        workbookId: expect.any(String),
+        sheets: expect.arrayContaining([
+          expect.objectContaining({ sheetKind: "game" })
+        ])
+      }), expect.any(Object));
     expect(result).toMatchObject({
       lifecycle: "playoffs",
       workbook: { downloadUrl: expect.stringContaining("/workbooks/") }

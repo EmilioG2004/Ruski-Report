@@ -624,7 +624,7 @@ export class AdminTournamentProgressionService {
           generatedAt,
           sheets: storedSheets,
           audit: { eventId: randomUUID() }
-        }, transaction);
+        }, transaction, true);
         const publication = await this.repository.publishBracketInTransaction(
           bracketPublicationInput(
             prepared,
@@ -634,6 +634,14 @@ export class AdminTournamentProgressionService {
             principal,
             generatedAt
           ),
+          transaction
+        );
+        await this.workbooks.assertGeneratedWorkbookSheetsCurrentInTransaction(
+          {
+            tournamentId: prepared.progression.tournamentId,
+            workbookId: stored.workbook.workbookId,
+            sheets: storedSheets
+          },
           transaction
         );
         projection = await refreshCanonicalProjectionInTransaction(

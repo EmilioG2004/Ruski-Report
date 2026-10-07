@@ -69,6 +69,10 @@ const SAFE_PROGRESSION_DETAIL_CODES = new Map<string, string>([
     "workbook_generation_revision_stale"
   ],
   [
+    "Generated sheet participants or match version are stale.",
+    "generated_sheet_match_not_materialized"
+  ],
+  [
     "Workbook operations require published tournament setup.",
     "workbook_requires_published_setup"
   ],
