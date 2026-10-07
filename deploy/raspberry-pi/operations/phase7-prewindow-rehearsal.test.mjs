@@ -10,6 +10,7 @@ test("uses a dedicated internal network and never joins a production network", (
   assert.match(script, /docker network create --internal/u);
   assert.doesNotMatch(script, /database_network/u);
   assert.doesNotMatch(script, /NetworkSettings\.Networks.*production_postgres/su);
+  assert.doesNotMatch(script, /docker compose/u);
   assert.match(script, /--network "\$\{network_name\}"/u);
 });
 

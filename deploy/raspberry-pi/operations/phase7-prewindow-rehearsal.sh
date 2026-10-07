@@ -149,15 +149,19 @@ readonly rollback_image_id=${release[RUSKI_ROLLBACK_IMAGE_ID]}
   '{{index .Config.Labels "org.opencontainers.image.revision"}}' \
   "${candidate_image_id}") == "${candidate_commit}" ]] || fail candidate_revision
 
-readonly compose_dir=${candidate_source}/deploy/raspberry-pi
-readonly compose_env=${RUSKI_COMPOSE_ENV_FILE:-${compose_dir}/.env}
-[[ -f "${compose_env}" ]] || fail compose_environment_missing
-production_api=$(docker compose --project-directory "${compose_dir}" \
-  --env-file "${compose_env}" ps -q api)
-production_postgres=$(docker compose --project-directory "${compose_dir}" \
-  --env-file "${compose_env}" ps -q postgres)
-[[ -n "${production_api}" && -n "${production_postgres}" ]] || \
-  fail production_reference_containers_unavailable
+mapfile -t production_api_rows < <(docker ps -q \
+  --filter label=com.docker.compose.project=ruski-report \
+  --filter label=com.docker.compose.service=api)
+mapfile -t production_postgres_rows < <(docker ps -q \
+  --filter label=com.docker.compose.project=ruski-report \
+  --filter label=com.docker.compose.service=postgres)
+[[ ${#production_api_rows[@]} -eq 1 && -n ${production_api_rows[0]} ]] || \
+  fail production_api_reference_not_unique
+[[ ${#production_postgres_rows[@]} -eq 1 && \
+  -n ${production_postgres_rows[0]} ]] || \
+  fail production_postgres_reference_not_unique
+readonly production_api=${production_api_rows[0]}
+readonly production_postgres=${production_postgres_rows[0]}
 [[ $(docker inspect --format '{{.Image}}' "${production_api}") == \
   "${rollback_image_id}" ]] || fail rollback_not_current_production_image
 postgres_image_id=$(docker inspect --format '{{.Image}}' "${production_postgres}")
