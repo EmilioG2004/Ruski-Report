@@ -7,28 +7,53 @@ release-candidate run and link any blocker to its GitHub issue.
 
 The current application candidate is
 `e5fff7c7d2c42d9ab98df379eb6b0269b5ca43de`. The evidence below qualifies
-several pre-window gates but does **not** authorize production migration,
-deployment, TestFlight upload, or App Store submission. `releaseReady` remains
-false while any required entry is blocked.
+the completed Phase 7 production rollout. It does **not** authorize a
+TestFlight upload or App Store submission; no build was uploaded during this
+rollout.
 
 | Gate | Result | Required current-candidate evidence |
 | --- | --- | --- |
 | Local two-database manifest | Pass | Exact-candidate clean run: 11 gates passed, 0 failed, and 8 external/window gates remained correctly blocked. Two distinct disposable local PostgreSQL 17.11 databases were used. |
-| Production-shaped restore | Pass | Encrypted snapshot `9cdf223684f6cf661f41e469fcc08e08589eff0d9fea51dd7460fb883b5a49e8` restored independently for the candidate lifecycle, rollback, and four failure scenarios on PostgreSQL 17.10. The live database was not accessed by the candidate. |
+| Production-shaped restore | Pass | Encrypted snapshot `9cdf223684f6cf661f41e469fcc08e08589eff0d9fea51dd7460fb883b5a49e8` restored independently for the candidate lifecycle, rollback, and four failure scenarios on PostgreSQL 17.10. Final frozen production snapshot `e46b7c7f6b14154547035757156c05a336e073dceff1984483d7402a51dea043` also passed a clean isolated restore before migration. |
 | Restored end-to-end lifecycle | Pass | The isolated restored environment completed setup, beginning/middle/end workbook ingestion, missing-sheet preservation, correction, identical no-op, pod finalization, seeding, override, bracket publication, championship, historical discovery, projection versions 1–9, and version-pinned realtime. |
 | Migration/backfill rehearsal | Pass | Exact-candidate dry-run/dry-run/apply/no-op passed. Backfill-apply, projection-materialization, active-pointer, and before-commit faults each rolled back completely, cleaned their fault objects, retried successfully, and ended with a deterministic no-op. |
-| Production migration/apply | Blocked | Explicit production authorization, maintenance window, successful migration/backfill evidence, and rollback owner. |
+| Production migration/apply | Pass | The owner authorized the 2026-10-07 production window. Migrations 7–13 applied, production dry-run/dry-run/apply/no-op passed, the protected legacy content digest remained unchanged, and the previous application/database restore path remained available. |
 | V1/v2 public equivalence | Pass | The exact candidate served the restored database through an isolated API; all 59 legacy and 59 canonical matches passed the material comparator at projection version 1. |
-| Production realtime | Blocked (isolated pass) | The current candidate passed isolated API connection/reconnect and the lifecycle emitted 9 tournament plus 8 changed-match events pinned to projection versions. A bounded production-window check remains required. |
-| Production privacy logs | Blocked | Bounded current-candidate structured/unstructured window with qualification canaries absent. |
+| Production realtime | Pass | Initial connection and reconnect passed repeatedly through the public production endpoint, including after the physical-client launch. Projection version 1 remained active and coherent. |
+| Production privacy logs | Pass | The final bounded candidate window contained 1,158 structured entries, zero error-level entries, and no credential, private-path, sensitive-field, or qualification-canary violations. |
 | Compact iPhone matrix | Pass | iPhone 17e / iOS 26.5: 139 unit and 30 distinct Release UI tests passed with zero failures. |
 | Large iPhone matrix | Pass | iPhone 17 Pro Max / iOS 26.5: 139 unit and 30 distinct Release UI tests passed with zero failures. |
-| Physical iPhone Release pass | Blocked (partial pass) | All 30 distinct Release UI scenarios passed on an iPhone 16 Plus / iOS 26.3.1, with one history-card timing failure passing on isolated retry. Production old-client and rollout-window checks remain required. |
+| Physical iPhone Release pass | Pass | All 30 distinct Release UI scenarios passed on an iPhone 16 Plus / iOS 26.3.1, with one history-card timing failure passing on isolated retry. The preserved installed 1.0 (1) build then launched successfully without reinstalling against the production candidate and remained running while the final public compatibility gate passed. |
 | Rollback rehearsal | Pass | The current production image was archived before rehearsal, restored in 11 seconds, and passed health, 59-match legacy reads, comment reads, and realtime connection/reconnect against a fresh restored database. Archive digest and mode-0600 evidence were verified. |
 
 Do not change these items to `Pass` based on code review, a clean synthetic
 database, or the earlier release evidence. Attach only privacy-safe counts,
 digests, versions, status codes, and artifact identifiers.
+
+## 2026-10-07–08 · Production Migration And Deployment
+
+The owner authorized a 2026-10-07 17:00–18:30 ET production maintenance
+window and accepted the documented rollback triggers. Emilio Garcia was the
+decision maker; Codex served as database backup/restore operator and
+application deploy operator; both observed the rollout. The server cutover
+completed during the authorized window. The final physical-client decision
+was deliberately withheld while the connected phone was locked, leaving the
+candidate under production observation until the owner unlocked it on
+2026-10-08 and directed completion. The recorded decision is **proceed**.
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Pre-change health | Pass | PostgreSQL 17.10, API, Cloudflare tunnel, and host services were healthy with zero failed units. The frozen legacy baseline contained 2,421 rows across the protected tables and digest `ff433f757f9fb995f12f3ca88c8f5b3f44af563ae5f3fa45de92d92e8043bdfa`. |
+| Final encrypted backup | Pass | Snapshot `e46b7c7f6b14154547035757156c05a336e073dceff1984483d7402a51dea043`, created 2026-10-07 17:01:59 ET after the write path stopped, passed a clean isolated restore through the 2026 tournament read. The ordinary hourly timer resumed and subsequent backups succeeded. |
+| Additive migration | Pass | The exact candidate artifact applied migrations `0007_tournament_engine.sql` through `0013_legacy_backfill_provenance.sql`; all 13 migrations were then present. No down migration or ad-hoc SQL was used. |
+| Production backfill | Pass | Two dry runs matched the rehearsal exactly with zero issues. Apply succeeded and the second apply was a deterministic no-op. Source `808caaaefe71a88d87890976a1c3c72b1c4db8496d19fe330670a4223e8a8bec`, plan `c6a37ac61b4bba97641a3d451f1e8acfa06a5f08384b08e817a5ac7497602fcc`, and mapping `947ce8e10ea88d842ddaf571f0b412b715705575677dbf32a7735b1e1c0e81ea` matched the restored rehearsal. |
+| Legacy preservation | Pass | The production-specific protected checkpoint digest was `c9270916d8fdb15d492f9193bc920a1db26b47c891b38015062f8b69df466696`. The independent protected content digest remained exactly `ff433f757f9fb995f12f3ca88c8f5b3f44af563ae5f3fa45de92d92e8043bdfa` before and after apply. |
+| Canonical projection | Pass | One completed tournament, 59 canonical matches, 59 match payloads, and one active projection pointer at version 1 were present. The event-derived correction checkpoint contained 55 bounded corrections with digest `ba6170004615be21746526cab0e547bf06097292046231594da8274cc0dcea6e`. |
+| Exact deployment | Pass | Production checkout and running API image resolved to candidate `e5fff7c7d2c42d9ab98df379eb6b0269b5ca43de` and immutable image `sha256:19a257048e1a1887e102cf15fc51823af0651a2c9407c6d22fab37b3ef6ce73b`. The previous image and protected rollback archive were retained. |
+| Public compatibility | Pass | Repeated public gates returned 1 game, 32 teams, 32 standings, 59 legacy matches, 59 canonical matches, zero active canonical tournaments, one historical tournament, projection version 1, material v1/v2 equivalence, the preserved legacy workbook route behind HTTP 401, and realtime connection/reconnect. |
+| Administrator and privacy canaries | Pass | The private sign-in page returned HTTP 200 and a synthetic invalid legacy administrator credential remained HTTP 401. The final privacy audit passed 1,158 structured entries with zero API or PostgreSQL errors and no canary or sensitive-field leak. |
+| Physical installed-client check | Pass | The already-installed Ruski Report 1.0 (1) build on the registered iPhone 16 Plus launched without reinstalling, remained running, and was followed by another successful public read/equivalence/realtime gate. |
+| Observation and decision | Proceed | The exact candidate remained healthy for approximately 24 hours with zero API error-level entries, zero PostgreSQL errors, coherent projection version 1, successful scheduled backups, and no rollback trigger. No TestFlight or App Store upload occurred. |
 
 ## 2026-10-07 · Restored Lifecycle, Failure Injection, And Rollback
 
