@@ -5,22 +5,23 @@ release-candidate run and link any blocker to its GitHub issue.
 
 ## Phase 7 Canonical Tournament Engine · Current Candidate
 
-The current application candidate is
-`e5fff7c7d2c42d9ab98df379eb6b0269b5ca43de`. The evidence below qualifies
-the completed Phase 7 production rollout. It does **not** authorize a
-TestFlight upload or App Store submission; no build was uploaded during this
-rollout.
+The current production application candidate is
+`8ff889938303a49468d8d6baa436be855655d3a9`. The canonical migration and
+initial production rollout used `e5fff7c7d2c42d9ab98df379eb6b0269b5ca43de`;
+the current candidate adds only the bounded administrator same-origin request
+compatibility fix recorded below. It does **not** authorize an App Store
+submission. No build was uploaded during the Phase 7 rollout.
 
 | Gate | Result | Required current-candidate evidence |
 | --- | --- | --- |
-| Local two-database manifest | Pass | Exact-candidate clean run: 11 gates passed, 0 failed, and 8 external/window gates remained correctly blocked. Two distinct disposable local PostgreSQL 17.11 databases were used. |
+| Local two-database manifest | Pass | Exact current-candidate clean run: 11 gates passed, 0 failed, and 8 external/window gates remained correctly blocked. Two fresh, distinct disposable local PostgreSQL 17.11 databases were used; 558 unit tests, 140 lifecycle tests, 9 projection/realtime transaction tests, 90 PostgreSQL integration tests, and 63 qualification-tool tests passed. |
 | Production-shaped restore | Pass | Encrypted snapshot `9cdf223684f6cf661f41e469fcc08e08589eff0d9fea51dd7460fb883b5a49e8` restored independently for the candidate lifecycle, rollback, and four failure scenarios on PostgreSQL 17.10. Final frozen production snapshot `e46b7c7f6b14154547035757156c05a336e073dceff1984483d7402a51dea043` also passed a clean isolated restore before migration. |
 | Restored end-to-end lifecycle | Pass | The isolated restored environment completed setup, beginning/middle/end workbook ingestion, missing-sheet preservation, correction, identical no-op, pod finalization, seeding, override, bracket publication, championship, historical discovery, projection versions 1–9, and version-pinned realtime. |
 | Migration/backfill rehearsal | Pass | Exact-candidate dry-run/dry-run/apply/no-op passed. Backfill-apply, projection-materialization, active-pointer, and before-commit faults each rolled back completely, cleaned their fault objects, retried successfully, and ended with a deterministic no-op. |
 | Production migration/apply | Pass | The owner authorized the 2026-10-07 production window. Migrations 7–13 applied, production dry-run/dry-run/apply/no-op passed, the protected legacy content digest remained unchanged, and the previous application/database restore path remained available. |
-| V1/v2 public equivalence | Pass | The exact candidate served the restored database through an isolated API; all 59 legacy and 59 canonical matches passed the material comparator at projection version 1. |
+| V1/v2 public equivalence | Pass | The migrated candidate passed all 59 legacy and 59 canonical matches through the isolated material comparator. The exact current production candidate repeated the public comparator at projection version 1 after deployment. |
 | Production realtime | Pass | Initial connection and reconnect passed repeatedly through the public production endpoint, including after the physical-client launch. Projection version 1 remained active and coherent. |
-| Production privacy logs | Pass | The final bounded candidate window contained 1,158 structured entries, zero error-level entries, and no credential, private-path, sensitive-field, or qualification-canary violations. |
+| Production privacy logs | Pass | The original bounded rollout window contained 1,158 structured entries with no violation. The post-hotfix bounded window passed 17 structured entries with no credential, private-path, sensitive-field, or qualification-canary violation; a subsequent clean operational window contained zero API and PostgreSQL errors. |
 | Compact iPhone matrix | Pass | iPhone 17e / iOS 26.5: 139 unit and 30 distinct Release UI tests passed with zero failures. |
 | Large iPhone matrix | Pass | iPhone 17 Pro Max / iOS 26.5: 139 unit and 30 distinct Release UI tests passed with zero failures. |
 | Physical iPhone Release pass | Pass | All 30 distinct Release UI scenarios passed on an iPhone 16 Plus / iOS 26.3.1, with one history-card timing failure passing on isolated retry. The preserved installed 1.0 (1) build then launched successfully without reinstalling against the production candidate and remained running while the final public compatibility gate passed. |
@@ -53,7 +54,28 @@ candidate under production observation until the owner unlocked it on
 | Public compatibility | Pass | Repeated public gates returned 1 game, 32 teams, 32 standings, 59 legacy matches, 59 canonical matches, zero active canonical tournaments, one historical tournament, projection version 1, material v1/v2 equivalence, the preserved legacy workbook route behind HTTP 401, and realtime connection/reconnect. |
 | Administrator and privacy canaries | Pass | The private sign-in page returned HTTP 200 and a synthetic invalid legacy administrator credential remained HTTP 401. The final privacy audit passed 1,158 structured entries with zero API or PostgreSQL errors and no canary or sensitive-field leak. |
 | Physical installed-client check | Pass | The already-installed Ruski Report 1.0 (1) build on the registered iPhone 16 Plus launched without reinstalling, remained running, and was followed by another successful public read/equivalence/realtime gate. |
-| Observation and decision | Proceed | The exact candidate remained healthy for approximately 24 hours with zero API error-level entries, zero PostgreSQL errors, coherent projection version 1, successful scheduled backups, and no rollback trigger. No TestFlight or App Store upload occurred. |
+| Observation and decision | Proceed | The migrated candidate remained healthy for approximately 24 hours with zero API error-level entries, zero PostgreSQL errors, coherent projection version 1, successful scheduled backups, and no rollback trigger. The bounded administrator compatibility hotfix then passed exact-image, public, authentication, privacy-log, and backup checks. No App Store submission occurred. |
+
+## 2026-10-08 · Administrator Bootstrap And Compatibility Hotfix
+
+The first production administrator was bootstrapped through the approved
+single-use invitation flow. Safari exposed a production compatibility defect:
+its form submission supplied an opaque origin even though fetch metadata and
+the double-submit CSRF values identified a same-origin navigation. Explicit
+foreign origins remain rejected. The fix accepts normalized configured origins
+and permits an absent or opaque origin only with `Sec-Fetch-Site: same-origin`;
+the CSRF cookie/form-token match and signed-token verification remain
+mandatory.
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| Exact candidate | Pass | Commit `8ff889938303a49468d8d6baa436be855655d3a9` was clean, committed, built once on ARM64, and deployed as immutable image `sha256:0dbc80cba7dd0b36aa3b1c24b8adc1f4b12c72f077d735b0cc4422a95ff3ae58`. The prior image `sha256:19a257048e1a1887e102cf15fc51823af0651a2c9407c6d22fab37b3ef6ce73b` remains the verified rollback image. |
+| Security regression | Pass | Exact-origin, normalized same-origin, opaque same-origin metadata, missing-metadata rejection, explicit cross-origin rejection, pre-auth CSRF, authenticated CSRF, session, and cookie tests passed. The complete backend suite and exact-candidate two-database manifest passed. |
+| Deployment | Pass | Compose configuration was valid, the migration service reported the schema current, the API was recreated without building or pulling, container identity matched the prepared release image, and private plus public health checks passed. |
+| Administrator bootstrap | Pass | One administrator account and one active session were present after Safari accepted the single-use invitation; zero open invitations remained. The bootstrap credential was shredded and the local clipboard cleared. No password, invitation, session, or CSRF material was retained in evidence. |
+| Production public gate | Pass | The exact deployed image returned 1 game, 32 teams, 32 standings, 59 legacy matches, 59 canonical matches, one historical canonical tournament, projection version 1, material v1/v2 equivalence, the protected legacy workbook route, and successful realtime connection/reconnect. |
+| Backup and runtime | Pass | A new encrypted backup completed successfully after administrator creation. Hourly backup and weekly integrity timers were enabled and active. API and PostgreSQL were healthy, Cloudflare remained running, and zero systemd units were failed. |
+| Privacy and errors | Pass | A bounded synthetic credential rejection returned HTTP 401 and the resulting 17-entry structured log window passed the privacy auditor. A clean post-diagnostic window contained zero API and PostgreSQL error entries. |
 
 ## 2026-10-07 · Restored Lifecycle, Failure Injection, And Rollback
 
