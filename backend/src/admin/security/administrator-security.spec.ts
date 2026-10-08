@@ -127,6 +127,67 @@ describe("AdministratorCsrfGuard", () => {
     expect(security.verifyPreAuthCsrf).toHaveBeenCalledWith(csrf.token);
   });
 
+  it("accepts a normalized same-origin value", async () => {
+    const tokens = new AdministratorSecurityTokens(config);
+    const csrf = tokens.issuePreAuthCsrf();
+    const security = {
+      verifyPreAuthCsrf: jest.fn().mockReturnValue(true)
+    } as unknown as AdministratorSecurityService;
+    const audit = { recordEvent: jest.fn() } as unknown as
+      AdministratorSecurityAuditService;
+    const guard = new AdministratorCsrfGuard(security, tokens, audit, config);
+
+    await expect(guard.canActivate(context({
+      headers: {
+        origin: `${config.origin}/`,
+        cookie: `${config.preAuthCsrfCookieName}=${csrf.token}`,
+        "x-csrf-token": csrf.token
+      }
+    }))).resolves.toBe(true);
+  });
+
+  it("accepts an opaque browser origin only with same-origin fetch metadata", async () => {
+    const tokens = new AdministratorSecurityTokens(config);
+    const csrf = tokens.issuePreAuthCsrf();
+    const security = {
+      verifyPreAuthCsrf: jest.fn().mockReturnValue(true)
+    } as unknown as AdministratorSecurityService;
+    const audit = { recordEvent: jest.fn() } as unknown as
+      AdministratorSecurityAuditService;
+    const guard = new AdministratorCsrfGuard(security, tokens, audit, config);
+
+    await expect(guard.canActivate(context({
+      headers: {
+        origin: "null",
+        "sec-fetch-site": "same-origin",
+        cookie: `${config.preAuthCsrfCookieName}=${csrf.token}`,
+        "x-csrf-token": csrf.token
+      }
+    }))).resolves.toBe(true);
+  });
+
+  it("rejects an opaque origin without same-origin fetch metadata", async () => {
+    const tokens = new AdministratorSecurityTokens(config);
+    const csrf = tokens.issuePreAuthCsrf();
+    const audit = {
+      recordEvent: jest.fn().mockResolvedValue(undefined)
+    } as unknown as AdministratorSecurityAuditService;
+    const guard = new AdministratorCsrfGuard(
+      {} as AdministratorSecurityService,
+      tokens,
+      audit,
+      config
+    );
+
+    await expect(guard.canActivate(context({
+      headers: {
+        origin: "null",
+        cookie: `${config.preAuthCsrfCookieName}=${csrf.token}`,
+        "x-csrf-token": csrf.token
+      }
+    }))).rejects.toMatchObject({ code: "FORBIDDEN", statusCode: 403 });
+  });
+
   it("uses only the authenticated CSRF cookie when a session is present", async () => {
     const tokens = new AdministratorSecurityTokens(config);
     const rawCsrf = "authenticated-csrf-token";

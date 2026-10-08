@@ -33,8 +33,7 @@ export class AdministratorCsrfGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp()
       .getRequest<AdministratorAuthenticatedRequest>();
-    const origin = headerValue(request, "origin");
-    if (origin !== this.config.origin) {
+    if (!hasAllowedOrigin(request, this.config.origin)) {
       await this.reject(request, "ADMIN_ORIGIN_INVALID");
     }
 
@@ -93,4 +92,20 @@ export class AdministratorCsrfGuard implements CanActivate {
     }
     throw administratorCsrfError(reasonCode);
   }
+}
+
+function hasAllowedOrigin(
+  request: AdministratorAuthenticatedRequest,
+  configuredOrigin: string
+): boolean {
+  const origin = headerValue(request, "origin");
+  if (origin !== undefined && origin !== "null") {
+    try {
+      return new URL(origin).origin === configuredOrigin;
+    } catch {
+      return false;
+    }
+  }
+
+  return headerValue(request, "sec-fetch-site") === "same-origin";
 }
