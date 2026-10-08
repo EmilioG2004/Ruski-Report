@@ -101,6 +101,9 @@ An app preview video is not required for v1.
 Select **Yes, data is collected**. Do not select tracking for any data type.
 The app has no advertising or cross-app tracking.
 
+These answers and both privacy URLs were published in App Store Connect on
+October 8, 2026.
+
 | App Store data type | Linked to user | Purpose | Shipped behavior |
 | --- | --- | --- | --- |
 | Contact Info → Name | Yes | App Functionality | Optional public-account display name. |
@@ -145,10 +148,11 @@ HTTPS/WSS and Keychain services. `ITSAppUsesNonExemptEncryption` is `NO` in the
 processed Info.plist, so no encryption documentation is expected.
 
 The app contains no licensed music, video, third-party branding, or copied
-media. It displays operator-supplied tournament records and user comments.
-Before making the content-rights declaration, the account holder must confirm
-that the operator is authorized to publish the tournament, team, roster, and
-match information.
+media. It displays operator-supplied tournament records and user comments. On
+October 8, 2026, the account holder confirmed authorization to publish the
+tournament, team, roster, and match information, and App Store Connect was
+saved with the declaration that the app has the necessary rights to its
+third-party content.
 
 ## App Review Information
 
@@ -156,6 +160,9 @@ Use display name `AppReview`. Its durable non-administrator password is stored
 in the macOS Keychain item named `Ruski Report App Review` and must never be
 copied into Git or release evidence. The reviewer does not need an
 administrator account and must never receive one.
+
+The account, reviewer contact information, review notes, and manual release
+selection were saved in App Store Connect on October 8, 2026.
 
 ### Review Notes
 
@@ -178,6 +185,10 @@ support links are available from the Account screen.
 
 ## Release Boundaries
 
+- iOS 1.0 (1) is Ready to Test in the manually managed `Phase 7 Internal`
+  group. Automatic distribution of future builds is disabled.
+- The invited account holder must install this exact build and complete the
+  production smoke test and observation window tracked by issue 47.
 - TestFlight upload does not authorize App Review submission.
 - Do not add the build to a review submission until the internal TestFlight
   production smoke test and observation window pass.

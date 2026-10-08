@@ -10,7 +10,9 @@ The current production application candidate is
 initial production rollout used `e5fff7c7d2c42d9ab98df379eb6b0269b5ca43de`;
 the current candidate adds only the bounded administrator same-origin request
 compatibility fix recorded below. It does **not** authorize an App Store
-submission. No build was uploaded during the Phase 7 rollout.
+submission. No build was uploaded during the Phase 7 production rollout
+itself; the exact qualified iOS artifact was subsequently uploaded to internal
+TestFlight as recorded below.
 
 | Gate | Result | Required current-candidate evidence |
 | --- | --- | --- |
@@ -26,10 +28,30 @@ submission. No build was uploaded during the Phase 7 rollout.
 | Large iPhone matrix | Pass | iPhone 17 Pro Max / iOS 26.5: 139 unit and 30 distinct Release UI tests passed with zero failures. |
 | Physical iPhone Release pass | Pass | All 30 distinct Release UI scenarios passed on an iPhone 16 Plus / iOS 26.3.1, with one history-card timing failure passing on isolated retry. The preserved installed 1.0 (1) build then launched successfully without reinstalling against the production candidate and remained running while the final public compatibility gate passed. |
 | Rollback rehearsal | Pass | The current production image was archived before rehearsal, restored in 11 seconds, and passed health, 59-match legacy reads, comment reads, and realtime connection/reconnect against a fresh restored database. Archive digest and mode-0600 evidence were verified. |
+| Internal TestFlight delivery | Pass; observation active | The exact qualified iOS 1.0 (1) IPA with SHA-256 `a50e49993fae12d92b25f9e2f16bc2848576ea83480ac9cab39207ab7c31752a` validated and uploaded without error. Apple completed processing, marked the binary App Store eligible and Ready to Test, and assigned it to the controlled `Phase 7 Internal` group. Installation and the issue 47 observation window remain required; no App Review submission occurred. |
 
 Do not change these items to `Pass` based on code review, a clean synthetic
 database, or the earlier release evidence. Attach only privacy-safe counts,
 digests, versions, status codes, and artifact identifiers.
+
+## 2026-10-08 · App Store Connect And Internal TestFlight
+
+The exact qualified iOS viewer artifact was uploaded only after the production
+migration, hotfix, physical-device qualification, and observation decision had
+passed. This delivery authorizes internal TestFlight testing only. It does not
+authorize external testing, an App Review submission, or release on the App
+Store.
+
+| Gate | Result | Evidence |
+| --- | --- | --- |
+| App record and commercial scope | Pass | App Store Connect Apple ID `6820726650` uses bundle `com.emiliogarcia.ruskireport`, English (U.S.), free pricing, no IAP, United States-only availability, Sports primary category, Entertainment secondary category, and manual App Store release. |
+| Trust and compliance metadata | Pass | The 18+ override, authorized third-party content-rights declaration, exempt-encryption declaration, published privacy URLs, and published five-data-type privacy label were saved. The label declares no tracking; Name, Customer Support, Other User Content, and User ID are linked for App Functionality, while Other Diagnostic Data is not linked. |
+| Review access | Pass | A durable non-administrator `AppReview` account was created in production, verified, and entered into App Store Connect with the required reviewer contact information and review notes. Its password remains only in the named macOS Keychain item and is absent from Git and evidence. |
+| Exact artifact validation | Pass | iOS 1.0 (1), bundle `com.emiliogarcia.ruskireport`, IPA SHA-256 `a50e49993fae12d92b25f9e2f16bc2848576ea83480ac9cab39207ab7c31752a`, validated with zero errors before upload. |
+| App Store Connect upload | Pass | Delivery `f3ad65be-ef00-4f9d-9591-6a21a1a597c9` uploaded 4,992,453 bytes without warning or error. Apple reported `VALID_BINARY`, `APP_STORE_ELIGIBLE`, iPhone-only, minimum iOS 17.0, and `USES-NON-EXEMPT-ENCRYPTION=false`; the build upload then reached Complete. |
+| Internal distribution | Pass | Build 1 reached Ready to Test and was added manually to the `Phase 7 Internal` group with automatic future-build distribution disabled. The account holder is the sole invited internal tester. No external group was created and the build was not added to an App Review submission. |
+| Credential hygiene | Pass | The single-use upload credential was revoked in Apple Account immediately after delivery, its local Keychain item was deleted, and the clipboard was cleared. The credential is not retained in the repository or release evidence. |
+| TestFlight production smoke and observation | In progress | Installation on the invited tester's physical iPhone, production-endpoint smoke coverage, and the issue 47 observation window remain before App Review can be considered. |
 
 ## 2026-10-07–08 · Production Migration And Deployment
 
