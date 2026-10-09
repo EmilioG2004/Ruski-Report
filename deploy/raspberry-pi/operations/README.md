@@ -157,6 +157,11 @@ systemctl list-timers 'ruski-report-backup*'
 shared lock prevents a backup, prune, integrity check, and restore rehearsal
 from changing the repository concurrently.
 
+The retention command groups snapshots by host and tags rather than by the
+temporary staging path. Keep that explicit grouping: every backup uses a unique
+run directory, and path-based groups would prevent the 27-day window from
+expiring older snapshots.
+
 ## Routine Verification
 
 The normal recovery point is the most recent successful hourly snapshot. Run
@@ -183,6 +188,135 @@ sudo journalctl --disk-usage
 
 Each container must use Docker's `journald` driver. The journal configuration
 must show persistent storage, a 256 MiB system cap, and a 30-day maximum age.
+
+## Phase 7 Release Image Custody
+
+`prepare-release-image.sh` stays in the checked-out repository because it must
+validate the exact checkout that supplies the Docker build context. Do not copy
+it into `/usr/local`, run it from another checkout, or modify the candidate
+after preparation.
+
+Before it builds anything, the helper requires an exact full commit or tag,
+requires that value to resolve to `HEAD`, and rejects tracked, untracked, or
+submodule changes. It reads the currently running API container's immutable
+image ID, gives that image a full-ID rollback tag, builds the candidate once,
+and labels it with the candidate commit. Its mode-0600 state file contains only
+privacy-safe release metadata:
+
+- candidate source reference and full commit;
+- commit-specific local candidate image reference and immutable image ID;
+- full-ID rollback image reference and immutable image ID;
+- preparation timestamp and state schema version.
+
+The state deliberately excludes environment values, credentials, database
+addresses, source paths, container names, and application data. Record the
+sanitized `prepare` or `verify` output in qualification evidence, not the state
+file's host path or contents.
+
+Preparation and verification are fail-closed:
+
+```bash
+cd /opt/ruski-report/source
+candidate_ref=EXACT_TAG_OR_FULL_COMMIT
+candidate_commit=$(git rev-parse "${candidate_ref}^{commit}")
+install -d -m 0700 /opt/ruski-report/release-images
+release_state=/opt/ruski-report/release-images/${candidate_commit}.env
+deploy/raspberry-pi/operations/prepare-release-image.sh prepare \
+  "$candidate_ref" "$release_state"
+deploy/raspberry-pi/operations/prepare-release-image.sh verify "$release_state"
+```
+
+Treat the state file as write-once release evidence for that attempt. If it
+already exists, `prepare` refuses to rebuild. Use `verify`; if verification fails,
+record a blocker and investigate rather than retagging or overwriting the
+file. Never run `docker image prune`, remove either recorded tag, or rebuild
+the candidate tag before the release decision and observation window end.
+
+### Phase 7 Pre-window Rehearsal
+
+`phase7-prewindow-rehearsal.sh` closes the restored-database gates without
+joining a production Docker network or changing a production container. It
+requires the immutable release-image state, an exact full restic snapshot ID,
+the exact clean candidate checkout, and a separate clean qualification-tool
+checkout. The qualification checkout may be a later tooling-only commit; the
+application candidate and rollback artifacts still come exclusively from the
+verified release state.
+
+The script performs these operations sequentially:
+
+- a protected `docker image save` archive of the immutable rollback image and
+  its SHA-256 digest alongside the final evidence;
+- four independent fresh restores for the backfill, projection-materialization,
+  active-pointer, and before-commit fault/retry scenarios;
+- another fresh restore for deterministic migration, dry-run/apply/no-op
+  backfill, the persisted setup-to-champion lifecycle, v1/v2 equivalence, and
+  two internal Socket.IO connections;
+- a final fresh restore started with the immutable previous application image
+  for rollback health, legacy read, comments, and realtime verification.
+
+Every database uses a generated name, tmpfs storage, and a dedicated internal
+Docker network with no published ports. The script verifies the currently
+running application image is the recorded rollback image before it starts. It
+never stops or restarts production, starts Cloudflare, runs Compose `up` or
+`down`, prunes Docker objects, or connects a rehearsal container to a
+production network. Cleanup is label-checked and cleanup failure fails the
+gate.
+
+Run it from a root shell after selecting an exact approved snapshot. The
+evidence destination is write-once and must not already exist:
+
+```bash
+set -a
+source /opt/ruski-report/secrets/restic.env
+set +a
+
+release_state=/opt/ruski-report/release-images/FULL_CANDIDATE_COMMIT.env
+snapshot_id=FULL_64_CHARACTER_RESTIC_SNAPSHOT_ID
+candidate_source=/opt/ruski-report/qualification/FULL_CANDIDATE_COMMIT
+qualification_source=/opt/ruski-report/qualification/FULL_TOOLING_COMMIT
+evidence_file=/opt/ruski-report/qualification-evidence/FULL_TOOLING_COMMIT.json
+
+"$qualification_source/deploy/raspberry-pi/operations/phase7-prewindow-rehearsal.sh" \
+  "$release_state" \
+  "$snapshot_id" \
+  "$candidate_source" \
+  "$qualification_source" \
+  "$evidence_file"
+```
+
+Record only the generated JSON evidence and the final sanitized status line.
+Keep the adjacent mode-0600 rollback image archive until the release decision
+and observation window are complete; its digest is recorded in the evidence.
+Do not retain the temporary logs, database URL, generated password, container
+names, administrator identity, tournament identity, or restored data. A failed
+run requires a new evidence path and a new execution; do not weaken a guard or
+reuse a partially mutated rehearsal database.
+
+Use `release-ref` to select the candidate for both the newly restored isolated
+database and production. Every Compose `up` in those workflows must include
+`--no-build`; `pull_policy: never` also prevents Compose from substituting a
+registry image. Verify the rehearsal and production API containers against the
+state after they start:
+
+```bash
+release_image=$(deploy/raspberry-pi/operations/prepare-release-image.sh \
+  release-ref "$release_state")
+export RUSKI_API_IMAGE="$release_image"
+deploy/raspberry-pi/operations/prepare-release-image.sh verify-container \
+  release "$release_state" API_CONTAINER
+```
+
+`restore-rehearsal.sh` remains the backup-integrity smoke test and intentionally
+uses the running deployment image. It is not the Phase 7 production-shaped
+candidate environment. That separate environment must import a fresh snapshot
+into a newly created database, export the verified `RUSKI_API_IMAGE`, and keep
+its data path and Compose project distinct from production.
+
+For rollback, `rollback-ref` verifies both image IDs and prints only the safe
+local reference. Keep the candidate checkout and state file in place until
+that check is complete. A database restore remains mandatory for the first
+canonical migration or any release whose backward compatibility has not been
+proven.
 
 ## Availability Alert Response
 

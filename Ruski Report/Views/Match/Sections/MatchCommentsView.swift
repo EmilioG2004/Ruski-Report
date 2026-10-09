@@ -2,6 +2,9 @@
 //  MatchCommentsView.swift
 //  Ruski Report
 //
+//  Owns comment-feed state and composes independent scrolling, an anchored
+//  composer, and moderation coordination without embedding policy in rows.
+//
 
 import SwiftUI
 
@@ -10,10 +13,8 @@ struct MatchCommentsView: View {
     @ObservedObject private var session: AccountSessionStore
     @ObservedObject private var userBlocking: UserBlockingStore
     @StateObject private var controller: MatchCommentsController
-    @StateObject private var reportingController: CommentReportingController
+    @StateObject private var moderation: MatchCommentModerationCoordinator
     @State private var draftComment = ""
-    @State private var selectedReport: CommentReportPresentation?
-    @State private var selectedBlock: BlockUserPresentation?
 
     init(
         matchId: MatchPreview.ID,
@@ -35,125 +36,79 @@ struct MatchCommentsView: View {
                 logger: logger
             )
         )
-        _reportingController = StateObject(
-            wrappedValue: CommentReportingController(
+        _moderation = StateObject(
+            wrappedValue: MatchCommentModerationCoordinator(
                 reports: commentReports,
                 session: session,
+                userBlocking: userBlocking,
                 logger: logger
             )
         )
     }
 
     var body: some View {
-        MatchSectionView(title: "Comments", systemImage: "text.bubble") {
-            Group {
-                switch controller.state {
-                case .loading:
-                    ProgressView("Loading comments")
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 12)
-                        .accessibilityIdentifier("match.comments.loading")
-                case .loaded(let content):
-                    loadedContent(content)
-                case .failed(let message):
-                    failedContent(message)
-                }
+        commentsPanel
+            .task(id: session.current) {
+                await controller.loadComments()
             }
-        }
-        .task(id: session.current) {
-            await controller.loadComments()
-        }
-        .task {
-            await controller.observeRealtimeUpdates()
-        }
-        .task(id: userBlocking.revision) {
-            guard userBlocking.revision > 0 else {
-                return
+            .task {
+                await controller.observeRealtimeUpdates()
             }
-            await controller.refreshComments()
-        }
-        .sheet(item: $selectedReport) { comment in
-            ReportCommentSheet(
-                comment: comment,
-                controller: reportingController,
-                refreshComments: {
-                    await controller.refreshComments()
-                }
+            .task(id: userBlocking.revision) {
+                guard userBlocking.revision > 0 else { return }
+                await controller.refreshComments()
+            }
+            .modifier(
+                MatchCommentModerationModifier(
+                    coordinator: moderation,
+                    refreshComments: controller.refreshComments,
+                    showAccount: sheetRouter.showAccount
+                )
             )
-        }
-        .confirmationDialog(
-            blockDialogTitle,
-            isPresented: blockDialogIsPresented,
-            titleVisibility: .visible,
-            presenting: selectedBlock
-        ) { user in
-            Button("Block User", role: .destructive) {
-                confirmBlock(user)
-            }
-            .accessibilityIdentifier("match.comments.block.confirm")
+    }
 
-            Button("Cancel", role: .cancel) {}
-                .accessibilityIdentifier("match.comments.block.cancel")
-        } message: { user in
-            Text(
-                "Comments from \(user.displayName) will be hidden for you. This does not report or remove their comments for anyone else."
-            )
+    @ViewBuilder
+    private var commentsPanel: some View {
+        switch controller.state {
+        case .loading:
+            MatchPanelScrollView {
+                AppLoadingStateView(
+                    title: MatchCopy.loadingComments,
+                    message: MatchCopy.loadingCommentsMessage
+                )
+                    .frame(minHeight: AppLayout.compactStateHeight)
+                    .accessibilityIdentifier("match.comments.loading")
+            }
+        case .loaded(let content):
+            loadedPanel(content)
+        case .failed(let message):
+            MatchPanelScrollView {
+                AppErrorStateView(title: MatchCopy.commentsTitle, message: message) {
+                    Task { await controller.loadComments() }
+                }
+                .frame(minHeight: AppLayout.compactStateHeight)
+                .accessibilityIdentifier("match.comments.retry")
+            }
         }
     }
 
-    private func loadedContent(_ content: MatchCommentsContent) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if let successMessage = reportingController.state.successMessage {
-                Label(successMessage, systemImage: "checkmark.circle")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("match.comments.reportSuccess")
-            }
-
-            if let noticeMessage = userBlocking.noticeMessage {
-                Label(noticeMessage, systemImage: "checkmark.circle")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("match.comments.blockSuccess")
-            }
-
-            if let errorMessage = userBlocking.actionErrorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("match.comments.blockError")
-            }
-
-            if content.comments.isEmpty {
-                EmptyMatchSectionView(
-                    title: "No comments yet",
-                    systemImage: "text.bubble"
-                )
-            } else {
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(
-                        Array(content.comments.enumerated()),
-                        id: \.element.id
-                    ) { index, comment in
-                        if index > 0 {
-                            Divider()
-                        }
-
-                        MatchCommentRowView(
-                            comment: comment,
-                            report: {
-                                beginReport(for: comment)
-                            },
-                            block: blockAction(for: comment)
-                        )
-                    }
-                }
-            }
-
-            MatchCommentComposer(
+    private func loadedPanel(_ content: MatchCommentsContent) -> some View {
+        ScrollView {
+            MatchCommentsFeedView(
+                content: content,
+                reportingController: moderation.reportingController,
+                userBlocking: userBlocking,
+                report: beginReport,
+                block: blockAction
+            )
+            .padding(AppLayout.pagePadding)
+            .frame(maxWidth: AppLayout.maximumContentWidth, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .accessibilityIdentifier("match.comments.scroll")
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            MatchCommentComposerBar(
                 authorization: content.postingAuthorization,
                 draft: $draftComment,
                 isPosting: content.isPosting,
@@ -162,26 +117,6 @@ struct MatchCommentsView: View {
                 openSignIn: sheetRouter.showAccount
             )
         }
-    }
-
-    private func failedContent(_ message: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(message, systemImage: "exclamationmark.triangle")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button {
-                Task {
-                    await controller.loadComments()
-                }
-            } label: {
-                Label("Retry", systemImage: "arrow.clockwise")
-            }
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier("match.comments.retry")
-        }
-        .padding(.vertical, 8)
     }
 
     private func submitComment() {
@@ -193,72 +128,11 @@ struct MatchCommentsView: View {
         }
     }
 
-    private func beginReport(for comment: MatchComment) {
-        guard session.current.canReportComments else {
-            sheetRouter.showAccount()
-            return
-        }
-
-        reportingController.reset()
-        selectedReport = CommentReportPresentation(
-            commentId: comment.id,
-            authorDisplayName: comment.authorDisplayName
-        )
+    private func beginReport(_ comment: MatchComment) {
+        moderation.beginReport(for: comment, showAccount: sheetRouter.showAccount)
     }
 
-    private func blockAction(for comment: MatchComment) -> (() -> Void)? {
-        guard let authorUserId = comment.authorUserId,
-              authorUserId != session.current.profile?.id else {
-            return nil
-        }
-
-        return {
-            beginBlock(
-                BlockUserPresentation(
-                    id: authorUserId,
-                    displayName: comment.authorDisplayName
-                )
-            )
-        }
-    }
-
-    private func beginBlock(_ user: BlockUserPresentation) {
-        guard session.current.canBlockUsers else {
-            sheetRouter.showAccount()
-            return
-        }
-
-        userBlocking.clearMessages()
-        selectedBlock = user
-    }
-
-    private func confirmBlock(_ user: BlockUserPresentation) {
-        selectedBlock = nil
-        Task {
-            let outcome = await userBlocking.block(user)
-            if outcome == .accountUnavailable {
-                await controller.refreshComments()
-            } else if outcome == .requiresSignIn {
-                sheetRouter.showAccount()
-            }
-        }
-    }
-
-    private var blockDialogTitle: String {
-        guard let selectedBlock else {
-            return "Block User?"
-        }
-        return "Block \(selectedBlock.displayName)?"
-    }
-
-    private var blockDialogIsPresented: Binding<Bool> {
-        Binding(
-            get: { selectedBlock != nil },
-            set: { isPresented in
-                if !isPresented {
-                    selectedBlock = nil
-                }
-            }
-        )
+    private func blockAction(_ comment: MatchComment) -> (() -> Void)? {
+        moderation.blockAction(for: comment, showAccount: sheetRouter.showAccount)
     }
 }

@@ -19,6 +19,7 @@ export interface LiveUpdateEvent {
   occurredAt: ISODateTimeString;
   tournamentId?: TournamentId;
   matchId?: MatchId;
+  projectionVersion?: number;
   version?: number;
   metadata?: Metadata;
 }

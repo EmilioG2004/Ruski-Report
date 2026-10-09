@@ -31,9 +31,30 @@ Release identity and platform settings live in:
 - `Configuration/Debug.xcconfig`
 - `Configuration/Release.xcconfig`
 
-Environment-specific API, realtime, and public-policy URLs remain in
-`AppConfig.json` and its documented deployment overrides. They do not belong
-in the release identity configuration.
+The API environment is selected by Xcode's build configuration:
+
+| Configuration | API base URL | Realtime URL |
+| --- | --- | --- |
+| Debug | `http://127.0.0.1:3000/api` | `ws://127.0.0.1:3000/socket.io/` |
+| Release | `https://api.ruskireport.com/api` | `wss://api.ruskireport.com/socket.io/` |
+
+`Debug.xcconfig` and `Release.xcconfig` supply the API URL while
+`Configuration/App-Info.plist` expands it into the processed app Info.plist.
+`AppConfig.json` contains only the public policy links. The Debug Run scheme
+may override its endpoint with `RUSKI_API_BASE_URL`; Release builds ignore that
+process environment override and always use their bundled value. This keeps
+archive-time source edits out of the release process.
+
+`AppConfig` permits HTTP only for loopback development in Debug builds. A
+Release build requires a credential-free HTTPS URL and its compiled fallback
+is the same production endpoint. The realtime client derives its URL from the
+API URL, replacing HTTPS with WSS and using the Socket.IO path. No API key,
+administrator credential, tunnel token, or AWS credential belongs in either
+configuration.
+
+App Transport Security remains at its secure default. The target does not add
+`NSAppTransportSecurity` exceptions; Debug loopback access is isolated from
+the production archive.
 
 The app derives its OSLog subsystem and Keychain service from the installed
 bundle identifier. Changing the canonical bundle identifier therefore does not
@@ -73,12 +94,20 @@ blocking, and operator moderation.
 
 ## Local Validation
 
-Validate the icon files and resolved Release settings without launching a
-simulator:
+Validate the icon files, resolved Release settings, and archived networking
+without launching a simulator:
 
 ```bash
 scripts/validate-ios-release.sh
 ```
+
+The script creates a temporary unsigned Release archive and verifies:
+
+- The processed Info.plist contains `https://api.ruskireport.com/api` and the
+  `Release` configuration marker.
+- The app contains no loopback HTTP/WebSocket service endpoint.
+- The app contains no App Transport Security exception.
+- The app contains no server credential marker.
 
 Compile and archive against a generic iOS device:
 
@@ -94,10 +123,11 @@ xcodebuild \
 ```
 
 The unsigned archive verifies compilation, asset-catalog processing, generated
-launch metadata, supported platforms, and archive structure. Producing the
-signed distribution archive additionally requires registering the bundle
-identifier and allowing Xcode to create or download the matching provisioning
-profile through the configured Apple Developer account.
+launch metadata, supported platforms, archive structure, and the production
+network configuration. Producing the signed distribution archive additionally
+requires registering the bundle identifier and allowing Xcode to create or
+download the matching provisioning profile through the configured Apple
+Developer account.
 
 ## Provisioning Status
 

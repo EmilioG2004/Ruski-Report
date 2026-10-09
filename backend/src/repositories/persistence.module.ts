@@ -7,6 +7,24 @@ import {
   PostgresTransactionManager
 } from "../database";
 import {
+  CANONICAL_PROJECTION_ACTIVATION_LISTENER,
+  CanonicalProjectionActivationListener,
+  PostgresCanonicalStatisticRepository,
+  PostgresMatchRevisionRepository,
+  PostgresMatchWriterRepository,
+  PostgresProjectionRepository,
+  PostgresRosterRepository,
+  PostgresTournamentSetupRepository,
+  PostgresTournamentProgressionRepository,
+  TournamentEngineTransactionManager
+} from "../tournament-engine/persistence";
+import { PostgresWorkbookReconciliationRepository } from "../tournament-engine/workbook";
+import {
+  createCanonicalProjectionActivationListener,
+  RealtimeModule,
+  RealtimeUpdatePublisher
+} from "../realtime";
+import {
   PostgresAccountRepository,
   PostgresAuthSessionRepository,
   PostgresCommentReportRepository,
@@ -65,7 +83,159 @@ const repositoryProviders = [
   }
 ];
 
+const tournamentEngineRepositoryTokens = [
+  TournamentEngineTransactionManager,
+  PostgresTournamentSetupRepository,
+  PostgresRosterRepository,
+  PostgresMatchWriterRepository,
+  PostgresMatchRevisionRepository,
+  PostgresCanonicalStatisticRepository,
+  PostgresTournamentProgressionRepository,
+  PostgresProjectionRepository,
+  PostgresWorkbookReconciliationRepository
+];
+
+const tournamentEngineRepositoryProviders = [
+  {
+    provide: CANONICAL_PROJECTION_ACTIVATION_LISTENER,
+    inject: [RealtimeUpdatePublisher],
+    useFactory: (
+      realtime: RealtimeUpdatePublisher
+    ): CanonicalProjectionActivationListener =>
+      createCanonicalProjectionActivationListener(realtime)
+  },
+  {
+    provide: TournamentEngineTransactionManager,
+    inject: [PostgresDatabase],
+    useFactory: (database: PostgresDatabase) =>
+      new TournamentEngineTransactionManager(database)
+  },
+  {
+    provide: PostgresTournamentSetupRepository,
+    inject: [
+      PostgresDatabase,
+      TournamentEngineTransactionManager,
+      PostgresProjectionRepository,
+      CANONICAL_PROJECTION_ACTIVATION_LISTENER
+    ],
+    useFactory: (
+      database: PostgresDatabase,
+      transactions: TournamentEngineTransactionManager,
+      projections: PostgresProjectionRepository,
+      projectionListener: CanonicalProjectionActivationListener
+    ) => new PostgresTournamentSetupRepository(
+      database,
+      transactions,
+      projections,
+      projectionListener
+    )
+  },
+  {
+    provide: PostgresRosterRepository,
+    inject: [
+      PostgresDatabase,
+      TournamentEngineTransactionManager,
+      PostgresProjectionRepository,
+      CANONICAL_PROJECTION_ACTIVATION_LISTENER
+    ],
+    useFactory: (
+      database: PostgresDatabase,
+      transactions: TournamentEngineTransactionManager,
+      projections: PostgresProjectionRepository,
+      projectionListener: CanonicalProjectionActivationListener
+    ) => new PostgresRosterRepository(
+      database,
+      transactions,
+      projections,
+      projectionListener
+    )
+  },
+  {
+    provide: PostgresMatchWriterRepository,
+    inject: [PostgresDatabase, TournamentEngineTransactionManager],
+    useFactory: (
+      database: PostgresDatabase,
+      transactions: TournamentEngineTransactionManager
+    ) => new PostgresMatchWriterRepository(database, transactions)
+  },
+  {
+    provide: PostgresCanonicalStatisticRepository,
+    inject: [PostgresDatabase],
+    useFactory: (database: PostgresDatabase) =>
+      new PostgresCanonicalStatisticRepository(database)
+  },
+  {
+    provide: PostgresMatchRevisionRepository,
+    inject: [PostgresDatabase, TournamentEngineTransactionManager],
+    useFactory: (
+      database: PostgresDatabase,
+      transactions: TournamentEngineTransactionManager
+    ) => new PostgresMatchRevisionRepository(database, transactions)
+  },
+  {
+    provide: PostgresProjectionRepository,
+    inject: [PostgresDatabase, TournamentEngineTransactionManager],
+    useFactory: (
+      database: PostgresDatabase,
+      transactions: TournamentEngineTransactionManager
+    ) => new PostgresProjectionRepository(database, transactions)
+  },
+  {
+    provide: PostgresTournamentProgressionRepository,
+    inject: [
+      PostgresDatabase,
+      TournamentEngineTransactionManager,
+      PostgresProjectionRepository,
+      CANONICAL_PROJECTION_ACTIVATION_LISTENER
+    ],
+    useFactory: (
+      database: PostgresDatabase,
+      transactions: TournamentEngineTransactionManager,
+      projections: PostgresProjectionRepository,
+      projectionListener: CanonicalProjectionActivationListener
+    ) => new PostgresTournamentProgressionRepository(
+      database,
+      transactions,
+      projections,
+      projectionListener
+    )
+  },
+  {
+    provide: PostgresWorkbookReconciliationRepository,
+    inject: [
+      PostgresDatabase,
+      TournamentEngineTransactionManager,
+      PostgresMatchWriterRepository,
+      PostgresMatchRevisionRepository,
+      PostgresCanonicalStatisticRepository,
+      PostgresTournamentProgressionRepository,
+      PostgresProjectionRepository,
+      CANONICAL_PROJECTION_ACTIVATION_LISTENER
+    ],
+    useFactory: (
+      database: PostgresDatabase,
+      transactions: TournamentEngineTransactionManager,
+      writers: PostgresMatchWriterRepository,
+      revisions: PostgresMatchRevisionRepository,
+      statistics: PostgresCanonicalStatisticRepository,
+      progression: PostgresTournamentProgressionRepository,
+      projections: PostgresProjectionRepository,
+      projectionListener: CanonicalProjectionActivationListener
+    ) => new PostgresWorkbookReconciliationRepository(
+      database,
+      transactions,
+      writers,
+      revisions,
+      statistics,
+      progression,
+      projections,
+      projectionListener
+    )
+  }
+];
+
 @Module({
+  imports: [RealtimeModule],
   providers: [
     {
       provide: DATABASE_CONFIG,
@@ -81,8 +251,13 @@ const repositoryProviders = [
     PostgresTournamentSnapshotRepository,
     PostgresUploadReportRepository,
     PostgresUserBlockRepository,
+    ...tournamentEngineRepositoryProviders,
     ...repositoryProviders
   ],
-  exports: [PostgresDatabase, ...repositoryProviders]
+  exports: [
+    PostgresDatabase,
+    ...tournamentEngineRepositoryTokens,
+    ...repositoryProviders
+  ]
 })
 export class PersistenceModule {}

@@ -151,6 +151,8 @@ nonisolated extension TournamentDetail {
                 winnerTeamId: winnerTeamId,
                 laterRounds: laterRounds
             ),
+            isScoreUnavailable: winnerTeamId != nil &&
+                !slots.isEmpty && slots.allSatisfy { $0.score == nil },
             isAvailable: match != nil
         )
     }
@@ -277,6 +279,7 @@ nonisolated struct TournamentBracketMatchup: Identifiable, Equatable {
     let statusText: String
     let slots: [TournamentBracketTeamSlot]
     let progressionText: String?
+    let isScoreUnavailable: Bool
     let isAvailable: Bool
 }
 

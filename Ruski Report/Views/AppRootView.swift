@@ -24,14 +24,24 @@ struct AppRootView: View {
                 logger: services.logger
             )
         )
-        _homeController = StateObject(
-            wrappedValue: HomeController(
-                tournaments: services.tournaments,
-                realtime: services.realtime,
-                logger: services.logger,
-                initialTournament: services.initialTournament
+        if services.usesCanonicalPublicAPI {
+            _homeController = StateObject(
+                wrappedValue: HomeController(
+                    tournaments: services.tournaments,
+                    realtime: services.realtime,
+                    logger: services.logger
+                )
             )
-        )
+        } else {
+            _homeController = StateObject(
+                wrappedValue: HomeController(
+                    tournaments: services.tournaments,
+                    realtime: services.realtime,
+                    logger: services.logger,
+                    initialTournament: services.initialTournament
+                )
+            )
+        }
     }
 
     var body: some View {
@@ -81,11 +91,17 @@ struct AppRootView: View {
         }
         .environmentObject(navigation)
         .environmentObject(sheetRouter)
+        .tint(Color.appBrand)
     }
 
     @ViewBuilder
     private func destination(for route: AppRoute) -> some View {
         switch route {
+        case .tournamentHistory:
+            TournamentHistoryView(
+                tournaments: services.tournaments,
+                logger: services.logger
+            )
         case .tournament(let id):
             TournamentDetailView(
                 tournamentId: id,
@@ -98,6 +114,27 @@ struct AppRootView: View {
             MatchDetailView(
                 routeContext: context,
                 matches: services.matches,
+                games: services.games,
+                comments: services.comments,
+                commentReports: services.commentReports,
+                userBlocking: userBlocking,
+                session: session,
+                realtime: services.realtime,
+                logger: services.logger
+            )
+        case .canonicalTournament(let context):
+            TournamentDetailView(
+                routeContext: context,
+                tournaments: services.tournaments,
+                games: services.games,
+                realtime: services.realtime,
+                logger: services.logger
+            )
+        case .canonicalMatch(let context):
+            MatchDetailView(
+                routeContext: context,
+                matches: services.matches,
+                tournaments: services.tournaments,
                 games: services.games,
                 comments: services.comments,
                 commentReports: services.commentReports,

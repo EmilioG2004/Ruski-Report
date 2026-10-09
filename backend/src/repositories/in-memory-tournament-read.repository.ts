@@ -23,15 +23,16 @@ export class InMemoryTournamentReadRepository
   async findActiveTournament(
     query?: ActiveTournamentQuery
   ): Promise<RepositoryResult<TournamentSummary | null>> {
-    const tournament =
-      this.tournaments.find((candidate) => {
+    const tournament = this.tournaments
+      .filter((candidate) => {
         const gameTypeMatches =
           query?.gameType === undefined || candidate.gameType === query.gameType;
         const yearMatches =
           query?.year === undefined || candidate.year === query.year;
 
-        return candidate.status === "active" && gameTypeMatches && yearMatches;
-      }) ?? null;
+        return gameTypeMatches && yearMatches;
+      })
+      .sort(compareNewestTournament)[0] ?? null;
 
     return repositorySuccess(
       tournament === null ? null : clone(toTournamentSummary(tournament))
@@ -65,6 +66,10 @@ export class InMemoryTournamentReadRepository
 
     return repositorySuccess(match === null ? null : clone(match));
   }
+}
+
+function compareNewestTournament(left: Tournament, right: Tournament): number {
+  return right.year - left.year || right.version - left.version;
 }
 
 function toTournamentSummary(tournament: Tournament): TournamentSummary {

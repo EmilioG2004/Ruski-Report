@@ -2,6 +2,9 @@
 //  TournamentSectionPicker.swift
 //  Ruski Report
 //
+//  Defines the tournament's extensible destination model and renders it with
+//  the shared horizontally scrolling picker rail.
+//
 
 import SwiftUI
 
@@ -9,45 +12,23 @@ struct TournamentSectionPicker: View {
     @Binding var selection: TournamentDetailSection
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(TournamentDetailSection.allCases) { section in
-                    Button {
-                        selection = section
-                    } label: {
-                        Label(section.title, systemImage: section.systemImage)
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                            .padding(.horizontal, 14)
-                            .frame(minHeight: 44)
-                            .foregroundStyle(
-                                selection == section ? Color.white : Color.primary
-                            )
-                            .background(
-                                selection == section ?
-                                    Color.accentColor : Color.appSecondaryGroupedBackground
-                            )
-                            .clipShape(
-                                RoundedRectangle(
-                                    cornerRadius: AppLayout.surfaceRadius,
-                                    style: .continuous
-                                )
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("tournament.section.\(section.rawValue)")
-                    .accessibilityAddTraits(selection == section ? .isSelected : [])
-                }
+        AppPickerRail(
+            options: TournamentDetailSection.allCases,
+            selection: $selection,
+            title: \.title,
+            systemImage: \.systemImage,
+            accessibilityIdentifier: {
+                "tournament.section.\($0.rawValue)"
             }
-        }
+        )
         .accessibilityIdentifier("tournament.sectionPicker")
     }
 }
 
 enum TournamentDetailSection: String, CaseIterable, Identifiable {
+    case matches
     case overview
     case pods
-    case matches
     case bracket
     case stats
 
@@ -57,7 +38,7 @@ enum TournamentDetailSection: String, CaseIterable, Identifiable {
         switch self {
         case .overview: "Overview"
         case .pods: "Pods"
-        case .matches: "Matches"
+        case .matches: TournamentCopy.gamesTitle
         case .bracket: "Bracket"
         case .stats: "Stats"
         }

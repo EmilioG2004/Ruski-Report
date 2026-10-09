@@ -2,10 +2,12 @@ export interface HttpServerConfig {
   allowedOrigins: string[];
   trustedProxyHops: number;
   requestBodyLimitBytes: number;
+  urlEncodedParameterLimit: number;
   scorebookUploadLimitBytes: number;
 }
 
-const DEFAULT_REQUEST_BODY_LIMIT_BYTES = 256 * 1024;
+const DEFAULT_REQUEST_BODY_LIMIT_BYTES = 8 * 1024 * 1024;
+const DEFAULT_URL_ENCODED_PARAMETER_LIMIT = 7_000;
 const DEFAULT_SCOREBOOK_UPLOAD_LIMIT_BYTES = 10 * 1024 * 1024;
 
 export function loadHttpServerConfig(
@@ -26,6 +28,13 @@ export function loadHttpServerConfig(
       1,
       10 * 1024 * 1024,
       "HTTP_REQUEST_BODY_LIMIT_BYTES"
+    ),
+    urlEncodedParameterLimit: readIntegerInRange(
+      environment.HTTP_URLENCODED_PARAMETER_LIMIT,
+      DEFAULT_URL_ENCODED_PARAMETER_LIMIT,
+      100,
+      10_000,
+      "HTTP_URLENCODED_PARAMETER_LIMIT"
     ),
     scorebookUploadLimitBytes: readIntegerInRange(
       environment.SCOREBOOK_UPLOAD_LIMIT_BYTES,
@@ -53,6 +62,7 @@ export function createCorsOptions(allowedOrigins: readonly string[]): {
       "Authorization",
       "Content-Type",
       "X-Admin-Token",
+      "X-CSRF-Token",
       "X-Request-ID"
     ],
     exposedHeaders: ["X-Request-ID"],

@@ -8,12 +8,30 @@ import Foundation
 nonisolated enum MatchDetailViewState: Equatable {
     case loading
     case loaded(MatchDetailScreen)
+    case canonicalLoaded(PublicMatchDetail)
     case failed(message: String)
 }
 
 nonisolated struct MatchDetailScreen: Equatable {
     let match: MatchDetail
     let gameDefinition: GameDefinition?
+    let turns: [MatchTurn]
+
+    init(match: MatchDetail, gameDefinition: GameDefinition?) {
+        self.match = match
+        self.gameDefinition = gameDefinition
+        turns = MatchTurnProjector.project(
+            scorecard: match.scorecard,
+            events: match.events
+        )
+    }
+
+    var isScoreUnavailable: Bool {
+        match.preview.status == .final &&
+            match.preview.score?.winnerTeamId != nil &&
+            match.preview.participants.allSatisfy { $0.score == nil } &&
+            (match.preview.score?.participants.isEmpty ?? true)
+    }
 
     var eventTypesById: [String: GameEventTypeDefinition] {
         Dictionary(

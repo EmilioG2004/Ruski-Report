@@ -31,18 +31,95 @@ provide `DATABASE_URL` through its secret manager and enable `DATABASE_SSL` when
 the database endpoint requires TLS. After compiling a production artifact, run
 `npm run db:migrate:prod` before `npm start`.
 
-PostgreSQL integration tests require a disposable database because they truncate
-application tables between cases:
+PostgreSQL integration tests require two disposable databases. Repository and
+administrator/setup/backfill cases truncate application tables, while the
+populated-migration database is reserved for upgrade rehearsals:
 
 ```bash
 docker compose -f compose.postgres.yml exec postgres \
   createdb -U ruski ruski_report_test
+docker compose -f compose.postgres.yml exec postgres \
+  createdb -U ruski ruski_report_migration_test
 export TEST_DATABASE_URL=postgresql://ruski:local-development-only@localhost:5432/ruski_report_test
+export POPULATED_MIGRATION_DATABASE_URL=postgresql://ruski:local-development-only@localhost:5432/ruski_report_migration_test
 npm run test:postgres
 ```
 
 Unit tests continue to use the in-memory repository adapters directly and do
 not require PostgreSQL.
+
+## Private Administrator Application
+
+The server-rendered administrator application is available at
+`/api/admin/app`. It uses separate administrator identities, opaque cookie
+sessions, strict same-origin CSRF protection, persisted rate limits, and
+immutable security and tournament-command audit records. The legacy
+`x-admin-token` remains limited to scorebook upload and moderation routes; it
+does not authorize the new tournament setup APIs.
+
+Production must provide an exact HTTPS `ADMIN_WEB_ORIGIN`, secure cookies, and
+a unique `ADMIN_AUTH_SECURITY_SECRET` of at least 32 bytes. Apply migrations
+before creating the first administrator. The bootstrap command writes the
+single-use credential only to a newly created mode-0600 file outside the
+repository; it never prints the raw token:
+
+```bash
+npm run db:admin-credential -- bootstrap \
+  --login-name tournament-admin \
+  --display-name "Tournament Administrator" \
+  --token-output /absolute/private/path/ruski-admin-bootstrap.json
+```
+
+Use the non-secret acceptance URL and token from that file to complete setup in
+the browser. After an administrator exists, create additional invitations from
+the authenticated administrator API. A local recovery credential uses the
+same protected-file workflow:
+
+```bash
+npm run db:admin-credential -- recover \
+  --administrator-id 00000000-0000-0000-0000-000000000000 \
+  --token-output /absolute/private/path/ruski-admin-recovery.json
+```
+
+Delete the credential file after the token is consumed or expires. Production
+artifacts without a `.git` checkout also require
+`--protected-output-root /absolute/private/directory`. The Raspberry Pi
+runbook documents the one-shot container invocation and protected bind mount.
+
+Authenticated JSON setup routes live under `/api/admin/tournaments`. Setup
+publication accepts only the expected row version, server-issued preview
+digest, and visibility; the database transaction regenerates the schedule and
+atomically locks setup, creates scheduled matches, and writes its engine audit.
+The built-in 32-team preset generates 48 pod-play matches. Published setups
+can generate and download canonical workbooks from
+`/api/admin/tournaments/:tournamentId/workbooks`; the private web application
+exposes the same workflow. Imports first create a 24-hour preview, compare
+stable per-sheet identities and semantic fingerprints, and require an explicit
+accepted/skipped partition before applying. Missing sheets are non-destructive,
+identical sheets are audited no-ops, and uploaded workbook bytes are never
+stored.
+
+Tournament-engine migrations `0007` through `0013` are additive. A previous
+application binary can run while their new tables and guards remain in place;
+do not drop administrator audit, tournament-engine history, generated workbook
+artifacts, reconciliation records, progression history, or public projections
+to roll back an application release. A database rollback uses a verified
+pre-migration backup and the documented restore rehearsal in
+`deploy/raspberry-pi/operations`, never a destructive down script.
+
+The 2026 migration command is dry-run by default and is the only supported
+legacy mutator:
+
+```bash
+npm run db:backfill:legacy -- --tournament-id <legacy-public-id>
+# Apply only under the Phase 7 maintenance and rollback procedure:
+npm run db:backfill:legacy -- --tournament-id <legacy-public-id> --apply
+```
+
+Completed canonical tournaments are intentionally absent from active discovery
+and remain readable through `/api/v2/tournaments/history` and pinned v2 detail
+routes. Follow the Phase 7 rollout runbook before applying the 2026 backfill;
+never infer production authorization from these commands.
 
 Health check:
 

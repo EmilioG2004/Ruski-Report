@@ -225,6 +225,40 @@ struct MatchCommentsControllerTests {
         #expect(comments.requestedMatchIds == ["match-1", "match-1"])
     }
 
+    @Test func realtimeConnectionReadyReloadsCommentsAfterReconnect() async {
+        let comments = StubCommentRepository(
+            commentsResult: .success([Self.existingComment])
+        )
+        let realtime = StubRealtimeUpdateRepository()
+        let controller = MatchCommentsController(
+            matchId: "match-1",
+            comments: comments,
+            session: StubSessionRepository(session: Self.authenticatedSession),
+            realtime: realtime,
+            logger: NoopAppLogger()
+        )
+
+        await controller.loadComments()
+
+        let observation = Task {
+            await controller.observeRealtimeUpdates()
+        }
+        defer {
+            observation.cancel()
+            realtime.finish()
+        }
+
+        await waitUntil {
+            realtime.subscriptions == [.match(tournamentId: nil, matchId: "match-1")]
+        }
+        realtime.send(.connectionReady)
+        await waitUntil {
+            comments.requestedMatchIds == ["match-1", "match-1"]
+        }
+
+        #expect(comments.requestedMatchIds == ["match-1", "match-1"])
+    }
+
     private static let authenticatedSession = UserSession.authenticated(
         UserProfile(
             id: "user-1",
@@ -251,6 +285,16 @@ struct MatchCommentsControllerTests {
 }
 
 private extension RealtimeUpdate {
+    static let connectionReady = RealtimeUpdate(
+        id: "connection-ready-test",
+        type: .connectionReady,
+        tournamentId: nil,
+        matchId: nil,
+        occurredAt: "2026-07-12T20:00:00.000Z",
+        version: nil,
+        metadata: nil
+    )
+
     static func commentsUpdated(matchId: String) -> RealtimeUpdate {
         RealtimeUpdate(
             id: "live-test",

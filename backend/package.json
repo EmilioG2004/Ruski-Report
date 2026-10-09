@@ -13,10 +13,14 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "smoke:realtime": "node scripts/smoke-realtime.mjs",
+    "db:backfill:legacy": "ts-node src/database/backfill-legacy.ts",
+    "db:backfill:legacy:prod": "node dist/database/backfill-legacy.js",
+    "db:admin-credential": "ts-node src/database/admin-bootstrap.ts",
+    "db:admin-credential:prod": "node dist/database/admin-bootstrap.js",
     "db:migrate": "ts-node src/database/migrate.ts",
     "db:migrate:prod": "node dist/database/migrate.js",
     "test": "jest --runInBand",
-    "test:postgres": "jest --runInBand postgres-persistence.integration.spec.ts",
+    "test:postgres": "node -e \"if (!process.env.TEST_DATABASE_URL || !process.env.POPULATED_MIGRATION_DATABASE_URL) { console.error('TEST_DATABASE_URL and POPULATED_MIGRATION_DATABASE_URL are required'); process.exit(1); }\" && jest --runInBand --testPathPattern='\\.integration\\.spec\\.ts$'",
     "test:watch": "jest --watch"
   },
   "dependencies": {

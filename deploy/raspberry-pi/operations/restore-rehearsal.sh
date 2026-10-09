@@ -134,6 +134,8 @@ docker run --detach --rm \
   --env DATABASE_SSL=false \
   --env DATABASE_MIGRATIONS_DIR=/app/migrations \
   --env ADMIN_API_TOKEN=restore-rehearsal-only \
+  --env ADMIN_WEB_ORIGIN=https://restore-rehearsal.invalid \
+  --env ADMIN_AUTH_SECURITY_SECRET=restore-rehearsal-only-administrator-secret \
   --env MODERATION_OPERATOR_ID=restore-rehearsal \
   --env COMMENT_MODERATION_RULES_PATH=/app/config/comment-moderation-rules.json \
   "${api_image}" >/dev/null

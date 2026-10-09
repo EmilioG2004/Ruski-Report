@@ -62,7 +62,11 @@ struct RepositoryTests {
         #expect(match.id == "match-1")
         #expect(match.boxScore?.rows.first?.stats["dis"] == 1)
         #expect(match.scorecard?.columns.map(\.key) == ["shotNumber", "shooter", "di"])
+        #expect(match.scorecard?.rows.first?.teamId == "team-alpha")
+        #expect(match.scorecard?.rows.first?.turnNumber == 1)
+        #expect(match.scorecard?.rows.first?.shotInTeamTurn == 1)
         #expect(match.events.first?.type == "di")
+        #expect(match.events.first?.teamTurnOrder == 1)
         #expect(match.commentsSummary?.count == 1)
     }
 

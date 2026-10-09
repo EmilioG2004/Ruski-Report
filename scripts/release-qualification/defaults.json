@@ -1,0 +1,9 @@
+{
+  "apiBaseUrl": "https://api.ruskireport.com/api",
+  "publicBaseUrl": "https://api.ruskireport.com",
+  "gameType": "ruski",
+  "realtimeEventTimeoutMilliseconds": 30000,
+  "requestTimeoutMilliseconds": 15000,
+  "scorebookPath": "docs/2026 Ruski Stat Sheet.xlsx",
+  "tournamentYear": 2026
+}

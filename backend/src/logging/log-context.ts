@@ -27,8 +27,6 @@ export interface LogEntry {
   uploadId?: string;
   error?: {
     name: string;
-    message: string;
-    stack?: string;
   };
   metadata?: Metadata;
 }

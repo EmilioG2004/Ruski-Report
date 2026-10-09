@@ -279,10 +279,18 @@ func matchDetailDTO() -> MatchDetailDTO {
                 ScorecardRowDTO(
                     id: "scorecard-row-1",
                     sequence: 1,
+                    teamId: "team-alpha",
+                    playerId: "player-alex",
                     values: [
                         "shotNumber": .number(1),
                         "shooter": .string("Alex"),
                         "di": .bool(true)
+                    ],
+                    eventIds: ["event-1"],
+                    metadata: [
+                        "turnNumber": .number(1),
+                        "teamTurnOrder": .number(1),
+                        "shotInTeamTurn": .number(1)
                     ]
                 )
             ]
@@ -294,7 +302,12 @@ func matchDetailDTO() -> MatchDetailDTO {
                 sequence: 1,
                 teamId: "team-alpha",
                 playerId: "player-alex",
-                value: 2
+                value: 2,
+                metadata: [
+                    "turnNumber": .number(1),
+                    "teamTurnOrder": .number(1),
+                    "shotInTeamTurn": .number(1)
+                ]
             )
         ],
         commentsSummary: CommentsSummaryDTO(

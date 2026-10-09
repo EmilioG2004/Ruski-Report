@@ -10,6 +10,8 @@ Use this folder for planning, scope control, delivery tracking, and project deci
 - [Milestones](milestones.md)
 - [Backlog](backlog.md)
 - [App Store release checklist](release-checklist.md)
+- [Release qualification](release-qualification.md)
+- [Release qualification evidence](release-qualification-evidence.md)
 - [Risks and assumptions](risks-and-assumptions.md)
 - [Meeting notes](meeting-notes/)
 

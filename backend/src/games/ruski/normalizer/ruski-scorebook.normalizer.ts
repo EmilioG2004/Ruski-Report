@@ -58,7 +58,8 @@ export class RuskiScorebookNormalizer {
       tournamentId,
       source.bracketRows,
       teamDirectory,
-      parsedMatches
+      parsedMatches,
+      generatedAt
     );
     const teams = teamDirectory.getTeams();
     const structure = normalizeRuskiTournamentStructure(

@@ -3,6 +3,7 @@ import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
 
 import { AppModule } from "./app.module";
+import { applyAdminSecurityHeaders } from "./admin/admin-security-headers";
 import {
   createCorsOptions,
   loadHttpServerConfig
@@ -16,10 +17,25 @@ async function bootstrap(): Promise<void> {
     "trust proxy",
     httpConfig.trustedProxyHops === 0 ? false : httpConfig.trustedProxyHops
   );
+  app.use(
+    "/api/admin",
+    (
+      _request: unknown,
+      response: { setHeader(name: string, value: string): unknown },
+      next: () => void
+    ) => {
+      applyAdminSecurityHeaders(
+        response,
+        process.env.NODE_ENV === "production"
+      );
+      next();
+    }
+  );
   app.useBodyParser("json", { limit: httpConfig.requestBodyLimitBytes });
   app.useBodyParser("urlencoded", {
     extended: false,
-    limit: httpConfig.requestBodyLimitBytes
+    limit: httpConfig.requestBodyLimitBytes,
+    parameterLimit: httpConfig.urlEncodedParameterLimit
   });
   app.enableCors(createCorsOptions(httpConfig.allowedOrigins));
   app.setGlobalPrefix("api");

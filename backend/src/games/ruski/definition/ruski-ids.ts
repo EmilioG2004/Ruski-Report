@@ -33,3 +33,14 @@ export const RUSKI_STANDING_METRIC_KEYS = {
   cupDifferential: "cupDifferential",
   shootingPercentage: "shootingPercentage"
 } as const;
+
+export const RUSKI_TURN_METADATA_KEYS = {
+  sideId: "sideId",
+  turnNumber: "turnNumber",
+  teamTurnOrder: "teamTurnOrder",
+  shotInTeamTurn: "shotInTeamTurn"
+} as const;
+
+export const RUSKI_MATCH_METADATA_KEYS = {
+  firstPossessionTeamId: "firstPossessionTeamId"
+} as const;

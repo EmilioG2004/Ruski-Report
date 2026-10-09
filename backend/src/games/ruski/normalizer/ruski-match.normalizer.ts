@@ -10,10 +10,12 @@ import { ParsedScorebookSheet, ParsedScorebookSide } from "../../parsed-scoreboo
 import {
   RUSKI_EVENT_TYPE_IDS,
   RUSKI_GAME_TYPE,
+  RUSKI_MATCH_METADATA_KEYS,
   RUSKI_PHASE_IDS
 } from "../definition";
 import { ruskiScorecardDefinition } from "../definition";
 import { calculateRuskiBoxScore } from "./ruski-box-score";
+import { calculateRuskiCupScore } from "./ruski-cup-score";
 import { createStableId } from "./ruski-id";
 import { normalizeRuskiScorecard } from "./ruski-scorecard.normalizer";
 import {
@@ -24,6 +26,10 @@ import {
 interface NormalizedSide {
   side: ParsedScorebookSide;
   resolution: RuskiTeamResolution;
+}
+
+interface ScoredParticipant extends MatchParticipant {
+  score: number;
 }
 
 export function normalizeRuskiGameSheet(
@@ -90,7 +96,9 @@ export function normalizeRuskiGameSheet(
     },
     metadata: {
       sourceSheetName: sheet.name,
-      sourceSheetIndex: sheet.index
+      sourceSheetIndex: sheet.index,
+      [RUSKI_MATCH_METADATA_KEYS.firstPossessionTeamId]:
+        normalizedSides[0]?.resolution.team.id
     },
     version: 1,
     updatedAt
@@ -102,15 +110,11 @@ function createParticipant(
   resolution: RuskiTeamResolution,
   events: readonly GameEvent[],
   status: MatchStatus
-): MatchParticipant {
+): ScoredParticipant {
   return {
     teamId: resolution.team.id,
     playerIds: resolution.playerIds,
-    score: events.filter(
-      (event) =>
-        event.teamId === resolution.team.id &&
-        event.type === RUSKI_EVENT_TYPE_IDS.make
-    ).length,
+    score: calculateRuskiCupScore(events, resolution.team.id),
     result: status === "final" ? "pending" : "pending",
     metadata: {
       sideId: side.id,
@@ -124,7 +128,7 @@ function mapGameStatus(status: string | null): MatchStatus {
 }
 
 function getWinnerTeamId(
-  participants: readonly MatchParticipant[],
+  participants: readonly ScoredParticipant[],
   status: MatchStatus
 ): TeamId | undefined {
   if (status !== "final" || participants.length !== 2) {

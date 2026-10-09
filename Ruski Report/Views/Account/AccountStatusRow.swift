@@ -2,6 +2,9 @@
 //  AccountStatusRow.swift
 //  Ruski Report
 //
+//  Summarizes the active account identity and role with the shared monogram and
+//  semantic visual tokens.
+//
 
 import SwiftUI
 
@@ -9,13 +12,13 @@ struct AccountStatusRow: View {
     let session: UserSession
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: iconName)
-                .font(.title3)
-                .foregroundStyle(iconColor)
-                .frame(width: 28)
+        HStack(spacing: AppLayout.standardSpacing) {
+            TeamMonogramView(
+                name: session.displayName,
+                size: AppLayout.heroTeamMonogramSize
+            )
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: AppLayout.microSpacing) {
                 Text(session.displayName)
                     .font(.body.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
@@ -26,17 +29,19 @@ struct AccountStatusRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            Spacer(minLength: 12)
+            Spacer(minLength: AppLayout.standardSpacing)
+
+            Text(roleText)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(iconColor)
+                .padding(.horizontal, AppLayout.smallSpacing)
+                .padding(.vertical, AppLayout.pillVerticalPadding)
+                .background(
+                    iconColor.opacity(AppVisualTokens.subtleTintOpacity)
+                )
+                .clipShape(Capsule())
         }
         .accessibilityIdentifier("account.status.\(session.kind.rawValue)")
-    }
-
-    private var iconName: String {
-        switch session {
-        case .guest: "person.crop.circle"
-        case .authenticated: "person.crop.circle.fill"
-        case .admin: "person.crop.circle.badge.checkmark"
-        }
     }
 
     private var statusText: String {
@@ -49,7 +54,15 @@ struct AccountStatusRow: View {
     }
 
     private var iconColor: Color {
-        session.kind == .guest ? .secondary : .appFinal
+        session.kind == .guest ? .secondary : .appBrand
+    }
+
+    private var roleText: String {
+        switch session {
+        case .guest: "GUEST"
+        case .authenticated: "MEMBER"
+        case .admin: "ADMIN"
+        }
     }
 }
 

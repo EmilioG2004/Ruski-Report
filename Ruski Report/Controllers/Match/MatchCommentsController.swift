@@ -48,6 +48,10 @@ final class MatchCommentsController: ObservableObject {
         for await update in realtime.updates(
             subscription: .match(tournamentId: nil, matchId: matchId)
         ) {
+            if update.type == .connectionReady {
+                await loadComments(showLoading: false, showFailure: false)
+                continue
+            }
             guard update.type == .commentsUpdated,
                   update.matchId == matchId else {
                 continue

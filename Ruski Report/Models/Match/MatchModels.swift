@@ -100,7 +100,13 @@ nonisolated struct ScorecardColumn: Identifiable, Equatable {
 nonisolated struct ScorecardRow: Identifiable, Equatable {
     let id: String
     let sequence: Int
+    let teamId: String?
+    let playerId: String?
     let values: [String: String]
+    let eventIds: [String]
+    let turnNumber: Int?
+    let teamTurnOrder: Int?
+    let shotInTeamTurn: Int?
 }
 
 nonisolated struct GameEvent: Identifiable, Equatable {
@@ -110,4 +116,7 @@ nonisolated struct GameEvent: Identifiable, Equatable {
     let teamId: String?
     let playerId: String?
     let value: Double?
+    let turnNumber: Int?
+    let teamTurnOrder: Int?
+    let shotInTeamTurn: Int?
 }

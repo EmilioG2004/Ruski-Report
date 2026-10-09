@@ -8,6 +8,7 @@ import {
 } from "../../../domain";
 import { ParsedScorebookRow } from "../../parsed-scorebook";
 import { createStableId } from "./ruski-id";
+import { createRuskiBracketPlaceholderMatch } from "./ruski-bracket-placeholder-match";
 import { RuskiTeamDirectory } from "./ruski-team-directory";
 
 export interface NormalizedRuskiBracket {
@@ -32,7 +33,8 @@ export function normalizeRuskiBracket(
   tournamentId: TournamentId,
   rows: readonly ParsedScorebookRow[],
   directory: RuskiTeamDirectory,
-  matches: readonly MatchDetail[]
+  matches: readonly MatchDetail[],
+  updatedAt: string
 ): NormalizedRuskiBracket {
   const championName = readChampion(rows);
   const championTeamId = championName === null
@@ -69,19 +71,45 @@ export function normalizeRuskiBracket(
     const bracketMatchId = linkedBracketMatchIdByMatchId.get(match.id);
     return bracketMatchId === undefined ? match : { ...match, bracketMatchId };
   });
+  const teamsById = new Map(directory.getTeams().map((team) => [team.id, team]));
+  const placeholderMatches = rounds.flatMap((round) =>
+    round.matches.flatMap((match) => {
+      if (match.matchId !== undefined) {
+        return [];
+      }
+
+      const placeholder = createRuskiBracketPlaceholderMatch(
+        tournamentId,
+        match,
+        teamsById,
+        updatedAt
+      );
+      return placeholder === undefined ? [] : [placeholder];
+    })
+  );
+  const placeholderIdByBracketMatchId = new Map(
+    placeholderMatches.map((match) => [match.bracketMatchId, match.id])
+  );
+  const completedRounds = rounds.map((round) => ({
+    ...round,
+    matches: round.matches.map((match) => ({
+      ...match,
+      matchId: match.matchId ?? placeholderIdByBracketMatchId.get(match.id)
+    }))
+  }));
 
   return {
     bracket: {
       id: createStableId("bracket", `${tournamentId}-playoffs`),
       tournamentId,
       name: "Playoff Bracket",
-      rounds,
+      rounds: completedRounds,
       metadata: {
         source: "playoff-bracket-sheet",
         championTeamId
       }
     },
-    matches: linkedMatches
+    matches: [...linkedMatches, ...placeholderMatches]
   };
 }
 

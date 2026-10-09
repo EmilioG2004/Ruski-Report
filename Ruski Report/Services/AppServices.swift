@@ -18,6 +18,7 @@ struct AppServices {
     let realtime: any RealtimeUpdateRepository
     let logger: any AppLogger
     let initialTournament: TournamentPreview
+    let usesCanonicalPublicAPI: Bool
     let policyLinks: AppPolicyLinks
 
     static let preview = preview(scenario: .standard)
@@ -35,10 +36,55 @@ struct AppServices {
             scenario == .reporting ||
             scenario == .reportUnavailable ||
             scenario == .blocking
-        let tournamentDetail = scenario == .empty ?
-            PreviewData.emptyTournamentDetail : PreviewData.tournamentDetail
-        let tournamentFailure: AppError? = scenario == .unavailable ?
-            .networkUnavailable("The tournament service is temporarily unavailable.") : nil
+        let tournamentDetail: TournamentDetail
+        switch scenario {
+        case .empty:
+            tournamentDetail = PreviewData.emptyTournamentDetail
+        case .longContent:
+            tournamentDetail = PreviewData.longContentTournamentDetail
+        default:
+            tournamentDetail = PreviewData.tournamentDetail
+        }
+        let publicTournamentDetails: [PublicTournamentDetail] = switch scenario {
+        case .empty, .publicZero:
+            []
+        case .publicTwo:
+            [
+                PublicDisplayFixtures.tournamentDetail,
+                PublicDisplayFixtures.secondaryTournamentDetail
+            ]
+        case .publicPartialDetail:
+            [
+                PublicDisplayFixtures.tournamentDetail,
+                PublicDisplayFixtures.secondaryTournamentDetail
+            ]
+        case .longContent, .publicLongContent:
+            [PublicDisplayFixtures.longContentTournamentDetail]
+        default:
+            [PublicDisplayFixtures.tournamentDetail]
+        }
+        let publicMatchIds = Set(
+            publicTournamentDetails.flatMap(\.matches).map(\.id)
+        )
+        let publicMatchDetails = PublicDisplayFixtures.matchDetailsById.filter {
+            publicMatchIds.contains($0.key)
+        }
+        let usesCanonicalPublicAPI: Bool
+        switch scenario {
+        case .publicZero, .publicTwo, .publicStates, .publicLongContent,
+             .publicOffline, .publicRecovering, .publicPartialDetail:
+            usesCanonicalPublicAPI = true
+        default:
+            usesCanonicalPublicAPI = false
+        }
+        let tournamentNetworkCondition: PreviewNetworkCondition = switch scenario {
+        case .unavailable, .publicOffline:
+            .unavailable
+        case .recovering, .publicRecovering:
+            .delayedRecovery
+        default:
+            .available
+        }
 
         let blockingState = PreviewUserBlockingState()
 
@@ -46,9 +92,15 @@ struct AppServices {
             games: PreviewGameRepository(),
             tournaments: PreviewTournamentRepository(
                 detail: tournamentDetail,
-                failure: tournamentFailure
+                publicDetails: publicTournamentDetails,
+                unavailablePublicDetailIds: scenario == .publicPartialDetail
+                    ? [PublicDisplayFixtures.secondaryTournamentId]
+                    : [],
+                networkCondition: tournamentNetworkCondition
             ),
-            matches: PreviewMatchRepository(),
+            matches: PreviewMatchRepository(
+                publicMatchDetails: publicMatchDetails
+            ),
             comments: PreviewCommentRepository(
                 blockingState: blockingState,
                 postError: previewCommentPostError(for: scenario)
@@ -67,7 +119,8 @@ struct AppServices {
             ),
             realtime: NoopRealtimeUpdateRepository(),
             logger: logger,
-            initialTournament: PreviewData.tournamentPreview,
+            initialTournament: tournamentDetail.preview,
+            usesCanonicalPublicAPI: usesCanonicalPublicAPI,
             policyLinks: .productionFallback
         )
     }
@@ -183,6 +236,7 @@ struct AppServices {
             ),
             logger: logger,
             initialTournament: PreviewData.tournamentPreview,
+            usesCanonicalPublicAPI: true,
             policyLinks: config.policyLinks
         )
     }

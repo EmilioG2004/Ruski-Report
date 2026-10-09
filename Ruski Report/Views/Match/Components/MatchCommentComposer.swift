@@ -2,6 +2,9 @@
 //  MatchCommentComposer.swift
 //  Ruski Report
 //
+//  Renders compact authenticated and guest composer states for the persistent
+//  bottom bar without owning posting or account policy.
+//
 
 import Foundation
 import SwiftUI
@@ -24,43 +27,53 @@ struct MatchCommentComposer: View {
     }
 
     private var authenticatedComposer: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            TextField("Add a comment", text: $draft, axis: .vertical)
-                .lineLimit(2...4)
-                .textFieldStyle(.roundedBorder)
-                .accessibilityIdentifier("match.comments.input")
+        VStack(alignment: .leading, spacing: AppLayout.smallSpacing) {
+            HStack(alignment: .bottom, spacing: AppLayout.smallSpacing) {
+                TextField(MatchCopy.commentPlaceholder, text: $draft, axis: .vertical)
+                    .lineLimit(1...3)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("match.comments.input")
 
-            Button(action: submit) {
-                Group {
-                    if isPosting {
-                        ProgressView()
-                    } else {
-                        Label("Post Comment", systemImage: "paperplane.fill")
+                Button(action: submit) {
+                    Group {
+                        if isPosting {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "paperplane.fill")
+                        }
                     }
+                    .frame(
+                        width: AppLayout.controlHeight,
+                        height: AppLayout.controlHeight
+                    )
                 }
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.borderedProminent)
+                .disabled(isPosting || trimmedDraft.isEmpty)
+                .accessibilityLabel(MatchCopy.postComment)
+                .accessibilityIdentifier("match.comments.post")
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(isPosting || trimmedDraft.isEmpty)
-            .accessibilityIdentifier("match.comments.post")
 
             errorText
         }
     }
 
     private func guestPrompt(message: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Label(message, systemImage: "person.crop.circle.badge.exclamationmark")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityIdentifier("match.comments.signInPrompt")
+        VStack(alignment: .leading, spacing: AppLayout.smallSpacing) {
+            HStack(spacing: AppLayout.standardSpacing) {
+                Label(message, systemImage: "person.crop.circle.badge.exclamationmark")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("match.comments.signInPrompt")
 
-            Button(action: openSignIn) {
-                Label("Sign In to Comment", systemImage: "person.crop.circle.badge.plus")
+                Button(action: openSignIn) {
+                    Text(MatchCopy.signIn)
+                }
+                .buttonStyle(.bordered)
+                .fixedSize()
+                .accessibilityLabel(MatchCopy.signInToComment)
+                .accessibilityIdentifier("match.comments.signIn")
             }
-            .buttonStyle(.bordered)
-            .accessibilityIdentifier("match.comments.signIn")
 
             errorText
         }

@@ -31,15 +31,87 @@ struct AppConfigTests {
     @Test func appConfigNormalizesLocalhostForSimulatorAccess() throws {
         let config = try AppConfig(
             apiBaseURLString: "http://localhost:3000/api",
+            buildConfiguration: .debug,
             policyLinks: .productionFallback
         )
 
         #expect(config.apiBaseURL.absoluteString == "http://127.0.0.1:3000/api")
     }
 
-    @Test func bundledConfigProvidesProductionPolicyLinks() throws {
+    @Test func debugConfigRejectsInsecureNonLoopbackEndpoints() {
+        #expect(throws: AppConfigError.self) {
+            try AppConfig(
+                apiBaseURLString: "http://192.168.8.129:3000/api",
+                buildConfiguration: .debug,
+                policyLinks: .productionFallback
+            )
+        }
+    }
+
+    @Test func releaseConfigUsesProductionHTTPSAPI() throws {
+        let config = try AppConfig(
+            apiBaseURLString: "https://api.ruskireport.com/api",
+            buildConfiguration: .release,
+            policyLinks: .productionFallback
+        )
+
+        #expect(config.apiBaseURL.absoluteString == "https://api.ruskireport.com/api")
+    }
+
+    @Test func releaseConfigRejectsHTTP() {
+        #expect(throws: AppConfigError.self) {
+            try AppConfig(
+                apiBaseURLString: "http://api.ruskireport.com/api",
+                buildConfiguration: .release,
+                policyLinks: .productionFallback
+            )
+        }
+    }
+
+    @Test func appConfigRejectsEmbeddedCredentials() {
+        #expect(throws: AppConfigError.self) {
+            try AppConfig(
+                apiBaseURLString: "https://admin:secret@api.ruskireport.com/api",
+                buildConfiguration: .release,
+                policyLinks: .productionFallback
+            )
+        }
+    }
+
+    @Test func appConfigRejectsMalformedURL() {
+        #expect(throws: AppConfigError.self) {
+            try AppConfig(
+                apiBaseURLString: "not a URL",
+                buildConfiguration: .release,
+                policyLinks: .productionFallback
+            )
+        }
+    }
+
+    @Test func debugConfigUsesExplicitEnvironmentOverride() {
+        let value = AppConfig.resolvedAPIBaseURLString(
+            bundledValue: "http://127.0.0.1:3000/api",
+            buildConfiguration: .debug,
+            environment: ["RUSKI_API_BASE_URL": "https://debug.example.com/api"]
+        )
+
+        #expect(value == "https://debug.example.com/api")
+    }
+
+    @Test func releaseConfigIgnoresProcessEnvironmentOverride() {
+        let value = AppConfig.resolvedAPIBaseURLString(
+            bundledValue: "https://api.ruskireport.com/api",
+            buildConfiguration: .release,
+            environment: ["RUSKI_API_BASE_URL": "http://127.0.0.1:3000/api"]
+        )
+
+        #expect(value == "https://api.ruskireport.com/api")
+    }
+
+    @Test func bundledConfigProvidesDebugAPIAndProductionPolicyLinks() throws {
         let config = try AppConfig.load()
 
+        #expect(config.apiBaseURL.absoluteString == "http://127.0.0.1:3000/api")
         #expect(config.policyLinks.privacyPolicy.scheme == "https")
         #expect(config.policyLinks.support.host == "emiliog2004.github.io")
         #expect(

@@ -25,8 +25,8 @@ export class PostgresDatabase implements OnApplicationShutdown {
       connectionTimeoutMillis: config.connectionTimeoutMilliseconds,
       idleTimeoutMillis: config.idleTimeoutMilliseconds
     });
-    this.pool.on("error", (error) => {
-      this.logger.error("PostgreSQL pool reported an idle client error.", error);
+    this.pool.on("error", () => {
+      this.logger.error("PostgreSQL pool reported an idle client error.");
     });
   }
 

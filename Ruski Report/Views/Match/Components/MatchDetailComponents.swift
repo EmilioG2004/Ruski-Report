@@ -2,8 +2,9 @@
 //  MatchDetailComponents.swift
 //  Ruski Report
 //
+//  Contains the small structural surfaces shared by multiple game panels.
+//
 
-import Foundation
 import SwiftUI
 
 struct MatchSectionView<Content: View>: View {
@@ -12,9 +13,23 @@ struct MatchSectionView<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: systemImage)
-                .font(.headline)
+        VStack(alignment: .leading, spacing: AppLayout.compactSpacing) {
+            HStack(spacing: AppLayout.smallSpacing) {
+                Image(systemName: systemImage)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(Color.appBrand)
+                    .frame(
+                        width: AppLayout.statusIconSize,
+                        height: AppLayout.statusIconSize
+                    )
+                    .background(
+                        Color.appBrand.opacity(AppVisualTokens.subtleTintOpacity)
+                    )
+                    .clipShape(Circle())
+
+                Text(title)
+                    .font(.title3.weight(.bold))
+            }
 
             AppSurface {
                 content
@@ -33,63 +48,5 @@ struct EmptyMatchSectionView: View {
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 12)
-    }
-}
-
-enum MatchValueFormatter {
-    static func stat(_ value: Double?, valueType: String) -> String {
-        guard let value else {
-            return "-"
-        }
-
-        if valueType == "percentage" {
-            return "\(number(value * 100))%"
-        }
-
-        return number(value)
-    }
-
-    static func bool(_ value: String?) -> Bool {
-        guard let value else {
-            return false
-        }
-
-        return switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "true", "yes", "1": true
-        default: false
-        }
-    }
-
-    private static func number(_ value: Double) -> String {
-        guard value.isFinite else {
-            return "-"
-        }
-
-        if value.rounded() == value {
-            return "\(Int(value))"
-        }
-
-        return String(format: "%.1f", value)
-    }
-}
-
-extension Text {
-    func boxScoreHeaderStyle(width: CGFloat, alignment: Alignment) -> some View {
-        font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .lineLimit(2)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(width: width, alignment: alignment)
-    }
-
-    func scorecardHeaderStyle(
-        width: CGFloat,
-        alignment: Alignment
-    ) -> some View {
-        font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .lineLimit(2)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(width: width, alignment: alignment)
     }
 }

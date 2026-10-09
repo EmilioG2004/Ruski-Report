@@ -13,10 +13,20 @@ import { RealtimeModule } from "../realtime";
 import { AdminAuthModule } from "./admin-auth.module";
 import { AdminScorebookController } from "./admin-scorebook.controller";
 import { AdminScorebookService } from "./admin-scorebook.service";
+import { AdministratorSecurityModule } from "./security";
+import { AdminTournamentSetupModule } from "./tournament-setup";
+import { AdminTournamentProgressionModule } from "./tournament-progression";
+import { AdminTournamentWorkbookModule } from "./tournament-workbooks";
+import { AdminWebModule } from "./web";
 
 @Module({
   imports: [
     AdminAuthModule,
+    AdministratorSecurityModule,
+    AdminTournamentSetupModule,
+    AdminTournamentProgressionModule,
+    AdminTournamentWorkbookModule,
+    AdminWebModule,
     MulterModule.registerAsync({
       useFactory: () => ({
         limits: {

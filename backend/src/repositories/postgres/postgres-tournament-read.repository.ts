@@ -41,7 +41,7 @@ export class PostgresTournamentReadRepository
     query?: ActiveTournamentQuery
   ): Promise<RepositoryResult<ReturnType<typeof mapTournamentSummary> | null>> {
     try {
-      const conditions = ["snapshot.status = 'active'"];
+      const conditions: string[] = [];
       const values: unknown[] = [];
 
       if (query?.gameType !== undefined) {
@@ -55,7 +55,7 @@ export class PostgresTournamentReadRepository
 
       const result = await this.database.query<SnapshotHeaderRow>(
         `${snapshotHeaderQuery}
-         WHERE ${conditions.join(" AND ")}
+         ${createWhereClause(conditions)}
          ORDER BY tournament.year DESC, snapshot.published_at DESC
          LIMIT 1`,
         values
@@ -178,3 +178,7 @@ const snapshotHeaderQuery = `
    AND snapshot.version = active.snapshot_version
   JOIN tournaments tournament ON tournament.id = active.tournament_id
 `;
+
+function createWhereClause(conditions: string[]): string {
+  return conditions.length === 0 ? "" : `WHERE ${conditions.join(" AND ")}`;
+}

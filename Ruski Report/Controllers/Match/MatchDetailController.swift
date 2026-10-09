@@ -13,9 +13,20 @@ final class MatchDetailController: ObservableObject {
     private let matchId: MatchPreview.ID
     private let tournamentId: TournamentPreview.ID?
     private let matches: any MatchRepository
+    private let tournaments: (any TournamentRepository)?
     private let games: any GameRepository
     private let realtime: any RealtimeUpdateRepository
     private let logger: any AppLogger
+    private let mode: Mode
+    private let discoveryScope: PublicTournamentDiscoveryScope
+    private var requestedProjectionVersion: Int64?
+    private var currentProjection: PublicProjectionReference?
+    private var loadGeneration = 0
+
+    private enum Mode {
+        case legacy
+        case canonical
+    }
 
     init(
         matchId: MatchPreview.ID,
@@ -28,43 +39,85 @@ final class MatchDetailController: ObservableObject {
         self.matchId = matchId
         self.tournamentId = tournamentId
         self.matches = matches
+        self.tournaments = nil
         self.games = games
         self.realtime = realtime
         self.logger = logger
+        self.mode = .legacy
+        self.discoveryScope = .active
+        self.requestedProjectionVersion = nil
+    }
+
+    init(
+        routeContext: PublicMatchRouteContext,
+        matches: any MatchRepository,
+        tournaments: any TournamentRepository,
+        games: any GameRepository,
+        realtime: any RealtimeUpdateRepository = NoopRealtimeUpdateRepository(),
+        logger: any AppLogger
+    ) {
+        self.matchId = routeContext.matchId
+        self.tournamentId = routeContext.tournamentId
+        self.matches = matches
+        self.tournaments = tournaments
+        self.games = games
+        self.realtime = realtime
+        self.logger = logger
+        self.mode = .canonical
+        self.discoveryScope = routeContext.discoveryScope
+        self.requestedProjectionVersion = routeContext.projectionVersion
     }
 
     func loadMatch() async {
-        await loadMatch(showLoading: true, showFailure: true)
+        switch mode {
+        case .legacy:
+            await loadLegacy(showLoading: true, showFailure: true)
+        case .canonical:
+            await loadCanonical(
+                projectionVersion: requestedProjectionVersion,
+                discoverCurrentProjection: requestedProjectionVersion == nil,
+                showLoading: true,
+                showFailure: true
+            )
+        }
     }
 
     func observeRealtimeUpdates() async {
         for await update in realtime.updates(
             subscription: .match(tournamentId: tournamentId, matchId: matchId)
         ) {
-            guard shouldRefresh(for: update) else {
-                continue
+            switch mode {
+            case .legacy:
+                guard shouldRefreshLegacy(for: update) else {
+                    continue
+                }
+                await loadLegacy(showLoading: false, showFailure: false)
+            case .canonical:
+                await handleCanonical(update)
             }
-
-            await loadMatch(showLoading: false, showFailure: false)
         }
     }
 
-    private func loadMatch(
+    private func loadLegacy(
         showLoading: Bool,
         showFailure: Bool
     ) async {
-        if showLoading {
-            state = .loading
-        }
+        let generation = beginLoad(showLoading: showLoading)
 
         do {
             let match = try await matches.match(id: matchId)
             let definition = await loadGameDefinition(for: match.preview.gameType)
+            guard generation == loadGeneration else {
+                return
+            }
 
             state = .loaded(
                 MatchDetailScreen(match: match, gameDefinition: definition)
             )
         } catch {
+            guard generation == loadGeneration else {
+                return
+            }
             logger.log(
                 .warning,
                 "Unable to load match detail",
@@ -84,7 +137,65 @@ final class MatchDetailController: ObservableObject {
         }
     }
 
-    private func shouldRefresh(for update: RealtimeUpdate) -> Bool {
+    private func loadCanonical(
+        projectionVersion: Int64?,
+        discoverCurrentProjection: Bool,
+        showLoading: Bool,
+        showFailure: Bool
+    ) async {
+        let generation = beginLoad(showLoading: showLoading)
+
+        do {
+            let version: Int64
+            if discoverCurrentProjection || projectionVersion == nil {
+                version = try await discoveredProjectionVersion()
+            } else if let projectionVersion {
+                version = projectionVersion
+            } else {
+                throw AppError.unsupported("Match projection is unavailable.")
+            }
+            guard let tournamentId else {
+                throw AppError.unsupported("Match tournament identity is unavailable.")
+            }
+            let match = try await matches.match(
+                id: matchId,
+                tournamentId: tournamentId,
+                projectionVersion: version
+            )
+            guard generation == loadGeneration else {
+                return
+            }
+            requestedProjectionVersion = match.summary.projection.version
+            currentProjection = match.summary.projection
+            state = .canonicalLoaded(match)
+        } catch {
+            guard generation == loadGeneration else {
+                return
+            }
+            logger.log(
+                .warning,
+                "Unable to load canonical match detail",
+                metadata: [
+                    "error": String(describing: error),
+                    "matchId": matchId,
+                    "projectionVersion": projectionVersion.map { String($0) } ?? "active"
+                ]
+            )
+            if showFailure {
+                state = .failed(
+                    message: AppErrorMessageFormatter.message(
+                        from: error,
+                        fallback: "Unable to load match details."
+                    )
+                )
+            }
+        }
+    }
+
+    private func shouldRefreshLegacy(for update: RealtimeUpdate) -> Bool {
+        if update.type == .connectionReady {
+            return true
+        }
         switch update.type {
         case .matchUpdated, .commentsUpdated:
             if let updateMatchId = update.matchId {
@@ -97,6 +208,66 @@ final class MatchDetailController: ObservableObject {
         case .connectionReady, .error, .unknown:
             return false
         }
+    }
+
+    private func handleCanonical(_ update: RealtimeUpdate) async {
+        if update.type == .connectionReady {
+            await loadCanonical(
+                projectionVersion: nil,
+                discoverCurrentProjection: true,
+                showLoading: false,
+                showFailure: false
+            )
+            return
+        }
+        guard update.type == .matchUpdated || update.type == .tournamentUpdated,
+              update.tournamentId == tournamentId,
+              update.matchId == nil || update.matchId == matchId else {
+            return
+        }
+        guard let version = update.projectionVersion else {
+            await loadCanonical(
+                projectionVersion: nil,
+                discoverCurrentProjection: true,
+                showLoading: false,
+                showFailure: false
+            )
+            return
+        }
+        if let currentProjection, version <= currentProjection.version {
+            return
+        }
+        await loadCanonical(
+            projectionVersion: version,
+            discoverCurrentProjection: false,
+            showLoading: false,
+            showFailure: false
+        )
+    }
+
+    private func discoveredProjectionVersion() async throws -> Int64 {
+        guard let tournaments, let tournamentId else {
+            throw AppError.unsupported("Match projection is unavailable.")
+        }
+        let discovered: [PublicTournamentSummary]
+        switch discoveryScope {
+        case .active:
+            discovered = try await tournaments.activeTournaments()
+        case .history:
+            discovered = try await tournaments.historicalTournaments()
+        }
+        guard let summary = discovered.first(where: { $0.id == tournamentId }) else {
+            throw AppError.unsupported("Match tournament projection is unavailable.")
+        }
+        return summary.projection.version
+    }
+
+    private func beginLoad(showLoading: Bool) -> Int {
+        loadGeneration += 1
+        if showLoading {
+            state = .loading
+        }
+        return loadGeneration
     }
 
     private func loadGameDefinition(for gameType: String) async -> GameDefinition? {

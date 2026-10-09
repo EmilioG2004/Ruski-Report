@@ -107,6 +107,7 @@ const eventTypes: GameEventType[] = [
     id: RUSKI_EVENT_TYPE_IDS.tri,
     label: "Tri",
     category: "attempt",
+    affectsScore: true,
     countsAsAttempt: true,
     statKey: RUSKI_STAT_KEYS.tris,
     metadata: {
@@ -121,6 +122,7 @@ const eventTypes: GameEventType[] = [
     id: RUSKI_EVENT_TYPE_IDS.di,
     label: "Di",
     category: "attempt",
+    affectsScore: true,
     countsAsAttempt: true,
     statKey: RUSKI_STAT_KEYS.dis,
     metadata: {
