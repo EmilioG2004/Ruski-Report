@@ -81,18 +81,18 @@ account deletion.
 
 ## Screenshots
 
-Upload these five privacy-reviewed iPhone 17 Pro Max portrait images in order.
-Each is 1320 × 2868 PNG without an alpha channel, which satisfies the 6.9-inch
-iPhone requirement. The files use synthetic production-like tournament data
-and contain no private account or community content.
+The following four privacy-reviewed iPhone 17 Pro portrait images were uploaded
+in order to the iPhone with Dynamic Island medium-display slot. Each is a
+1206 × 2622 RGB PNG without an alpha channel. The files use deterministic
+synthetic tournament fixtures and contain no private account, community, or
+operational content.
 
 | Order | Artifact | SHA-256 |
 | --- | --- | --- |
-| 1 | `01-home.png` | `02c378a4a774721a93ae0ff9b8780e1fd0419af6ba042b765f07fd35e025b643` |
-| 2 | `02-tournament-overview.png` | `8c5b6ca99636331ac8d7877585f4d6f082b97460346f05bd769f4ea1cd82cf4b` |
-| 3 | `03-pod-standings.png` | `35a8be22952bd3b34acd36c9a7102d4c5aa8bde407c416b784b0c1d46d7c71dc` |
-| 4 | `04-bracket.png` | `f25d6dbd02b4862abe0cc57446713c2023e1d6cfee52755ec66037b6fdbc1847` |
-| 5 | `05-match-detail.png` | `ee976fe300bef0aba63e4d811d7ad937c9525638053d15672877b0b00f78c21a` |
+| 1 | `01-score-feed.png` | `f9caa3d1a89a407ecbc0314247ba3e3996641fa8559d5dd064f3c4664f05d170` |
+| 2 | `02-standings.png` | `5e469a3000e5096bb7e85a84ce4835c2f8b5b9df2c302568eef241e1be9a46fb` |
+| 3 | `03-bracket.png` | `235d70a38c0d0b526c092a55b30cfa6aafd3bed73873571d03a508ab1dcb3988` |
+| 4 | `04-match-scorecard.png` | `170d2bc7456108890690fe6d328aad8da7d129a517200fdadce352762e01bb1d` |
 
 An app preview video is not required for v1.
 
@@ -185,13 +185,15 @@ support links are available from the Account screen.
 
 ## Release Boundaries
 
-- iOS 1.0 (1) is Ready to Test in the manually managed `Phase 7 Internal`
-  group. Automatic distribution of future builds is disabled.
+- iOS 1.0 (1) remains in the manually managed `Phase 7 Internal` group.
+  Automatic distribution of future builds is disabled.
 - The invited account holder installed this exact build and completed the
-  physical production smoke test. The longer observation window remains
-  tracked by issue 47.
-- TestFlight upload does not authorize App Review submission.
-- Do not add the build to a review submission until the internal TestFlight
-  observation window passes.
+  physical production smoke test.
+- On October 8, 2026, the owner explicitly accepted the residual risk of
+  submitting before Apple populated the longer TestFlight metrics window.
+- iOS 1.0 build 1 was submitted as the only App Review item under submission
+  `94795588-3d55-4695-a052-13d80be905a7` and reached `Waiting for Review`.
+- Manual App Store release remains selected; approval does not authorize an
+  automatic storefront release.
 - Availability remains United States only.
 - The app remains free with no IAP.

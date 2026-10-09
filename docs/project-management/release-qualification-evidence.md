@@ -9,10 +9,12 @@ The current production application candidate is
 `8ff889938303a49468d8d6baa436be855655d3a9`. The canonical migration and
 initial production rollout used `e5fff7c7d2c42d9ab98df379eb6b0269b5ca43de`;
 the current candidate adds only the bounded administrator same-origin request
-compatibility fix recorded below. It does **not** authorize an App Store
-submission. No build was uploaded during the Phase 7 production rollout
-itself; the exact qualified iOS artifact was subsequently uploaded to internal
-TestFlight as recorded below.
+compatibility fix recorded below. No build was uploaded during the Phase 7
+production rollout itself; the exact qualified iOS artifact was subsequently
+uploaded to internal TestFlight. On October 8, 2026, the owner accepted the
+documented risk of submitting before Apple populated the extended TestFlight
+metrics window and explicitly authorized App Review submission. Manual App
+Store release remains selected.
 
 | Gate | Result | Required current-candidate evidence |
 | --- | --- | --- |
@@ -28,7 +30,7 @@ TestFlight as recorded below.
 | Large iPhone matrix | Pass | iPhone 17 Pro Max / iOS 26.5: 139 unit and 30 distinct Release UI tests passed with zero failures. |
 | Physical iPhone Release pass | Pass | All 30 distinct Release UI scenarios passed on an iPhone 16 Plus / iOS 26.3.1, with one history-card timing failure passing on isolated retry. The preserved installed 1.0 (1) build then launched successfully without reinstalling against the production candidate and remained running while the final public compatibility gate passed. |
 | Rollback rehearsal | Pass | The current production image was archived before rehearsal, restored in 11 seconds, and passed health, 59-match legacy reads, comment reads, and realtime connection/reconnect against a fresh restored database. Archive digest and mode-0600 evidence were verified. |
-| Internal TestFlight delivery | Pass; observation active | The exact qualified iOS 1.0 (1) IPA with SHA-256 `a50e49993fae12d92b25f9e2f16bc2848576ea83480ac9cab39207ab7c31752a` validated and uploaded without error. Apple completed processing, marked the binary App Store eligible, and assigned it to the controlled `Phase 7 Internal` group. The invited account holder installed and passed the physical production smoke below. The issue 47 observation window remains active; no App Review submission occurred. |
+| Internal TestFlight delivery | Pass; extended observation waived | The exact qualified iOS 1.0 (1) IPA with SHA-256 `a50e49993fae12d92b25f9e2f16bc2848576ea83480ac9cab39207ab7c31752a` validated and uploaded without error. Apple completed processing, marked the binary App Store eligible, and assigned it to the controlled `Phase 7 Internal` group. The invited account holder installed and passed the physical production smoke below. Apple installation and crash metrics had not populated when the owner explicitly waived the longer observation period and authorized submission. |
 
 Do not change these items to `Pass` based on code review, a clean synthetic
 database, or the earlier release evidence. Attach only privacy-safe counts,
@@ -37,10 +39,10 @@ digests, versions, status codes, and artifact identifiers.
 ## 2026-10-08 · App Store Connect And Internal TestFlight
 
 The exact qualified iOS viewer artifact was uploaded only after the production
-migration, hotfix, physical-device qualification, and observation decision had
-passed. This delivery authorizes internal TestFlight testing only. It does not
-authorize external testing, an App Review submission, or release on the App
-Store.
+migration, hotfix, and physical-device qualification passed. The owner then
+explicitly waived the longer TestFlight observation recommendation and
+authorized App Review submission. This does not authorize automatic App Store
+release; manual release remains selected.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
@@ -49,9 +51,10 @@ Store.
 | Review access | Pass | A durable non-administrator `AppReview` account was created in production, verified, and entered into App Store Connect with the required reviewer contact information and review notes. The initially empty local Keychain value was detected during physical smoke, so only this account's password was rotated, existing sessions were revoked, the replacement was verified through production sign-in/sign-out, and App Store Connect was updated and saved. Its password remains only in the named macOS Keychain item and is absent from Git and evidence. |
 | Exact artifact validation | Pass | iOS 1.0 (1), bundle `com.emiliogarcia.ruskireport`, IPA SHA-256 `a50e49993fae12d92b25f9e2f16bc2848576ea83480ac9cab39207ab7c31752a`, validated with zero errors before upload. |
 | App Store Connect upload | Pass | Delivery `f3ad65be-ef00-4f9d-9591-6a21a1a597c9` uploaded 4,992,453 bytes without warning or error. Apple reported `VALID_BINARY`, `APP_STORE_ELIGIBLE`, iPhone-only, minimum iOS 17.0, and `USES-NON-EXEMPT-ENCRYPTION=false`; the build upload then reached Complete. |
-| Internal distribution | Pass | Build 1 reached Ready to Test and was added manually to the `Phase 7 Internal` group with automatic future-build distribution disabled. The account holder is the sole invited internal tester. No external group was created and the build was not added to an App Review submission. |
+| Internal distribution | Pass | Build 1 reached Ready to Test and was added manually to the `Phase 7 Internal` group with automatic future-build distribution disabled. The account holder is the sole invited internal tester. No external testing group was created. |
 | Credential hygiene | Pass | The single-use upload credential was revoked in Apple Account immediately after delivery, its local Keychain item was deleted, and the clipboard was cleared. The credential is not retained in the repository or release evidence. |
-| TestFlight production smoke and observation | Smoke pass; observation active | The invited tester installed and ran the exact TestFlight iOS 1.0 (1) build on the registered iPhone 16 Plus. Guest mode passed the expected no-active-tournament state, 2026 history, overview, standings, bracket, statistics, match result/scorecard, and comments. `AppReview` sign-in, session persistence after force-quit, and comment-composer authorization passed without posting content. Airplane Mode produced a recoverable network state without a crash; restoring connectivity and Retry returned to Scores and History. The stable post-recovery window passed 21 structured privacy-audited API entries with zero API and PostgreSQL errors. A single HTTP 404 during the intentional network transition did not recur, and the app recovered; an earlier PostgreSQL syntax error was attributable to a read-only diagnostic command, not application traffic. Apple metrics had not yet populated installation or crash counts, so the issue 47 observation window remains active. No App Review submission occurred. |
+| TestFlight production smoke and observation | Smoke pass; extended observation waived | The invited tester installed and ran the exact TestFlight iOS 1.0 (1) build on the registered iPhone 16 Plus. Guest mode passed the expected no-active-tournament state, 2026 history, overview, standings, bracket, statistics, match result/scorecard, and comments. `AppReview` sign-in, session persistence after force-quit, and comment-composer authorization passed without posting content. Airplane Mode produced a recoverable network state without a crash; restoring connectivity and Retry returned to Scores and History. The stable post-recovery window passed 21 structured privacy-audited API entries with zero API and PostgreSQL errors. A single HTTP 404 during the intentional network transition did not recur, and the app recovered; an earlier PostgreSQL syntax error was attributable to a read-only diagnostic command, not application traffic. Apple installation and crash metrics had not yet populated; the owner explicitly accepted that residual risk and directed immediate submission. A final read-only production gate then confirmed the exact deployed image, healthy API and PostgreSQL, public HTTPS/WSS and realtime reconnect, fresh backups, 59/59 v1/v2 equivalence, projection version 1, zero failed units or restarts, and a clean privacy-audited error window. |
+| App Review submission | Submitted; Waiting for Review | Four privacy-reviewed 1206 × 2622 RGB screenshots without alpha were uploaded for the iPhone with Dynamic Island medium-display slot. The submission contains only iOS 1.0 build 1, submission identifier `94795588-3d55-4695-a052-13d80be905a7`. App Store Connect accepted it at 2026-10-08 21:10 ET and reported `Waiting for Review`. Manual release remains selected. |
 
 ### Physical TestFlight Smoke Runtime Snapshot
 
@@ -246,5 +249,7 @@ Issue 45 has no remaining release blocker. The live production Pi was not
 deliberately stopped, and the physical phone was not placed under 100 percent
 packet loss. Equivalent client loading, outage, retry, session-expiration, and
 recovery paths passed deterministic qualification instead. This production-safe
-substitution is accepted for the v1 qualification closeout; live service
-resilience remains part of the TestFlight observation window in issue 47.
+substitution is accepted for the v1 qualification closeout. The subsequent
+physical TestFlight smoke and final production gate passed; the owner accepted
+the residual risk of submitting before Apple populated extended TestFlight
+metrics, as recorded in issue 47.
