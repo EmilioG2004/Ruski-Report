@@ -446,6 +446,7 @@ postgresDescribe("PostgreSQL 2026 legacy backfill rehearsal", () => {
       policy: string;
       mismatch_count: string;
       mismatch_digest: string;
+      protected_legacy_digest: string;
     }>(
       `
         SELECT
@@ -453,7 +454,8 @@ postgresDescribe("PostgreSQL 2026 legacy backfill rehearsal", () => {
           metadata #>> '{tournamentStatisticCorrections,mismatchCount}'
             AS mismatch_count,
           metadata #>> '{tournamentStatisticCorrections,mismatchDigest}'
-            AS mismatch_digest
+            AS mismatch_digest,
+          metadata ->> 'protectedLegacyDigest' AS protected_legacy_digest
         FROM engine_legacy_backfill_runs
         WHERE legacy_tournament_id = $1 AND status = 'completed'
       `,
@@ -462,7 +464,8 @@ postgresDescribe("PostgreSQL 2026 legacy backfill rehearsal", () => {
     expect(checkpoint.rows).toEqual([{
       policy: "canonical_match_events_v1",
       mismatch_count: "1",
-      mismatch_digest: expect.stringMatching(/^[a-f0-9]{64}$/)
+      mismatch_digest: expect.stringMatching(/^[a-f0-9]{64}$/),
+      protected_legacy_digest: expect.stringMatching(/^[a-f0-9]{64}$/)
     }]);
 
     const projection = await database.query<{

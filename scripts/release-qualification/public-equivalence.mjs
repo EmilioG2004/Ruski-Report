@@ -3,6 +3,8 @@
  * Results contain only stable rule codes and never echo response payloads.
  */
 
+import { createHash } from "node:crypto";
+
 export function comparePublicContracts(input) {
   const mismatches = [];
   compareScalar(
@@ -29,30 +31,23 @@ export function comparePublicContracts(input) {
     legacyBracket(input.legacyTournament?.bracket),
     canonicalBracket(input.canonicalTournament?.bracket)
   );
-  compareScalar(
-    mismatches,
-    "standings",
-    legacyStandings(input.legacyTournament?.standings),
-    canonicalStandings(input.canonicalTournament?.pods)
-  );
-  compareScalar(
-    mismatches,
-    "tournament_statistics",
-    legacyTournamentStatistics(input.legacyTournament?.statistics),
-    canonicalTournamentStatistics(input.canonicalTournament?.statistics)
-  );
-  compareScalar(
-    mismatches,
-    "effective_seeds",
-    legacyEffectiveSeeds(input.legacyTournament?.teams),
-    canonicalEffectiveSeeds(input.canonicalTournament?.seeds)
-  );
-  compareScalar(
-    mismatches,
-    "match_details",
-    legacyMatchDetails(input.legacyMatchDetails),
-    canonicalMatchDetails(input.canonicalMatchDetails)
-  );
+  compareCondition(mismatches, "standings", standingsEquivalent(
+    input.legacyTournament?.standings,
+    input.canonicalTournament?.pods
+  ));
+  compareCondition(mismatches, "tournament_statistics", tournamentStatisticsEquivalent(
+    input.legacyTournament?.statistics,
+    input.canonicalTournament?.statistics,
+    input.expectedTournamentStatisticCorrections
+  ));
+  compareCondition(mismatches, "effective_seeds", effectiveSeedsEquivalent(
+    input.legacyTournament?.teams,
+    input.canonicalTournament?.seeds
+  ));
+  compareCondition(mismatches, "match_details", matchDetailsEquivalent(
+    input.legacyMatchDetails,
+    input.canonicalMatchDetails
+  ));
   return { equivalent: mismatches.length === 0, mismatches };
 }
 
@@ -94,6 +89,18 @@ function canonicalEffectiveSeeds(seeds) {
     teamId: seed?.team?.id ?? null,
     seed: seed?.effectiveSeed ?? null
   })).sort(byTeam));
+}
+
+function effectiveSeedsEquivalent(teams, seeds) {
+  if (!Array.isArray(teams) || !Array.isArray(seeds)) return false;
+  const canonical = new Map(seeds.map((seed) => [
+    seed?.team?.id ?? null,
+    seed?.effectiveSeed ?? null
+  ]));
+  const legacy = teams.filter((team) => team?.seed?.overall !== undefined);
+  return legacy.every((team) =>
+    canonical.get(team?.id ?? null) === team.seed.overall
+  );
 }
 
 function stableRosters(teams, map) {
@@ -144,7 +151,10 @@ function stableMatchList(matches, map) {
 }
 
 function comparableLegacyScores(match) {
-  if (match?.status !== "final") return null;
+  if (
+    match?.status !== "final" ||
+    legacyScoreAvailability(match) !== "complete"
+  ) return null;
   return array(match?.score?.participants)
     .map((score) => [score?.teamId ?? null, score?.score ?? null])
     .sort(([left], [right]) => String(left).localeCompare(String(right)));
@@ -182,7 +192,9 @@ function legacyBracket(bracket) {
     matchId: match?.matchId ?? null,
     winnerTeamId: match?.winnerTeamId ?? null,
     slots: array(match?.slots).map((slot) => ({
-      source: slot?.source?.type ?? (slot?.teamId === undefined ? "tbd" : "team"),
+      source: canonicalBracketSource(
+        slot?.source?.type ?? (slot?.teamId === undefined ? "tbd" : "team")
+      ),
       sourceBracketMatchId: slot?.source?.sourceMatchId ?? null,
       teamId: slot?.teamId ?? null,
       seed: slot?.seed ?? null
@@ -202,6 +214,10 @@ function canonicalBracket(bracket) {
       seed: slot?.seed ?? null
     }))
   }));
+}
+
+function canonicalBracketSource(source) {
+  return source === "match-winner" ? "match_winner" : source;
 }
 
 function bracketSignature(bracket, map) {
@@ -241,6 +257,38 @@ function canonicalStandings(pods) {
   }))).sort(byPodAndTeam));
 }
 
+function standingsEquivalent(standings, pods) {
+  if (!Array.isArray(standings) || !Array.isArray(pods)) return false;
+  const canonicalRows = pods.flatMap((pod) => array(pod?.standings).map(
+    (standing) => ({ pod, standing })
+  ));
+  if (standings.length !== canonicalRows.length) return false;
+  const canonical = new Map(canonicalRows.map(({ pod, standing }) => [
+    `${pod?.id ?? null}:${standing?.team?.id ?? null}`,
+    standing
+  ]));
+  return standings.every((standing) => {
+    const row = canonical.get(
+      `${standing?.podId ?? null}:${standing?.teamId ?? null}`
+    );
+    if (row === undefined) return false;
+    const values = standing?.metricValues;
+    return row?.rank === (standing?.rank ?? null) &&
+      row?.wins === (standing?.record?.wins ?? null) &&
+      row?.losses === (standing?.record?.losses ?? null) &&
+      numbersEquivalent(metric(values, "cupDifferential"), row?.cupDifferential) &&
+      numbersEquivalent(metric(values, "shootingPercentage"), row?.shootingPercentage) &&
+      optionalMetricEquivalent(values, "makes", row?.makes) &&
+      optionalMetricEquivalent(values, "attempts", row?.attempts);
+  });
+}
+
+function optionalMetricEquivalent(values, key, actual) {
+  return values === null || typeof values !== "object" || !(key in values)
+    ? true
+    : numbersEquivalent(values[key], actual);
+}
+
 function legacyTournamentStatistics(tables) {
   if (!Array.isArray(tables)) return stable([]);
   return stable(tables.flatMap((table) => array(table?.rows).map((row) => ({
@@ -258,6 +306,68 @@ function canonicalTournamentStatistics(statistics) {
       subjectId: statistic?.subject?.id ?? null,
       values: sortedValues(statistic?.values)
     })).sort(byStageAndSubject));
+}
+
+export function summarizeTournamentStatisticCorrections(tables, statistics) {
+  if (!Array.isArray(tables) || !Array.isArray(statistics)) return null;
+  const canonical = statistics.filter((statistic) => statistic?.scope === "tournament");
+  const corrections = [];
+  for (const table of tables) {
+    const stage = table?.scope === "season" ? null : "playoffs";
+    const subjectType = table?.subjectType;
+    if (subjectType !== "team" && subjectType !== "player") return null;
+    for (const row of array(table?.rows)) {
+      const subjectId = subjectType === "team"
+        ? row?.subject?.teamId
+        : row?.subject?.playerId;
+      if (typeof subjectId !== "string" || subjectId.length === 0) return null;
+      const candidates = canonical.filter((statistic) =>
+        statistic?.stage === stage && statistic?.subject?.id === subjectId
+      );
+      if (candidates.length !== 1) return null;
+      const candidate = candidates[0];
+      for (const [legacyMetric, expected] of Object.entries(row?.values ?? {})) {
+        const metricKey = legacyCorrectionMetricKey(legacyMetric);
+        if (metricKey === undefined) continue;
+        if (!(metricKey in (candidate?.values ?? {}))) return null;
+        const actual = candidate.values[metricKey];
+        if (!numbersEquivalent(expected, actual)) {
+          corrections.push({
+            scope: table.scope,
+            subjectType,
+            subjectId,
+            metric: metricKey,
+            legacyValue: expected,
+            canonicalValue: actual
+          });
+        }
+      }
+    }
+  }
+  corrections.sort((left, right) =>
+    left.scope.localeCompare(right.scope) ||
+    left.subjectType.localeCompare(right.subjectType) ||
+    left.subjectId.localeCompare(right.subjectId) ||
+    left.metric.localeCompare(right.metric)
+  );
+  return {
+    policy: "canonical_match_events_v1",
+    mismatchCount: corrections.length,
+    mismatchDigest: digest(corrections)
+  };
+}
+
+function tournamentStatisticsEquivalent(tables, statistics, expected) {
+  const actual = summarizeTournamentStatisticCorrections(tables, statistics);
+  if (actual === null) return false;
+  const required = expected ?? {
+    policy: "canonical_match_events_v1",
+    mismatchCount: 0,
+    mismatchDigest: digest([])
+  };
+  return required?.policy === actual.policy &&
+    required?.mismatchCount === actual.mismatchCount &&
+    required?.mismatchDigest === actual.mismatchDigest;
 }
 
 function legacyMatchDetails(details) {
@@ -286,6 +396,114 @@ function canonicalMatchDetails(details) {
   }));
 }
 
+function matchDetailsEquivalent(legacyDetails, canonicalDetails) {
+  if (!Array.isArray(legacyDetails) || !Array.isArray(canonicalDetails)) {
+    return false;
+  }
+  if (legacyDetails.length !== canonicalDetails.length) return false;
+  const canonicalById = new Map(canonicalDetails.map((detail) => [detail?.id, detail]));
+  return legacyDetails.every((legacy) => {
+    const canonical = canonicalById.get(legacy?.id);
+    return canonical !== undefined &&
+      participantsEquivalent(legacy?.participants, canonical?.participants) &&
+      eventsEquivalent(legacy?.events, canonical?.events) &&
+      boxScoresEquivalent(legacy?.boxScore, canonical?.boxScore) &&
+      scorecardsEquivalent(legacy, canonical);
+  });
+}
+
+function participantsEquivalent(legacyParticipants, canonicalParticipants) {
+  const legacy = array(legacyParticipants).map((participant) => ({
+    teamId: participant?.teamId ?? null,
+    playerIds: array(participant?.playerIds).sort()
+  })).sort(byTeam);
+  const canonical = array(canonicalParticipants).map((participant) => ({
+    teamId: participant?.team?.id ?? null,
+    playerIds: array(participant?.players)
+      .map((player) => player?.id ?? null).sort()
+  })).sort(byTeam);
+  return stable(legacy) === stable(canonical);
+}
+
+function eventsEquivalent(legacyEvents, canonicalEvents) {
+  const legacy = array(legacyEvents).map(normalizeLegacyEvent).sort(bySequence);
+  const canonical = array(canonicalEvents).map(normalizeCanonicalEvent).sort(bySequence);
+  if (legacy.length !== canonical.length) return false;
+  return legacy.every((event, index) => {
+    const candidate = canonical[index];
+    return candidate !== undefined &&
+      event.sequence === candidate.sequence &&
+      event.type === candidate.type &&
+      event.teamId === candidate.teamId &&
+      (event.playerId === null || event.playerId === candidate.playerId) &&
+      event.outcome === candidate.outcome &&
+      event.classification === candidate.classification;
+  });
+}
+
+function boxScoresEquivalent(legacyBoxScore, canonicalBoxScore) {
+  const sourceRows = array(legacyBoxScore?.rows);
+  const canonicalRows = array(canonicalBoxScore?.rows);
+  if (sourceRows.length === 0) return canonicalRows.length === 0;
+  const explicitPlayerIds = new Set(sourceRows.flatMap((row) =>
+    row?.subject?.type === "player" && typeof row?.subject?.playerId === "string"
+      ? [row.subject.playerId]
+      : []
+  ));
+  return sourceRows.every((row) => {
+    const subjectType = row?.subject?.type;
+    const subjectId = subjectType === "player"
+      ? row?.subject?.playerId
+      : subjectType === "team" ? row?.subject?.teamId : undefined;
+    if (typeof subjectId !== "string" || subjectId.length === 0) return false;
+    const candidates = canonicalRows.filter((candidate) =>
+      subjectType === "player"
+        ? candidate?.subject?.type === "player" &&
+          candidate?.subject?.id === subjectId
+        : candidate?.teamId === subjectId && (
+          candidate?.subject?.type === "team" ||
+          !explicitPlayerIds.has(candidate?.subject?.id)
+        )
+    ).filter((candidate) => Object.entries(row?.stats ?? {}).every(
+      ([key, expected]) => {
+        const metricKey = legacyCorrectionMetricKey(key);
+        return metricKey === undefined || numbersEquivalent(
+          expected,
+          candidate?.values?.[metricKey]
+        );
+      }
+    ));
+    return candidates.length === 1;
+  });
+}
+
+function scorecardsEquivalent(legacyDetail, canonicalDetail) {
+  const legacyEvents = new Map(array(legacyDetail?.events).map((event) => [
+    event?.id,
+    event
+  ]));
+  const canonicalEvents = new Map(array(canonicalDetail?.events).map((event) => [
+    event?.sequence,
+    event
+  ]));
+  const shotRows = array(legacyDetail?.scorecard?.rows).flatMap((row) => {
+    const event = array(row?.eventIds).map((id) => legacyEvents.get(id))
+      .find((candidate) => candidate !== undefined && candidate?.type !== "vom");
+    return event === undefined ? [] : [{ row, event }];
+  });
+  const canonicalRows = array(canonicalDetail?.scorecard?.rows);
+  if (shotRows.length !== canonicalRows.length) return false;
+  const canonicalRowsById = new Map(canonicalRows.map((row) => [row?.id, row]));
+  return shotRows.every(({ row, event }) => {
+    const canonicalEvent = canonicalEvents.get(event?.sequence);
+    const canonicalRow = canonicalRowsById.get(canonicalEvent?.id);
+    return canonicalEvent !== undefined && canonicalRow !== undefined &&
+      canonicalRow?.sequence === canonicalEvent?.sequence &&
+      (row?.teamId === undefined || row?.teamId === canonicalRow?.teamId) &&
+      (row?.playerId === undefined || row?.playerId === canonicalRow?.playerId);
+  });
+}
+
 function stableDetailList(details, map) {
   if (!Array.isArray(details)) return "invalid";
   return stable(details.map(map).sort(byId));
@@ -303,8 +521,8 @@ function normalizeLegacyEvent(event) {
     type: event?.type === "vom" ? "vom" : "shot_attempt",
     teamId: event?.teamId ?? null,
     playerId: event?.playerId ?? null,
-    outcome: event?.type === "make" ? "made" :
-      event?.type === "vom" ? null : "missed",
+    outcome: event?.type === "make" ? "make" :
+      event?.type === "vom" ? null : "miss",
     classification: classifications[event?.type] ?? null
   };
 }
@@ -370,8 +588,53 @@ function canonicalMetricKey(key) {
   })[key] ?? key;
 }
 
+function legacyCorrectionMetricKey(key) {
+  return ({
+    makes: "makes",
+    misses: "misses",
+    attempts: "attempts",
+    shootingPercentage: "shooting_percentage",
+    splashOuts: "splash_outs",
+    guys: "guys",
+    tris: "tris",
+    dis: "dis",
+    voms: "voms",
+    cupsScored: "cups_scored",
+    cupsAgainst: "cups_against",
+    cupDifferential: "cup_differential"
+  })[key];
+}
+
 function compareScalar(mismatches, code, left, right) {
   if (left !== right) mismatches.push({ code });
+}
+
+function compareCondition(mismatches, code, condition) {
+  if (!condition) mismatches.push({ code });
+}
+
+function numbersEquivalent(expected, actual) {
+  if (expected === null || actual === null || actual === undefined) {
+    return expected === actual;
+  }
+  return typeof expected === "number" && typeof actual === "number" &&
+    Math.abs(expected - actual) <= 1e-10;
+}
+
+function digest(value) {
+  return createHash("sha256").update(stableJson(value)).digest("hex");
+}
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    return `{${Object.entries(value)
+      .filter(([, item]) => item !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => `${JSON.stringify(key)}:${stableJson(item)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 
 function stable(value) {

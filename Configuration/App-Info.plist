@@ -22,6 +22,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>RUSKI_API_BASE_URL</key>
 	<string>$(RUSKI_API_BASE_URL)</string>
 	<key>RUSKI_BUILD_CONFIGURATION</key>

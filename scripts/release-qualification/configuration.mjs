@@ -50,6 +50,54 @@ export function loadQualificationConfiguration(environment = process.env) {
   };
 }
 
+export function loadExpectedActiveTournamentIds(environment = process.env) {
+  const value = environment.RUSKI_QUALIFICATION_EXPECTED_ACTIVE_TOURNAMENT_IDS;
+  if (value === undefined || value.trim().length === 0) {
+    throw new Error(
+      "RUSKI_QUALIFICATION_EXPECTED_ACTIVE_TOURNAMENT_IDS must be 'none' " +
+        "or an explicit comma-separated list."
+    );
+  }
+  if (value.trim().toLowerCase() === "none") return [];
+
+  const identifiers = value.split(",").map((identifier) => identifier.trim());
+  if (
+    identifiers.some((identifier) =>
+      !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(identifier)
+    ) ||
+    new Set(identifiers).size !== identifiers.length
+  ) {
+    throw new Error(
+      "RUSKI_QUALIFICATION_EXPECTED_ACTIVE_TOURNAMENT_IDS is invalid."
+    );
+  }
+  return identifiers.sort((left, right) => left.localeCompare(right));
+}
+
+export function loadExpectedTournamentStatisticCorrections(
+  environment = process.env
+) {
+  const countValue = environment.RUSKI_QUALIFICATION_STATISTIC_CORRECTION_COUNT;
+  const digest = environment.RUSKI_QUALIFICATION_STATISTIC_CORRECTION_DIGEST;
+  if (countValue === undefined && digest === undefined) return undefined;
+  const count = Number(countValue);
+  if (
+    !Number.isSafeInteger(count) || count < 0 ||
+    typeof digest !== "string" || !/^[a-f0-9]{64}$/u.test(digest)
+  ) {
+    throw new Error(
+      "RUSKI_QUALIFICATION_STATISTIC_CORRECTION_COUNT and " +
+        "RUSKI_QUALIFICATION_STATISTIC_CORRECTION_DIGEST must be supplied " +
+        "together from the completed backfill checkpoint."
+    );
+  }
+  return {
+    policy: "canonical_match_events_v1",
+    mismatchCount: count,
+    mismatchDigest: digest
+  };
+}
+
 function readHttpsUrl(value, name) {
   const url = new URL(value);
   if (url.protocol !== "https:") {

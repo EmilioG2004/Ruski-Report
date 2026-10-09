@@ -191,7 +191,9 @@ HTTPS origin used to open the private administrator app. Do not place any
 secret in shell history, source control, screenshots, the iOS app, or operator
 documentation.
 
-Set `RUSKI_IMAGE_TAG` to the checked-out tag or short commit SHA. Keep
+For the first deployment, set `RUSKI_API_IMAGE` to a local, immutable-purpose
+tag such as `ruski-report-api:bootstrap-FULL_COMMIT_SHA`. Phase 7 updates use
+the preparation workflow below instead of choosing this value by hand. Keep
 `RUSKI_API_BIND_ADDRESS=127.0.0.1` except during the LAN acceptance test below.
 Keep `CLOUDFLARED_ENV_FILE` outside the source directory. The production
 defaults allow browser origins `https://ruskireport.com` and
@@ -206,19 +208,23 @@ would expose secrets:
 docker compose --env-file .env config --quiet
 ```
 
-## 5. Build and Start
+## 5. Build and Start The First Deployment
+
+This section is only for a host that has no prior Ruski Report API image to
+preserve. Once an API is deployed, every release must use the build-once
+workflow under **Deploy an Update**.
 
 Build the ARM64 image from the lockfile:
 
 ```bash
-docker compose --env-file .env build --pull
+docker compose --env-file .env build --pull api
 ```
 
 Start the stack. Compose waits for PostgreSQL, runs migrations once, and starts
 the API only after migrations succeed:
 
 ```bash
-docker compose --env-file .env up -d
+docker compose --env-file .env up -d --no-build
 docker compose --env-file .env ps --all
 ```
 
@@ -438,29 +444,98 @@ docker compose --env-file .env up -d --no-deps --force-recreate cloudflared
 
 ## Deploy an Update
 
-Before a live deployment, complete the backup gate from issue 37. Then fetch
-and check out the reviewed release:
+Phase 7 builds the API image once, rehearses that exact image, and then reuses
+it in production. Do not run `docker compose build` during rehearsal,
+deployment, or rollback. The preparation command records only the candidate
+commit, local image references, immutable Docker image IDs, and a timestamp.
+It does not record the repository path, environment-file path, credentials, or
+configuration values.
+
+Before preparing an image, complete the local qualification gate, select the
+exact reviewed full commit or tag, and leave the existing API container
+running so its immutable image can be preserved for rollback. Fetch and check
+out the candidate in detached mode:
 
 ```bash
 cd /opt/ruski-report/source
 git fetch --tags origin
-git checkout --detach NEW_TAG_OR_COMMIT
-git rev-parse HEAD
+candidate_ref=EXACT_TAG_OR_FULL_COMMIT
+git checkout --detach "$candidate_ref"
+candidate_commit=$(git rev-parse HEAD)
 ```
 
-Update `RUSKI_IMAGE_TAG` in `deploy/raspberry-pi/.env`, then build, migrate, and
-recreate the services:
+Create a protected state directory outside Git and prepare the candidate. The
+script rejects a branch name, dirty worktree, candidate/HEAD mismatch, missing
+running API, reused candidate tag, or invalid Docker image ID. It tags the
+currently running API by its full immutable image ID before building the
+candidate. Do not delete either tag during qualification or the production
+observation window.
 
 ```bash
-cd deploy/raspberry-pi
-docker compose --env-file .env build --pull
-docker compose --env-file .env run --rm migrate
-docker compose --env-file .env up -d --remove-orphans
+install -d -m 0700 /opt/ruski-report/release-images
+release_state=/opt/ruski-report/release-images/${candidate_commit}.env
+deploy/raspberry-pi/operations/prepare-release-image.sh prepare \
+  "$candidate_ref" "$release_state"
+```
+
+Record the command's sanitized summary in release evidence. Keep the mode-0600
+state file on the Pi, but do not record its path. It is the local verification
+record, not a secret or a substitute for the release evidence summary.
+
+Before and after every restored rehearsal step, verify that the tag still
+resolves to the recorded image ID and revision label:
+
+```bash
+deploy/raspberry-pi/operations/prepare-release-image.sh verify "$release_state"
+release_image=$(deploy/raspberry-pi/operations/prepare-release-image.sh \
+  release-ref "$release_state")
+export RUSKI_API_IMAGE="$release_image"
+```
+
+Supply this exported value to the isolated restored-database Compose project.
+Its API and migration services must use this repository's `compose.yml`, must
+start with `--no-build`, and must not point at the production PostgreSQL data
+path. After starting its API, prove the running container uses the recorded
+image ID:
+
+```bash
+deploy/raspberry-pi/operations/prepare-release-image.sh verify-container \
+  release "$release_state" REHEARSAL_API_CONTAINER
+```
+
+Do not proceed until the restored migration, deterministic backfill,
+equivalence, lifecycle, and rollback gates pass. The ordinary backup
+`restore-rehearsal.sh` checks backup readability only; it does not replace the
+Phase 7 candidate rehearsal.
+
+Inside the explicitly authorized maintenance window, verify the state again,
+then edit only `RUSKI_API_IMAGE` in `.env` to the verified `release_image`.
+Run the migration service from the already-built image and recreate the stack
+without building. Stop after the migration command and complete the authorized
+production backfill dry-run/apply/no-op sequence from the Phase 7 rollout
+runbook. Start the candidate API only after those checks pass:
+
+```bash
+cd /opt/ruski-report/source/deploy/raspberry-pi
+operations/prepare-release-image.sh verify "$release_state"
+docker compose --env-file .env run --rm --no-deps migrate
+```
+
+After the backfill gate passes:
+
+```bash
+docker compose --env-file .env up -d --no-build --no-deps \
+  --force-recreate api
 docker compose --env-file .env ps --all
+api_container=$(docker compose --env-file .env ps -q api)
+operations/prepare-release-image.sh verify-container \
+  release "$release_state" "$api_container"
 ```
 
 Migration execution is serialized by a PostgreSQL advisory lock and runs in a
-transaction. Application startup never mutates the schema implicitly.
+transaction. Application startup never mutates the schema implicitly. A
+missing prepared image now fails locally because Compose never pulls an API
+image; it must not be repaired by rebuilding during the release window.
 
 ## Restart and Inspect
 
@@ -475,29 +550,36 @@ storage.
 
 ## Code Rollback
 
-Record the currently deployed commit before every update. If the new release is
-unhealthy and its migrations are backward-compatible, check out the preceding
-release, restore its image tag in `.env`, rebuild, and recreate the API:
+The preparation workflow retains the previously running image under a tag that
+contains its full immutable image ID. If a rollback trigger fires, obtain and
+verify that reference before changing the checkout. Set `RUSKI_API_IMAGE` in
+`.env` to the printed value, then recreate the API without a build:
 
 ```bash
-cd /opt/ruski-report/source
-git checkout --detach PREVIOUS_TAG_OR_COMMIT
-cd deploy/raspberry-pi
-docker compose --env-file .env build
-docker compose --env-file .env up -d --no-deps --force-recreate api
+rollback_image=$(operations/prepare-release-image.sh rollback-ref \
+  "$release_state")
+operations/prepare-release-image.sh verify "$release_state"
+sudoedit .env
+docker compose --env-file .env up -d --no-build --no-deps \
+  --force-recreate api
+api_container=$(docker compose --env-file .env ps -q api)
+operations/prepare-release-image.sh verify-container \
+  rollback "$release_state" "$api_container"
 curl --fail --show-error http://127.0.0.1:3000/api/health
 ```
 
-Do not reverse or delete database migrations manually. If a release introduces
-a schema change that is not backward-compatible, stop and use the documented
-database restore procedure from issue 37 instead of attempting code-only
-rollback.
+Enter the printed `rollback_image` as the new `.env` value; do not paste the
+state-file path or its contents into evidence. Do not reverse or delete
+database migrations manually. For the first canonical migration, or whenever
+schema compatibility is not already proven, restore the final pre-window
+backup into a newly created database before starting the preserved image, as
+required by the Phase 7 rollout runbook.
 
 ## Issue 35 Acceptance Record
 
 Record these results in issue 35 before closing it:
 
-- Exact Git commit and `RUSKI_IMAGE_TAG`.
+- Exact Git commit, `RUSKI_API_IMAGE`, and immutable Docker image ID.
 - `docker compose config --quiet` success.
 - ARM64 image build success.
 - Migration and container health output.

@@ -25,6 +25,11 @@ export const LOCAL_QUALIFICATION_GATES = Object.freeze([
   backendGate("backend-lint", "backend TypeScript lint", ["run", "lint"]),
   backendGate("backend-build", "backend production build", ["run", "build"]),
   backendGate(
+    "backend-production-dependency-audit",
+    "production dependency audit (high and critical advisories)",
+    ["audit", "--omit=dev", "--audit-level=high"]
+  ),
+  backendGate(
     "backend-unit",
     "complete backend unit suite",
     ["test", "--", "--testPathIgnorePatterns=integration\\.spec\\.ts$"]
@@ -58,12 +63,18 @@ export const LOCAL_QUALIFICATION_GATES = Object.freeze([
     args: [
       "--test",
       "scripts/release-qualification/candidate-identity.test.mjs",
+      "scripts/release-qualification/backfill-sequence.test.mjs",
       "scripts/release-qualification/configuration.test.mjs",
       "scripts/release-qualification/database-guard.test.mjs",
       "scripts/release-qualification/evidence.test.mjs",
       "scripts/release-qualification/log-audit.test.mjs",
       "scripts/release-qualification/public-equivalence.test.mjs",
+      "scripts/release-qualification/production-read.test.mjs",
       "scripts/release-qualification/production-write.test.mjs",
+      "scripts/release-qualification/restored-database-guard.test.mjs",
+      "scripts/release-qualification/isolated-realtime-smoke.test.mjs",
+      "deploy/raspberry-pi/operations/prepare-release-image.test.mjs",
+      "deploy/raspberry-pi/operations/phase7-prewindow-rehearsal.test.mjs",
       "backend/scripts/realtime-event-observer.test.mjs"
     ]
   },

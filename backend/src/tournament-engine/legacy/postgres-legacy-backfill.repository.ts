@@ -214,7 +214,8 @@ implements LegacyBackfillRepository {
         plan,
         run,
         actualCounts,
-        statisticCorrections
+        statisticCorrections,
+        protectedDigest
       );
       await client.query("COMMIT");
 
@@ -1112,7 +1113,8 @@ async function completeCheckpoint(
   plan: LegacyBackfillPlan,
   run: LegacyBackfillRunRecord,
   counts: LegacyBackfillCounts,
-  statisticCorrections: LegacyTournamentStatisticCorrectionSummary
+  statisticCorrections: LegacyTournamentStatisticCorrectionSummary,
+  protectedLegacyDigest: string
 ): Promise<void> {
   await executor.query(
     `
@@ -1133,6 +1135,7 @@ async function completeCheckpoint(
         planDigest: plan.planDigest,
         mappingDigest: plan.mappingDigest,
         schemaVersion: plan.schemaVersion,
+        protectedLegacyDigest,
         tournamentStatisticCorrections: statisticCorrections
       })
     ]

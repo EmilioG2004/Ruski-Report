@@ -33,14 +33,18 @@ available through `RUSKI_PRIVACY_POLICY_URL`, `RUSKI_SUPPORT_URL`, and
       missing-icon, entitlement, or platform warnings.
 - [x] Attempt automatic development and App Store provisioning and record the
       Apple account prerequisites reported on July 28, 2026.
-- [ ] Enroll the current Apple account in the Apple Developer Program or select
+- [x] Enroll the current Apple account in the Apple Developer Program or select
       an enrolled team with App Store Connect access.
-- [ ] Complete any required Apple Developer and App Store Connect agreements.
-- [ ] Register `com.emiliogarcia.ruskireport` with the Apple Developer account
+- [x] Complete the agreements required for the initial free, no-IAP, US-only
+      release. The Free Apps Agreement is active through August 26, 2027. The
+      Paid Apps Agreement remains `New` and EU Digital Services Act trader
+      status remains incomplete; both are deferred while monetization and EU
+      availability remain out of scope. Reopen this gate before either changes.
+- [x] Register `com.emiliogarcia.ruskireport` with the Apple Developer account
       and create or download its provisioning profile.
-- [ ] Register an iPhone with the development team before validating a signed
+- [x] Register an iPhone with the development team before validating a signed
       development-device build.
-- [ ] Produce and validate a signed distribution archive.
+- [x] Produce and validate a signed distribution archive.
 
 The detailed contract and local commands are in
 [`docs/ios-release-configuration.md`](../ios-release-configuration.md).
@@ -70,9 +74,10 @@ The end-to-end procedure and current observed results are in
       youth-oriented imagery.
 - [x] Prohibit comments that encourage underage, dangerous, or excessive
       alcohol consumption.
-- [ ] Complete the App Store Connect questionnaire from the shipped binary and
-      metadata.
-- [ ] Use Apple's higher-rating override if the calculated rating is below 18+.
+- [x] Complete the App Store Connect questionnaire from the shipped binary and
+      metadata (saved October 8, 2026).
+- [x] Use Apple's higher-rating override if the calculated rating is below 18+
+      (18+ override saved October 8, 2026).
 
 The App Store rating does not replace account eligibility or age verification.
 The current service policy remains that people under 13 may not create accounts
@@ -96,9 +101,9 @@ or post comments.
 - [x] Run the `Publish policy site` workflow from the production source.
 - [x] Verify every production URL returns HTTP 200 and matches its committed
       source.
-- [ ] Inspect every production page visually at a phone-sized width.
-- [ ] Confirm App Store Connect privacy answers match the published policy.
-- [ ] Enter the privacy and support URLs in App Store Connect.
+- [x] Inspect every production page visually at a phone-sized width.
+- [x] Confirm App Store Connect privacy answers match the published policy.
+- [x] Enter the privacy and support URLs in App Store Connect.
 
 ## Raspberry Pi Privacy Gates
 

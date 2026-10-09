@@ -41,7 +41,7 @@ The ordered manifest runs these groups:
 
 | Gate | Executable coverage |
 | --- | --- |
-| Backend lint/build/unit | TypeScript lint, production build, and every non-integration Jest suite. |
+| Backend lint/build/audit/unit | TypeScript lint, production build, a registry audit that rejects high or critical production dependency advisories, and every non-integration Jest suite. |
 | Lifecycle contracts | Setup, workbook generation and parsing, beginning/middle/correction/end/no-op planning, canonical event adaptation, statistics, standings, seeds, mirrored bracket, progression, public projection, v2 reads, and realtime publication. |
 | Projection/realtime transaction | The production dependency graph must inject projection refresh/listener dependencies, the listener must emit version-pinned tournament and changed-match events, and the PostgreSQL projection suite must retain an old active pointer on activation failure. |
 | PostgreSQL integration | Migrations on clean and populated databases; setup, workbook reconciliation, statistics, progression, projection, backfill, authentication, authorization, CSRF, rate-limit, and audit persistence suites. |
@@ -96,6 +96,9 @@ Against an authorized isolated candidate or the production read-only window:
 ```bash
 RUSKI_QUALIFICATION_API_URL='https://candidate.example/api' \
 RUSKI_QUALIFICATION_PUBLIC_URL='https://candidate.example' \
+RUSKI_QUALIFICATION_EXPECTED_ACTIVE_TOURNAMENT_IDS='none' \
+RUSKI_QUALIFICATION_STATISTIC_CORRECTION_COUNT='<checkpoint count>' \
+RUSKI_QUALIFICATION_STATISTIC_CORRECTION_DIGEST='<checkpoint SHA-256>' \
 node scripts/release-qualification/run.mjs production-read
 ```
 
@@ -105,6 +108,11 @@ pinned v2 tournament/match read, common material v1/v2 semantics, and initial
 plus reconnected realtime handshakes. It supports 2026 appearing in v2 history
 instead of active discovery. The home contract separately requires all active
 v2 tournaments; two simultaneous active tournaments are valid.
+
+Copy the correction count and digest from the completed backfill checkpoint.
+The comparator accepts canonical tournament-statistic corrections only when
+that exact bounded set is reproduced; omitting the variables requires zero
+corrections, and supplying only one is invalid.
 
 The hook's comparator is a transport gate for shared public fields. The
 restored-database backfill verifier remains authoritative for deep standings,

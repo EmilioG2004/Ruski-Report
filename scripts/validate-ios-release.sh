@@ -6,6 +6,7 @@ readonly REPOSITORY_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 readonly PROJECT_PATH="${REPOSITORY_ROOT}/Ruski Report.xcodeproj"
 readonly APP_ICON_DIRECTORY="${REPOSITORY_ROOT}/Ruski Report/Assets.xcassets/AppIcon.appiconset"
 readonly APP_ICON_CONTENTS="${APP_ICON_DIRECTORY}/Contents.json"
+readonly PRIVACY_MANIFEST_SOURCE="${REPOSITORY_ROOT}/Ruski Report/PrivacyInfo.xcprivacy"
 
 fail() {
   echo "iOS release validation failed: $*" >&2
@@ -30,6 +31,52 @@ require_command plutil
 require_command rg
 require_command sips
 require_command xcodebuild
+
+plutil -lint "${PRIVACY_MANIFEST_SOURCE}" >/dev/null ||
+  fail "PrivacyInfo.xcprivacy is not a valid property list"
+
+readonly PRIVACY_MANIFEST_JSON="$(plutil -convert json -o - "${PRIVACY_MANIFEST_SOURCE}")"
+
+jq -e '
+  .NSPrivacyTracking == false
+  and .NSPrivacyTrackingDomains == []
+  and .NSPrivacyAccessedAPITypes == []
+  and (.NSPrivacyCollectedDataTypes | length == 4)
+  and (
+    [.NSPrivacyCollectedDataTypes[] | {
+      type: .NSPrivacyCollectedDataType,
+      linked: .NSPrivacyCollectedDataTypeLinked,
+      tracking: .NSPrivacyCollectedDataTypeTracking,
+      purposes: .NSPrivacyCollectedDataTypePurposes
+    }] | sort_by(.type)
+  ) == ([
+    {
+      type: "NSPrivacyCollectedDataTypeName",
+      linked: true,
+      tracking: false,
+      purposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
+    },
+    {
+      type: "NSPrivacyCollectedDataTypeOtherDiagnosticData",
+      linked: false,
+      tracking: false,
+      purposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
+    },
+    {
+      type: "NSPrivacyCollectedDataTypeOtherUserContent",
+      linked: true,
+      tracking: false,
+      purposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
+    },
+    {
+      type: "NSPrivacyCollectedDataTypeUserID",
+      linked: true,
+      tracking: false,
+      purposes: ["NSPrivacyCollectedDataTypePurposeAppFunctionality"]
+    }
+  ] | sort_by(.type))
+' <<<"${PRIVACY_MANIFEST_JSON}" >/dev/null ||
+  fail "PrivacyInfo.xcprivacy does not match the reviewed first-party data map"
 
 jq -e '
   (.images | length == 3)
@@ -153,8 +200,15 @@ fi
 
 readonly APP_PATH="${ARCHIVE_PATH}/Products/Applications/Ruski Report.app"
 readonly INFO_PLIST_PATH="${APP_PATH}/Info.plist"
+readonly PRIVACY_MANIFEST_PATH="${APP_PATH}/PrivacyInfo.xcprivacy"
 
 [[ -d "${APP_PATH}" ]] || fail "Release archive does not contain the app"
+[[ -f "${PRIVACY_MANIFEST_PATH}" ]] ||
+  fail "Release archive does not contain PrivacyInfo.xcprivacy"
+plutil -lint "${PRIVACY_MANIFEST_PATH}" >/dev/null ||
+  fail "archived PrivacyInfo.xcprivacy is not a valid property list"
+cmp -s "${PRIVACY_MANIFEST_SOURCE}" "${PRIVACY_MANIFEST_PATH}" ||
+  fail "archived PrivacyInfo.xcprivacy differs from the reviewed source"
 
 plist_value() {
   plutil -extract "$1" raw -o - "${INFO_PLIST_PATH}"
