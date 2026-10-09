@@ -28,7 +28,7 @@ TestFlight as recorded below.
 | Large iPhone matrix | Pass | iPhone 17 Pro Max / iOS 26.5: 139 unit and 30 distinct Release UI tests passed with zero failures. |
 | Physical iPhone Release pass | Pass | All 30 distinct Release UI scenarios passed on an iPhone 16 Plus / iOS 26.3.1, with one history-card timing failure passing on isolated retry. The preserved installed 1.0 (1) build then launched successfully without reinstalling against the production candidate and remained running while the final public compatibility gate passed. |
 | Rollback rehearsal | Pass | The current production image was archived before rehearsal, restored in 11 seconds, and passed health, 59-match legacy reads, comment reads, and realtime connection/reconnect against a fresh restored database. Archive digest and mode-0600 evidence were verified. |
-| Internal TestFlight delivery | Pass; observation active | The exact qualified iOS 1.0 (1) IPA with SHA-256 `a50e49993fae12d92b25f9e2f16bc2848576ea83480ac9cab39207ab7c31752a` validated and uploaded without error. Apple completed processing, marked the binary App Store eligible and Ready to Test, and assigned it to the controlled `Phase 7 Internal` group. Installation and the issue 47 observation window remain required; no App Review submission occurred. |
+| Internal TestFlight delivery | Pass; observation active | The exact qualified iOS 1.0 (1) IPA with SHA-256 `a50e49993fae12d92b25f9e2f16bc2848576ea83480ac9cab39207ab7c31752a` validated and uploaded without error. Apple completed processing, marked the binary App Store eligible, and assigned it to the controlled `Phase 7 Internal` group. The invited account holder installed and passed the physical production smoke below. The issue 47 observation window remains active; no App Review submission occurred. |
 
 Do not change these items to `Pass` based on code review, a clean synthetic
 database, or the earlier release evidence. Attach only privacy-safe counts,
@@ -46,12 +46,24 @@ Store.
 | --- | --- | --- |
 | App record and commercial scope | Pass | App Store Connect Apple ID `6820726650` uses bundle `com.emiliogarcia.ruskireport`, English (U.S.), free pricing, no IAP, United States-only availability, Sports primary category, Entertainment secondary category, and manual App Store release. |
 | Trust and compliance metadata | Pass | The 18+ override, authorized third-party content-rights declaration, exempt-encryption declaration, published privacy URLs, and published five-data-type privacy label were saved. The label declares no tracking; Name, Customer Support, Other User Content, and User ID are linked for App Functionality, while Other Diagnostic Data is not linked. |
-| Review access | Pass | A durable non-administrator `AppReview` account was created in production, verified, and entered into App Store Connect with the required reviewer contact information and review notes. Its password remains only in the named macOS Keychain item and is absent from Git and evidence. |
+| Review access | Pass | A durable non-administrator `AppReview` account was created in production, verified, and entered into App Store Connect with the required reviewer contact information and review notes. The initially empty local Keychain value was detected during physical smoke, so only this account's password was rotated, existing sessions were revoked, the replacement was verified through production sign-in/sign-out, and App Store Connect was updated and saved. Its password remains only in the named macOS Keychain item and is absent from Git and evidence. |
 | Exact artifact validation | Pass | iOS 1.0 (1), bundle `com.emiliogarcia.ruskireport`, IPA SHA-256 `a50e49993fae12d92b25f9e2f16bc2848576ea83480ac9cab39207ab7c31752a`, validated with zero errors before upload. |
 | App Store Connect upload | Pass | Delivery `f3ad65be-ef00-4f9d-9591-6a21a1a597c9` uploaded 4,992,453 bytes without warning or error. Apple reported `VALID_BINARY`, `APP_STORE_ELIGIBLE`, iPhone-only, minimum iOS 17.0, and `USES-NON-EXEMPT-ENCRYPTION=false`; the build upload then reached Complete. |
 | Internal distribution | Pass | Build 1 reached Ready to Test and was added manually to the `Phase 7 Internal` group with automatic future-build distribution disabled. The account holder is the sole invited internal tester. No external group was created and the build was not added to an App Review submission. |
 | Credential hygiene | Pass | The single-use upload credential was revoked in Apple Account immediately after delivery, its local Keychain item was deleted, and the clipboard was cleared. The credential is not retained in the repository or release evidence. |
-| TestFlight production smoke and observation | In progress | Installation on the invited tester's physical iPhone, production-endpoint smoke coverage, and the issue 47 observation window remain before App Review can be considered. |
+| TestFlight production smoke and observation | Smoke pass; observation active | The invited tester installed and ran the exact TestFlight iOS 1.0 (1) build on the registered iPhone 16 Plus. Guest mode passed the expected no-active-tournament state, 2026 history, overview, standings, bracket, statistics, match result/scorecard, and comments. `AppReview` sign-in, session persistence after force-quit, and comment-composer authorization passed without posting content. Airplane Mode produced a recoverable network state without a crash; restoring connectivity and Retry returned to Scores and History. The stable post-recovery window passed 21 structured privacy-audited API entries with zero API and PostgreSQL errors. A single HTTP 404 during the intentional network transition did not recur, and the app recovered; an earlier PostgreSQL syntax error was attributable to a read-only diagnostic command, not application traffic. Apple metrics had not yet populated installation or crash counts, so the issue 47 observation window remains active. No App Review submission occurred. |
+
+### Physical TestFlight Smoke Runtime Snapshot
+
+The post-smoke production snapshot found the API and PostgreSQL containers
+healthy, Cloudflare running, zero failed systemd units, 13 percent root-disk
+use, approximately 7.3 GB available memory, and low load. Backup and backup
+integrity timers were active with successful last results. The PostgreSQL
+database was 29,202,099 bytes with one production review account, zero
+comments, and one active physical-device session; no test content was left
+behind. The public production qualification remained coherent at 59 legacy
+and 59 canonical matches, projection version 1, and successful realtime
+connection and reconnection.
 
 ## 2026-10-07–08 · Production Migration And Deployment
 

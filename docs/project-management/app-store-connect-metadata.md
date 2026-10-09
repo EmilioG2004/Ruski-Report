@@ -187,10 +187,11 @@ support links are available from the Account screen.
 
 - iOS 1.0 (1) is Ready to Test in the manually managed `Phase 7 Internal`
   group. Automatic distribution of future builds is disabled.
-- The invited account holder must install this exact build and complete the
-  production smoke test and observation window tracked by issue 47.
+- The invited account holder installed this exact build and completed the
+  physical production smoke test. The longer observation window remains
+  tracked by issue 47.
 - TestFlight upload does not authorize App Review submission.
 - Do not add the build to a review submission until the internal TestFlight
-  production smoke test and observation window pass.
+  observation window passes.
 - Availability remains United States only.
 - The app remains free with no IAP.
